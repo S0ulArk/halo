@@ -29,8 +29,6 @@ export type AgeOrbProps = {
    * from screen readers (the number beside it speaks). It still turns under a finger at any size.
    */
   bare?: boolean;
-  /** Rim colours of its own ("#rrggbb" top and bottom) in place of the delta's: the heart orb's rose and coral. */
-  tones?: { top: string; bottom: string };
 };
 
 const BANDS = 8;
@@ -84,7 +82,7 @@ const turns = (t: number, k: number) => {
  * The loops stop when the screen loses focus, the app goes to the background or after 30 s untouched; reduce motion
  * shows the settled frame alone.
  */
-export function AgeOrb({ age, deltaYears, provisional = false, size = 300, reason, bare = false, tones }: AgeOrbProps) {
+export function AgeOrb({ age, deltaYears, provisional = false, size = 300, reason, bare = false }: AgeOrbProps) {
   const { c } = useTheme();
   const has = age !== null && deltaYears !== null;
   const delta = has ? deltaYears : null;
@@ -210,12 +208,7 @@ export function AgeOrb({ age, deltaYears, provisional = false, size = 300, reaso
   // --- The layers: drawn once per size, delta and theme; the animated tree around them is built once too. ---
   // The core is dark in both schemes (the person asked for the dark centre back), so its text is always the dark
   // scheme's: light on the deep core, which reads as part of the orb rather than printed over it.
-  const toneTop = tones?.top;
-  const toneBottom = tones?.bottom;
-  const art = React.useMemo(
-    () => (opened ? drawOrb(size, delta, small, (t: ColorToken) => hexRGB(c[t]), hexRGB(DARK.orbCore), hexRGB(DARK.orbHighlight), toneTop && toneBottom ? { top: hexRGB(toneTop), bottom: hexRGB(toneBottom) } : undefined) : null),
-    [opened, size, delta, small, c, toneTop, toneBottom],
-  );
+  const art = React.useMemo(() => (opened ? drawOrb(size, delta, small, (t: ColorToken) => hexRGB(c[t]), hexRGB(DARK.orbCore), hexRGB(DARK.orbHighlight)) : null), [opened, size, delta, small, c]);
   const layers = React.useMemo(() => {
     if (!art) return null;
     const place = (half: number): ViewStyle => ({ position: "absolute", left: size / 2 - half, top: size / 2 - half, width: 2 * half, height: 2 * half });
@@ -344,9 +337,9 @@ function square(half: number, children: React.ReactNode, res = 1) {
  * and the rim particles that stay put), core shimmer, the rim particles that twinkle and sway, and the inner particles
  * that drift (two layers, one per direction).
  */
-function drawOrb(size: number, delta: number | null, small: boolean, rgb: (t: ColorToken) => RGB, CORE: RGB, HIGHLIGHT: RGB, own?: { top: RGB; bottom: RGB }): OrbArt {
+function drawOrb(size: number, delta: number | null, small: boolean, rgb: (t: ColorToken) => RGB, CORE: RGB, HIGHLIGHT: RGB): OrbArt {
   const id = uid("orb");
-  const { top, bottom } = own ?? orbColors(delta, rgb);
+  const { top, bottom } = orbColors(delta, rgb);
   const tone = (col: RGB, k: number) => (k <= 1 ? mixRGB(CORE, col, k) : shadeRGB(col, k));
   const bright = (col: RGB) => mixRGB(shadeRGB(col, ORB.lift), HIGHLIGHT, ORB.sparkle);
   const dim = delta === null ? 0.55 : 1;

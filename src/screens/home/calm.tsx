@@ -3,7 +3,6 @@
 // Strain on a half gauge, one at a time under a segmented control) and the vitals row (Health Monitor and Stress).
 // Every number keeps its unit small beside it.
 import * as React from "react";
-import { AgeOrb } from "@/screens/health/AgeOrb";
 import { useRouter, type Href } from "expo-router";
 import { Pressable, View } from "react-native";
 import { BatteryCharging, ChevronRight, Flame, HeartPulse, Moon } from "lucide-react-native";
@@ -17,7 +16,7 @@ import { useCalm, type CalmTint } from "@/ui/calm";
 import { CapsuleMeter } from "@/ui/components/CapsuleMeter";
 import { RollingNumber } from "@/ui/components/Halo";
 import { GrowIn } from "@/ui/motion/Rise";
-import { BandHero } from "@/ui/components/BandHero";
+import { HeartTrace } from "@/ui/components/BandHero";
 import { CalmSurface, PillAction } from "@/ui/components/CalmSurface";
 import { StreakFlame, UserAvatar } from "@/ui/components/HomeHeader";
 import { GoLiveButton, GoLiveSheet, StopLiveButton } from "@/screens/settings/liveHr";
@@ -158,17 +157,16 @@ function ScoreCard({ tint, icon: Icon, label, value, unit, fill, spoken, onPress
 }
 
 const TILE_W = 160;
-/** The heart orb's box on the band tile, and its rim colours: warm rose at the top, coral at the bottom. */
-const ORB_SIZE = 148;
-const HEART_ORB = { top: "#ff4f7f", bottom: "#ff8a5c" };
 
-/** The live pulse (a halo ring beating at your heart rate over a heartbeat line), with the newest heart rate laid over it: live over Bluetooth when streaming, else Health Connect's latest. */
+/** The live trace: the newest heart rate large over a line of the recent readings: live over Bluetooth when streaming, else Health Connect's latest. */
 function BandTile({ height, today, onPress }: { height: number; today: boolean; onPress: () => void }) {
   const c = useCalm();
   const { liveHr } = useLiveHr();
   const live = useLiveBle();
   const streaming = showsLive(live);
   const bpm = streaming ? live.bpm : (liveHr.latest?.bpm ?? null);
+  // The line under the number: the band's last 2 minutes while live, else Health Connect's last 30.
+  const trace = React.useMemo(() => (streaming ? live.history.map((h) => ({ t: h.t / 1000, bpm: h.bpm })) : liveHr.recent.map((r) => ({ t: r.ts, bpm: r.bpm }))), [streaming, live.history, liveHr.recent]);
   const [sheet, setSheet] = React.useState(false);
   const [tileH, setTileH] = React.useState(0);
   // Against the last refresh (once a minute), so render stays pure.
@@ -180,26 +178,7 @@ function BandTile({ height, today, onPress }: { height: number; today: boolean; 
     <View style={{ width: TILE_W, height, gap: 10 }}>
       <View style={{ flex: 1 }} onLayout={(e) => setTileH(Math.round(e.nativeEvent.layout.height))}>
         {tileH > 0 && (
-          <BandHero
-            width={TILE_W}
-            height={tileH}
-            footer={PILL}
-            bpm={bpm}
-            artSize={ORB_SIZE}
-            // The Halo Age orb's particles and dark core in warm rose and coral, bare: no glow or labels of its own; the
-            // tile beats it and lays the bpm on its core.
-            art={<AgeOrb bare age={0} deltaYears={0} size={ORB_SIZE} tones={HEART_ORB} />}
-            center={
-              <View style={{ alignItems: "center" }}>
-                <Txt size={30} lineHeight={32} style={[font.numeric(700), { color: "#ffffff" }]}>
-                  {bpm ? String(bpm) : MISSING}
-                </Txt>
-                <Txt size={10} lineHeight={13} weight={600} style={{ color: "rgba(255,255,255,0.7)", letterSpacing: 1.4 }}>
-                  BPM
-                </Txt>
-              </View>
-            }
-          >
+          <HeartTrace width={TILE_W} height={tileH} footer={PILL} bpm={bpm} live={streaming} points={trace} caption={streaming ? "last 2 min" : "last 30 min"}>
             {today && (
               // How fresh the reading is, on the tile's foot: tap for the heart-rate screen.
               <Pressable
@@ -219,7 +198,7 @@ function BandTile({ height, today, onPress }: { height: number; today: boolean; 
                 </Txt>
               </Pressable>
             )}
-          </BandHero>
+          </HeartTrace>
         )}
       </View>
       {today && !streaming && <GoLiveButton onPress={() => setSheet(true)} style={{ alignSelf: "center" }} />}
