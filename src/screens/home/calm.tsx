@@ -157,6 +157,8 @@ function ScoreCard({ tint, icon: Icon, label, value, unit, fill, spoken, onPress
 }
 
 const TILE_W = 160;
+/** The heart-rate tile's line: the last 10 minutes of Health Connect's readings. */
+const TRACE_S = 10 * 60;
 
 /** The live trace: the newest heart rate large over a line of the recent readings: live over Bluetooth when streaming, else Health Connect's latest. */
 function BandTile({ height, today, onPress }: { height: number; today: boolean; onPress: () => void }) {
@@ -165,28 +167,36 @@ function BandTile({ height, today, onPress }: { height: number; today: boolean; 
   const live = useLiveBle();
   const streaming = showsLive(live);
   const bpm = streaming ? live.bpm : (liveHr.latest?.bpm ?? null);
-  // The line under the number: the band's last 2 minutes while live, else Health Connect's last 30.
-  const trace = React.useMemo(() => (streaming ? live.history.map((h) => ({ t: h.t / 1000, bpm: h.bpm })) : liveHr.recent.map((r) => ({ t: r.ts, bpm: r.bpm }))), [streaming, live.history, liveHr.recent]);
+  // The line under the number: the band's last 2 minutes while live, else Health Connect's last 10 (30 was too dense
+  // for a narrow tile).
+  const trace = React.useMemo(() => {
+    if (streaming) return live.history.map((h) => ({ t: h.t / 1000, bpm: h.bpm }));
+    const end = liveHr.latest?.ts ?? 0;
+    return liveHr.recent.filter((r) => r.ts >= end - TRACE_S).map((r) => ({ t: r.ts, bpm: r.bpm }));
+  }, [streaming, live.history, liveHr.recent, liveHr.latest]);
   const [sheet, setSheet] = React.useState(false);
   const [tileH, setTileH] = React.useState(0);
   // Against the last refresh (once a minute), so render stays pure.
   const ago = liveHr.latest && liveHr.updatedAt ? Math.max(0, Math.round((liveHr.updatedAt / 1000 - liveHr.latest.ts) / 60)) : null;
   const when = streaming ? "Live" : ago === null ? "No reading yet" : ago < 1 ? "Just now" : `${ago} min ago`;
   // Today the heart rate sits at the tile's foot; the band is centred in what's above it.
-  const PILL = today ? 66 : 0;
+  const PILL = today ? 58 : 0;
   return (
     <View style={{ width: TILE_W, height, gap: 10 }}>
-      <View style={{ flex: 1 }} onLayout={(e) => setTileH(Math.round(e.nativeEvent.layout.height))}>
+      {/* The whole tile opens the heart-rate screen. */}
+      <Pressable
+        onPress={today ? onPress : undefined}
+        disabled={!today}
+        accessibilityRole="button"
+        accessibilityLabel={bpm ? `Heart rate ${bpm} beats per minute, ${when}. Opens heart rate` : "Heart rate. Opens heart rate"}
+        style={({ pressed }) => ({ flex: 1, opacity: pressed ? 0.88 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] })}
+        onLayout={(e) => setTileH(Math.round(e.nativeEvent.layout.height))}
+      >
         {tileH > 0 && (
-          <HeartTrace width={TILE_W} height={tileH} footer={PILL} bpm={bpm} live={streaming} points={trace} caption={streaming ? "last 2 min" : "last 30 min"}>
+          <HeartTrace width={TILE_W} height={tileH} footer={PILL} bpm={bpm} live={streaming} points={trace} caption={streaming ? "last 2 min" : "last 10 min"}>
             {today && (
-              // How fresh the reading is, on the tile's foot: tap for the heart-rate screen.
-              <Pressable
-                onPress={onPress}
-                accessibilityRole="button"
-                accessibilityLabel={bpm ? `Heart rate ${bpm} beats per minute, ${when}` : "Heart rate"}
-                style={({ pressed }) => ({ position: "absolute", left: 8, right: 8, bottom: 8, borderRadius: 20, backgroundColor: c.card, paddingHorizontal: 12, paddingVertical: 8, opacity: pressed ? 0.85 : 1, boxShadow: "0 2px 10px rgba(17,24,39,0.08)" })}
-              >
+              // How fresh the reading is, on the tile's foot.
+              <View style={{ position: "absolute", left: 8, right: 8, bottom: 8, borderRadius: 18, backgroundColor: c.card, paddingHorizontal: 12, paddingVertical: 6, boxShadow: "0 2px 10px rgba(17,24,39,0.08)" }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                   <HeartPulse size={18} color={c.tintInk.rose} strokeWidth={2} />
                   <Txt size={14} lineHeight={18} weight={600} style={{ color: c.ink }}>
@@ -196,11 +206,11 @@ function BandTile({ height, today, onPress }: { height: number; today: boolean; 
                 <Txt size={12} lineHeight={16} numberOfLines={1} style={{ color: streaming ? c.tintInk.mint : c.sub }}>
                   {streaming ? "Live from your band" : when}
                 </Txt>
-              </Pressable>
+              </View>
             )}
           </HeartTrace>
         )}
-      </View>
+      </Pressable>
       {today && !streaming && <GoLiveButton onPress={() => setSheet(true)} style={{ alignSelf: "center" }} />}
       {today && streaming && <StopLiveButton style={{ alignSelf: "center" }} />}
       {today && <GoLiveSheet open={sheet} onClose={() => setSheet(false)} />}

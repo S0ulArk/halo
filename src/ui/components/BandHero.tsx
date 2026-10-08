@@ -1,5 +1,5 @@
 // The heart-rate tile on Today: the live trace. The newest heart rate large, and under it a smooth line of the recent
-// readings (the last 30 minutes from Health Connect, or the last 2 minutes over Bluetooth while live) with a soft fill
+// readings (the last 10 minutes from Health Connect, or the last 2 minutes over Bluetooth while live) with a soft fill
 // and a glowing dot at "now", on the rose family's gradient. Real data, nothing decorative.
 //
 // The only motion is the dot's glow breathing (and the line refreshing as readings arrive): one opacity and scale on
@@ -53,7 +53,7 @@ export type HeartTraceProps = {
   /** The recent readings, oldest first: unix seconds and bpm. */
   points: { t: number; bpm: number }[];
   live: boolean;
-  /** Under the line: "last 30 min", "last 2 min". */
+  /** Under the line: "last 10 min", "last 2 min". */
   caption: string;
   style?: StyleProp<ViewStyle>;
   children?: React.ReactNode;
@@ -83,7 +83,7 @@ export function HeartTrace({ width, height, footer = 0, radius = 28, bpm, points
 
   const pad = 16;
   // The label and the number sit above the line; the caption under it, just clear of the footer.
-  const top = 92;
+  const top = 80;
   const bottom = height - footer - 22;
   const chartH = Math.max(0, bottom - top);
   const ink = c.tintInk.rose;
@@ -109,8 +109,8 @@ export function HeartTrace({ width, height, footer = 0, radius = 28, bpm, points
         <Txt size={10} lineHeight={13} weight={600} style={{ position: "absolute", top: 18, left: pad, color: c.sub, letterSpacing: 1.4 }}>
           {live ? "HEART RATE · LIVE" : "HEART RATE"}
         </Txt>
-        <View style={{ position: "absolute", top: 34, left: pad, flexDirection: "row", alignItems: "baseline", gap: 4 }}>
-          <Txt size={44} lineHeight={50} style={[font.numeric(700), { color: bpm ? c.ink : c.faint, letterSpacing: -1 }]}>
+        <View style={{ position: "absolute", top: 32, left: pad, flexDirection: "row", alignItems: "baseline", gap: 4 }}>
+          <Txt size={40} lineHeight={44} style={[font.numeric(700), { color: bpm ? c.ink : c.faint, letterSpacing: -1 }]}>
             {bpm ? String(bpm) : MISSING}
           </Txt>
           <Txt size={15} lineHeight={20} weight={600} style={{ color: c.sub }}>
