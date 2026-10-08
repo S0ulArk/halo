@@ -1,0 +1,21 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'app.pulse'
+version = '1.0.0'
+
+android {
+  namespace "app.pulse.google"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  // Google Identity Services' AuthorizationClient (Identity.getAuthorizationClient): OAuth access tokens from Google
+  // Play services, with no client secret or refresh token on the phone. The only dependency this module adds.
+  implementation 'com.google.android.gms:play-services-auth:22.0.0'
+}

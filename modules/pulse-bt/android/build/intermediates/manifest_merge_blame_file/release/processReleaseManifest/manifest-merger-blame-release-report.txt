@@ -1,0 +1,14 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="app.pulse.bt" >
+4
+5    <uses-sdk android:minSdkVersion="26" />
+6    <!-- Lets Pulse open the Google Health app (Share heart rate lives there). -->
+7    <queries>
+7-->/Users/k4lki/Documents/pulse-mobile/modules/pulse-bt/android/src/main/AndroidManifest.xml:3:3-5:13
+8        <package android:name="com.fitbit.FitbitMobile" />
+8-->/Users/k4lki/Documents/pulse-mobile/modules/pulse-bt/android/src/main/AndroidManifest.xml:4:5-55
+8-->/Users/k4lki/Documents/pulse-mobile/modules/pulse-bt/android/src/main/AndroidManifest.xml:4:14-52
+9    </queries>
+10
+11</manifest>

@@ -1,0 +1,10 @@
+{
+  "rollupDataPoints": [
+    { "civilStartTime": { "date": { "year": 2026, "month": 10, "day": 1 }, "time": {} },
+      "civilEndTime": { "date": { "year": 2026, "month": 10, "day": 2 }, "time": {} },
+      "heartRateVariabilityPersonalRange": { "averageHeartRateVariabilityMillisecondsMin": 31.5, "averageHeartRateVariabilityMillisecondsMax": 55.25 } },
+    { "civilStartTime": { "date": { "year": 2026, "month": 10, "day": 2 }, "time": {} },
+      "civilEndTime": { "date": { "year": 2026, "month": 10, "day": 3 }, "time": {} },
+      "heartRateVariabilityPersonalRange": { "averageHeartRateVariabilityMillisecondsMin": 60, "averageHeartRateVariabilityMillisecondsMax": 40 } }
+  ]
+}

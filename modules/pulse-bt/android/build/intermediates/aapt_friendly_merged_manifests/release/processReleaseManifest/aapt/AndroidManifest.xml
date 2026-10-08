@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="app.pulse.bt" >
+
+    <uses-sdk android:minSdkVersion="26" />
+    <!-- Lets Pulse open the Google Health app (Share heart rate lives there). -->
+    <queries>
+        <package android:name="com.fitbit.FitbitMobile" />
+    </queries>
+
+</manifest>

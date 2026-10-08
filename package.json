@@ -1,22 +1,81 @@
 {
-  "name": "pulse-mobile",
-  "version": "1.0.0",
+  "name": "pulse",
+  "version": "1.22.4",
   "main": "index.ts",
   "dependencies": {
+    "@ai-sdk/anthropic": "4.0.71",
+    "@ai-sdk/google": "4.0.87",
+    "@ai-sdk/openai": "4.0.83",
+    "@ai-sdk/openai-compatible": "3.0.62",
+    "@ai-sdk/react": "4.0.130",
+    "@expo-google-fonts/barlow": "^0.4.1",
+    "@expo-google-fonts/doto": "^0.4.1",
+    "@expo-google-fonts/figtree": "^0.4.1",
+    "@gorhom/bottom-sheet": "^5.2.14",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@shopify/react-native-skia": "^2.6.2",
+    "ai": "7.0.127",
     "expo": "~57.0.27",
+    "expo-background-task": "~57.0.21",
+    "expo-blur": "~57.0.3",
+    "expo-build-properties": "~57.0.22",
+    "expo-constants": "~57.0.21",
+    "expo-file-system": "~57.0.7",
+    "expo-font": "~57.0.4",
+    "expo-haptics": "^57.0.3",
+    "expo-image-manipulator": "~57.0.21",
+    "expo-image-picker": "~57.0.20",
+    "expo-keep-awake": "~57.0.2",
+    "expo-linear-gradient": "~57.0.2",
+    "expo-linking": "~57.0.12",
+    "expo-notifications": "~57.0.22",
+    "expo-router": "~57.0.25",
+    "expo-secure-store": "~57.0.4",
+    "expo-sharing": "~57.0.22",
+    "expo-sqlite": "~57.0.4",
     "expo-status-bar": "~57.0.1",
+    "expo-system-ui": "^57.0.4",
+    "expo-task-manager": "~57.0.21",
+    "lucide-react-native": "^1.52.0",
     "react": "19.2.3",
-    "react-native": "0.86.3"
+    "react-native": "0.86.3",
+    "react-native-ble-plx": "^3.5.1",
+    "react-native-gesture-handler": "~2.32.0",
+    "react-native-health-connect": "^4.1.3",
+    "react-native-keyboard-controller": "^1.21.9",
+    "react-native-reanimated": "^4.5.1",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-svg": "15.15.4",
+    "react-native-worklets": "^0.10.1",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
-    "typescript": "~6.0.3"
+    "@vitest/coverage-v8": "^5.0.3",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~57.0.2",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.3",
+    "vitest": "^5.0.3"
   },
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "prebuild": "expo prebuild --platform android --clean",
+    "build:apk": "scripts/build-apk.sh",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "expo lint",
+    "build:apk:bump": "scripts/build-apk.sh --bump"
   },
-  "private": true
+  "private": true,
+  "reanimated": {
+    "staticFeatureFlags": {
+      "ANDROID_SYNCHRONOUSLY_UPDATE_UI_PROPS": true
+    }
+  }
 }

@@ -1,0 +1,7 @@
+app.pulse.bt.pulse-bt-pngs-0 /Users/k4lki/Documents/pulse-mobile/modules/pulse-bt/android/build/generated/res/pngs/release
+app.pulse.bt.pulse-bt-resValues-1 /Users/k4lki/Documents/pulse-mobile/modules/pulse-bt/android/build/generated/res/resValues/release
+app.pulse.bt.pulse-bt-mergeReleaseResources-2 /Users/k4lki/Documents/pulse-mobile/modules/pulse-bt/android/build/intermediates/incremental/release/mergeReleaseResources/merged.dir
+app.pulse.bt.pulse-bt-mergeReleaseResources-3 /Users/k4lki/Documents/pulse-mobile/modules/pulse-bt/android/build/intermediates/incremental/release/mergeReleaseResources/stripped.dir
+app.pulse.bt.pulse-bt-release-4 /Users/k4lki/Documents/pulse-mobile/modules/pulse-bt/android/build/intermediates/merged_res/release/mergeReleaseResources
+app.pulse.bt.pulse-bt-main-5 /Users/k4lki/Documents/pulse-mobile/modules/pulse-bt/android/src/main/res
+app.pulse.bt.pulse-bt-release-6 /Users/k4lki/Documents/pulse-mobile/modules/pulse-bt/android/src/release/res

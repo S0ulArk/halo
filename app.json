@@ -1,25 +1,99 @@
 {
   "expo": {
-    "name": "pulse-mobile",
-    "slug": "pulse-mobile",
-    "version": "1.0.0",
+    "name": "Halo",
+    "slug": "pulse",
+    "version": "1.22.4",
+    "scheme": "pulse",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "ios": {
-      "supportsTablet": true
-    },
+    "userInterfaceStyle": "automatic",
     "android": {
+      "package": "app.halo.health",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "monochromeImage": "./assets/android-icon-monochrome.png",
+        "backgroundColor": "#0c1e2b"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_DISTANCE",
+        "android.permission.health.READ_HEART_RATE",
+        "android.permission.health.READ_RESTING_HEART_RATE",
+        "android.permission.health.READ_HEART_RATE_VARIABILITY",
+        "android.permission.health.READ_SLEEP",
+        "android.permission.health.READ_OXYGEN_SATURATION",
+        "android.permission.health.READ_RESPIRATORY_RATE",
+        "android.permission.health.READ_SKIN_TEMPERATURE",
+        "android.permission.health.READ_EXERCISE",
+        "android.permission.health.READ_TOTAL_CALORIES_BURNED",
+        "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+        "android.permission.health.READ_VO2_MAX",
+        "android.permission.health.READ_HEALTH_DATA_HISTORY",
+        "android.permission.health.READ_WEIGHT",
+        "android.permission.health.READ_BODY_FAT",
+        "android.permission.health.READ_FLOORS_CLIMBED",
+        "android.permission.health.READ_ELEVATION_GAINED",
+        "android.permission.health.READ_HYDRATION",
+        "android.permission.health.READ_NUTRITION",
+        "android.permission.health.READ_BLOOD_GLUCOSE",
+        "android.permission.health.READ_BODY_TEMPERATURE",
+        "android.permission.health.READ_MENSTRUATION",
+        "android.permission.health.READ_INTERMENSTRUAL_BLEEDING",
+        "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND",
+        "android.permission.POST_NOTIFICATIONS"
+      ],
+      "versionCode": 59
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    }
+    "plugins": [
+      "expo-router",
+      "react-native-health-connect",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "minSdkVersion": 26,
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
+          }
+        }
+      ],
+      "expo-sqlite",
+      "./plugins/withReleaseSigning.js",
+      "expo-secure-store",
+      "expo-background-task",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-monochrome.png",
+          "color": "#2f7f84"
+        }
+      ],
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "modes": [],
+          "neverForLocation": true
+        }
+      ],
+      "./plugins/withHighRefreshRate.js",
+      "./plugins/withFastGradle.js",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Halo uses the camera to photograph a meal, so your own AI provider can estimate its nutrition. The photo isn't saved.",
+          "photosPermission": "Halo lets you choose a meal photo, so your own AI provider can estimate its nutrition. The photo isn't saved.",
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "backgroundColor": "#040609"
   }
 }

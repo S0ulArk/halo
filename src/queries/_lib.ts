@@ -1,0 +1,250 @@
+// The few helpers the queries need from Pulse's src/lib/{format,bands,url,extraMetrics,dashboard}.ts and
+// src/lib/log.ts, copied here so src/queries depends on nothing outside src/core, src/lib/time and src/lib/reasons
+// (the UI's own port of those libs is written separately). Keep each function identical to the web's.
+import { acwrBand, type AcwrBand } from "@/core/scoring/readiness";
+
+// ── format.ts ───────────────────────────────────────────────────────────────
+
+export const LOCALE = "en-US";
+const MINUS = "−";
+const grouped = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 });
+const minus = (s: string) => s.replace("-", MINUS);
+const fixed = (v: number, d: number) => {
+  const s = v.toFixed(d);
+  return minus(/^-0(\.0+)?$/.test(s) ? s.slice(1) : s);
+};
+const signed = (v: number, d: number) => (Number(v.toFixed(d)) > 0 ? `+${fixed(v, d)}` : fixed(v, d));
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** Minutes → "7:42". */
+export function hmm(minutes: number) {
+  const m = Math.max(0, Math.round(minutes));
+  return `${Math.floor(m / 60)}:${pad(m % 60)}`;
+}
+
+export const FORMATS = {
+  int: (v: number) => fixed(v, 0),
+  grouped: (v: number) => minus(grouped.format(Math.round(v))),
+  decimal1: (v: number) => fixed(v, 1),
+  decimal2: (v: number) => fixed(v, 2),
+  signed1: (v: number) => signed(v, 1),
+  signedInt: (v: number) => signed(v, 0),
+  /** Minutes → h:mm. */
+  duration: hmm,
+  /** Seconds (per km) → m:ss, the pace "5:32". */
+  pace: (s: number) => {
+    const t = Math.max(0, Math.round(s));
+    return `${Math.floor(t / 60)}:${pad(t % 60)}`;
+  },
+  /** Seconds → h:mm:ss. */
+  durationHMS: (s: number) => {
+    const t = Math.max(0, Math.round(s));
+    return `${Math.floor(t / 3600)}:${pad(Math.floor(t / 60) % 60)}:${pad(t % 60)}`;
+  },
+} satisfies Record<string, (v: number) => string>;
+export type FormatKey = keyof typeof FORMATS;
+
+const dates = new Map<string, Intl.DateTimeFormat>();
+/** A calendar day ("2026-09-28", or a month "2026-09") in LOCALE, read and formatted in UTC so the runtime's zone never shifts it. */
+export function formatDay(day: string, opts: Intl.DateTimeFormatOptions) {
+  const key = JSON.stringify(opts);
+  let f = dates.get(key);
+  if (!f) dates.set(key, (f = new Intl.DateTimeFormat(LOCALE, { ...opts, timeZone: "UTC" })));
+  return f.format(new Date(`${day.length === 7 ? `${day}-01` : day}T00:00:00Z`));
+}
+
+/** The app's date shapes as Intl options for formatDay. */
+export const DAY = {
+  /** "Mon, Sep 28" */
+  short: { weekday: "short", month: "short", day: "numeric" },
+  /** "Monday, September 28" */
+  long: { weekday: "long", month: "long", day: "numeric" },
+  /** "Sep 28" */
+  monthDay: { month: "short", day: "numeric" },
+  /** "Sep 28, 1990" */
+  full: { month: "short", day: "numeric", year: "numeric" },
+  /** "September 2026" */
+  monthYear: { month: "long", year: "numeric" },
+} satisfies Record<string, Intl.DateTimeFormatOptions>;
+
+/** "Today", "Yesterday", else "Mon, Sep 28". */
+export function dayLabel(date: string, today: string) {
+  if (date === today) return "Today";
+  const y = new Date(`${today}T00:00:00Z`);
+  y.setUTCDate(y.getUTCDate() - 1);
+  if (date === y.toISOString().slice(0, 10)) return "Yesterday";
+  return formatDay(date, DAY.short);
+}
+
+const clocks = new Map<string, Intl.DateTimeFormat>();
+/** Epoch ms → 24-hour "HH:mm" in `timeZone`. */
+export function clock(ms: number, timeZone?: string) {
+  const key = timeZone ?? "";
+  let f = clocks.get(key);
+  if (!f) {
+    f = new Intl.DateTimeFormat(LOCALE, { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone });
+    clocks.set(key, f);
+  }
+  return f.format(ms);
+}
+
+// ── url.ts ──────────────────────────────────────────────────────────────────
+
+const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
+/** Monday and Sunday of the ISO week containing `day`. */
+export function weekOf(day: string): [string, string] {
+  const t = Date.parse(`${day}T00:00:00Z`);
+  const back = (new Date(t).getUTCDay() + 6) % 7; // Monday 0 … Sunday 6
+  const mon = t - back * 86_400_000;
+  return [iso(mon), iso(mon + 6 * 86_400_000)];
+}
+
+export const RANGES = ["w", "m", "6m", "1y"] as const;
+export type TrendRange = (typeof RANGES)[number];
+export const RANGE_DAYS: Record<TrendRange, number> = { w: 7, m: 30, "6m": 182, "1y": 365 };
+
+/** A metric's own detail screen (Steps, Distance, Weight, …): `/metric/steps`. The mobile router maps it to a route. */
+export const metricHref = (key: string) => `/metric/${key}`;
+
+// ── bands.ts ────────────────────────────────────────────────────────────────
+
+export type RecoveryBand = "green" | "yellow" | "red";
+
+/** ≥ 67 green, 34-66 yellow, below 34 red. */
+export function recoveryBand(value: number): RecoveryBand {
+  if (value >= 67) return "green";
+  if (value >= 34) return "yellow";
+  return "red";
+}
+
+export type StressLevel = "low" | "medium" | "high";
+export function stressLevel(value: number): StressLevel {
+  if (value >= 2) return "high";
+  if (value >= 1) return "medium";
+  return "low";
+}
+
+/** Which way is good. `neutral` still shows the arrow direction, never a good/bad tone. */
+export type GoodDirection = "up" | "down" | "neutral" | "toward_zero";
+
+export type ChipTone = "optimal" | "warning" | "alert" | "neutral";
+
+const ACWR_TONE: Record<AcwrBand, ChipTone> = { LOAD_RAMPING_DOWN: "neutral", LOAD_SWEET_SPOT: "optimal", LOAD_BUILDING_FAST: "warning", LOAD_SPIKING: "alert" };
+
+/** Training load (ACWR) chip tone, on Garmin's 2026 bands: below 0.8 neutral, [0.8, 1.5) optimal, [1.5, 2.0) warning, then alert. */
+export const acwrTone = (acwr: number): ChipTone => ACWR_TONE[acwrBand(acwr)];
+
+// ── extraMetrics.ts ─────────────────────────────────────────────────────────
+
+export type ExtraMetric = {
+  key: string;
+  label: string;
+  /** Shown after the value; minutes use h:mm via `format` instead. */
+  unit?: string;
+  format: FormatKey;
+  direction: GoodDirection;
+  /** My Dashboard's editor group. Every extra opens its own detail screen, `/metric/<key>`. */
+  group: "activity" | "nutrition" | "vitals";
+  /** Accrues through the day: today is a gap in trends, not a low bar. */
+  partialToday?: boolean;
+  /**
+   * mobile: where the number comes from when it is not the source's own roll-up. Health Connect carries no activity
+   * minutes, Active Zone Minutes or daily average heart rate, so the sync derives them from the band's heart rate and
+   * steps (src/health/derive.ts), approximating Fitbit's rules; the metric screen shows this note as the source.
+   */
+  note?: string;
+};
+
+const DERIVED_NOTE =
+  "From a Google account, Fitbit's own number. From Health Connect, which doesn't carry it, Halo computes it from your band's heart rate and steps, following Fitbit's rules as closely as Health Connect allows, so Fitbit's number may differ a little.";
+
+export const EXTRA_METRICS = [
+  { key: "distance", label: "Distance", unit: "km", format: "decimal2", direction: "up", group: "activity", partialToday: true },
+  { key: "floors", label: "Floors", format: "grouped", direction: "up", group: "activity", partialToday: true },
+  { key: "elevation", label: "Elevation gain", unit: "m", format: "int", direction: "up", group: "activity", partialToday: true },
+  { key: "active_minutes", label: "Active minutes", format: "duration", direction: "up", group: "activity", partialToday: true, note: DERIVED_NOTE },
+  { key: "light_minutes", label: "Light activity", format: "duration", direction: "up", group: "activity", partialToday: true, note: DERIVED_NOTE },
+  { key: "azm", label: "Active Zone Minutes", format: "duration", direction: "up", group: "activity", partialToday: true, note: DERIVED_NOTE },
+  { key: "active_calories", label: "Active calories", unit: "kcal", format: "grouped", direction: "neutral", group: "activity", partialToday: true },
+  { key: "sedentary_minutes", label: "Sedentary time", format: "duration", direction: "down", group: "activity", partialToday: true, note: DERIVED_NOTE },
+  // Today's is the samples so far (in the morning mostly the night's), not the day's average: "so far", like Stress's.
+  { key: "avg_hr", label: "Average heart rate", unit: "bpm", format: "int", direction: "neutral", group: "activity", partialToday: true, note: DERIVED_NOTE },
+  { key: "water", label: "Water", unit: "ml", format: "grouped", direction: "up", group: "nutrition", partialToday: true },
+  { key: "calories_in", label: "Calories eaten", unit: "kcal", format: "grouped", direction: "neutral", group: "nutrition", partialToday: true },
+  { key: "protein", label: "Protein", unit: "g", format: "int", direction: "neutral", group: "nutrition", partialToday: true },
+  { key: "carbs", label: "Carbohydrates", unit: "g", format: "int", direction: "neutral", group: "nutrition", partialToday: true },
+  { key: "fat", label: "Fat", unit: "g", format: "int", direction: "neutral", group: "nutrition", partialToday: true },
+  { key: "glucose", label: "Blood glucose", unit: "mg/dL", format: "int", direction: "neutral", group: "vitals" },
+  { key: "core_temp", label: "Core temperature", unit: "°C", format: "decimal1", direction: "neutral", group: "vitals" },
+  { key: "swim_strokes", label: "Swim strokes", format: "grouped", direction: "up", group: "activity", partialToday: true },
+] as const satisfies readonly ExtraMetric[];
+
+export type ExtraKey = (typeof EXTRA_METRICS)[number]["key"];
+export const EXTRA_KEYS = EXTRA_METRICS.map((m) => m.key) as ExtraKey[];
+export const extraMetric = (key: ExtraKey): ExtraMetric => EXTRA_METRICS.find((m) => m.key === key)!;
+
+// ── dashboard.ts ────────────────────────────────────────────────────────────
+
+export const DASHBOARD_GROUPS = [
+  { key: "recovery", label: "Recovery & sleep" },
+  { key: "activity", label: "Activity" },
+  { key: "body", label: "Body" },
+  { key: "nutrition", label: "Nutrition" },
+  { key: "vitals", label: "Vitals" },
+] as const;
+export type DashboardGroup = (typeof DASHBOARD_GROUPS)[number]["key"];
+
+/** The eight v1 rows; their units and reasons live in the Home query (`keyStats`). */
+const CORE = [
+  { key: "hrv", label: "Heart rate variability", group: "recovery" },
+  { key: "rhr", label: "Resting heart rate", group: "recovery" },
+  { key: "resp", label: "Respiratory rate", group: "vitals" },
+  { key: "sleep", label: "Sleep performance", group: "recovery" },
+  { key: "calories", label: "Calories", group: "activity" },
+  { key: "steps", label: "Steps", group: "activity" },
+  { key: "spo2", label: "Blood oxygen", group: "vitals" },
+  { key: "skin", label: "Skin temperature", group: "vitals" },
+] as const;
+
+/** Weight and body-fat readings; each opens its detail screen. */
+export const BODY_METRICS = [
+  { key: "weight", label: "Weight", unit: "kg", format: "decimal1", direction: "neutral", href: metricHref("weight") },
+  { key: "body_fat", label: "Body fat", unit: "%", format: "decimal1", direction: "neutral", href: metricHref("body_fat") },
+] as const satisfies readonly { key: string; label: string; unit: string; format: FormatKey; direction: GoodDirection; href: string }[];
+export type BodyKey = (typeof BODY_METRICS)[number]["key"];
+
+export type DashboardKey = (typeof CORE)[number]["key"] | BodyKey | ExtraKey;
+
+const ALL: { key: DashboardKey; label: string; group: DashboardGroup }[] = [
+  ...CORE,
+  ...BODY_METRICS.map((m) => ({ key: m.key, label: m.label, group: "body" as const })),
+  ...EXTRA_METRICS.map((m) => ({ key: m.key, label: m.label, group: m.group })),
+];
+
+/** Every metric, in editor order: by group, then catalogue order within it. */
+export const DASHBOARD_METRICS = DASHBOARD_GROUPS.flatMap((g) => ALL.filter((m) => m.group === g.key));
+
+export const DASHBOARD_LABEL = Object.fromEntries(ALL.map((m) => [m.key, m.label])) as Record<DashboardKey, string>;
+
+export const isDashboardKey = (k: string): k is DashboardKey => Object.prototype.hasOwnProperty.call(DASHBOARD_LABEL, k);
+
+/** The default list: the v1 rows in their v1 order. */
+export const DASHBOARD_DEFAULT: DashboardKey[] = CORE.map((m) => m.key);
+
+/** The default for an account that has never synced heart rate (phone only, no band): what its phone counts. */
+export const PHONE_DEFAULT: DashboardKey[] = ["steps", "distance", "calories", "active_minutes", "active_calories", "floors"];
+
+/** Phone Home's lead card (spec §11 CD2): what a phone records without a band. */
+export const PHONE_STATS: DashboardKey[] = ["steps", "distance", "calories", "active_minutes"];
+
+// ── log.ts (types only: the metric screen's "entries" section shape) ────────
+
+export const LOG_TYPES = ["hydration-log", "nutrition-log", "weight", "body-fat", "oxygen-saturation", "moods", "symptoms", "menstrual-period", "ovulation-test"] as const;
+export type LogType = (typeof LOG_TYPES)[number];
+
+/**
+ * One entry logged from Pulse, as the metric screen lists it. mobile: `source` says whether it was logged in Pulse or
+ * read from Health Connect (logged in Fitbit); the latter are shown read-only.
+ */
+export type LoggedEntry = { id: string; type: LogType; ts: number; day: string; title: string; detail: string; atGoogle: boolean; source: "pulse" | "health_connect" };

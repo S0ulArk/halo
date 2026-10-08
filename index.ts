@@ -1,8 +1,4 @@
-import { registerRootComponent } from 'expo';
-
-import App from './App';
-
-// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
-// It also ensures that whether you load the app in Expo Go or in a native build,
-// the environment is set up appropriately
-registerRootComponent(App);
+// The entry (package.json `main`). The background task is defined here, outside React and before the router, so a
+// headless launch (WorkManager waking Pulse with no UI) finds it: expo-task-manager needs defineTask in global scope.
+import "@/background/task";
+import "expo-router/entry";
