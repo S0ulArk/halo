@@ -158,7 +158,7 @@ function ScoreCard({ tint, icon: Icon, label, value, unit, fill, spoken, onPress
 
 const TILE_W = 160;
 
-/** The Fitbit Air photo, always gently in motion, with the newest heart rate laid over it: live over Bluetooth when streaming, else Health Connect's latest. */
+/** The live pulse (a halo ring beating at your heart rate over a heartbeat line), with the newest heart rate laid over it: live over Bluetooth when streaming, else Health Connect's latest. */
 function BandTile({ height, today, onPress }: { height: number; today: boolean; onPress: () => void }) {
   const c = useCalm();
   const { liveHr } = useLiveHr();
@@ -176,7 +176,7 @@ function BandTile({ height, today, onPress }: { height: number; today: boolean; 
     <View style={{ width: TILE_W, height, gap: 10 }}>
       <View style={{ flex: 1 }} onLayout={(e) => setTileH(Math.round(e.nativeEvent.layout.height))}>
         {tileH > 0 && (
-          <BandHero width={TILE_W} height={tileH} footer={PILL}>
+          <BandHero width={TILE_W} height={tileH} footer={PILL} bpm={bpm}>
             {today && (
               // The newest heart rate on the tile: tap for the heart-rate screen.
               <Pressable
