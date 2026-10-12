@@ -22,6 +22,12 @@ How each score is calculated is in the app under More › How Halo works. The re
 
 Recovery needs 7 nights of HRV before its first score. More › Diagnostics shows what each app has written if a score stays empty.
 
+## Updates
+
+Halo checks this repository's [latest release](../../releases/latest) a few times a day. When there's a newer version it says so once, as a notification and when you open the app, and **Update** downloads the release's APK and opens Android's installer (the first time, Android asks you to allow installs from Halo). The update installs over your current app and keeps your data. More › About › Check for updates checks at once.
+
+For a release to be offered, its tag must be a higher version than the installed app (`v1.23.0`, matching `app.json`) and it must have the signed `.apk` attached.
+
 ## Report a bug
 
 Open an [issue](../../issues/new). Include your phone model, Android version, Halo version (More › About) and what you did, what you expected and what happened.
@@ -29,6 +35,8 @@ Open an [issue](../../issues/new). Include your phone model, Android version, Ha
 ## Privacy
 
 Everything stays on your phone. Halo reads Health Connect and never writes to it. Two things leave the phone, only when you use them, and only to the AI provider you chose with your own API key: Coach questions (with the numbers its tools look up), and a food photo or description you ask Halo to estimate. The photo is scaled down, sent once and not kept.
+
+A few times a day Halo asks GitHub for its latest release, to tell you when an update is out. That request carries no health data or account; turn it off in Settings › Notifications › App updates.
 
 ## Develop
 

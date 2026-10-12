@@ -2,7 +2,7 @@
 // a grey sentence, then the actions stacked full width as pills (the confirm, rose when it removes something, above
 // Cancel). Fades and scales in over 320 ms, out over 200 ms.
 import * as React from "react";
-import { ActivityIndicator, Animated, Easing, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, Animated, Easing, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { OverlayModal } from "@/ui/components/Overlay";
 import { MOTION, Txt, useTheme } from "@/ui";
 import { useCalm } from "@/ui/calm";
@@ -32,6 +32,7 @@ export function ConfirmDialog({
   title,
   description,
   confirm,
+  cancel = "Cancel",
   pendingLabel,
   danger = true,
   pending,
@@ -42,6 +43,8 @@ export function ConfirmDialog({
   title: string;
   description: string;
   confirm: string;
+  /** The lower button's label. */
+  cancel?: string;
   pendingLabel?: string;
   danger?: boolean;
   pending?: boolean;
@@ -50,7 +53,7 @@ export function ConfirmDialog({
 }) {
   const { c } = useTheme();
   const calm = useCalm();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const [t] = React.useState(() => new Animated.Value(0));
   const [shown, setShown] = React.useState(open);
   // Mount on open (during render, so the first frame already has the dialog); unmount after the close animation.
@@ -78,13 +81,16 @@ export function ConfirmDialog({
             <Txt size={17} lineHeight={22} weight={600} accessibilityRole="header" style={{ color: calm.ink }}>
               {title}
             </Txt>
-            <Txt size={14} lineHeight={19} style={{ color: calm.sub }}>
-              {description}
-            </Txt>
+            {/* A long description (release notes) scrolls inside the card. */}
+            <ScrollView style={{ maxHeight: height * 0.45 }} contentContainerStyle={{ flexGrow: 0 }} bounces={false}>
+              <Txt size={14} lineHeight={19} style={{ color: calm.sub }}>
+                {description}
+              </Txt>
+            </ScrollView>
           </View>
           <View style={{ gap: 8 }}>
             <DialogButton label={pending && pendingLabel ? pendingLabel : confirm} variant={danger ? "danger" : "confirm"} onPress={onConfirm} disabled={pending} busy={pending} />
-            <DialogButton label="Cancel" variant="cancel" onPress={close} disabled={pending} />
+            <DialogButton label={cancel} variant="cancel" onPress={close} disabled={pending} />
           </View>
         </Animated.View>
       </View>

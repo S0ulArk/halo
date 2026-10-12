@@ -1,6 +1,6 @@
 {
   "name": "pulse",
-  "version": "1.22.8",
+  "version": "1.23.0",
   "main": "index.ts",
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.71",
@@ -25,6 +25,7 @@
     "expo-haptics": "^57.0.3",
     "expo-image-manipulator": "~57.0.21",
     "expo-image-picker": "~57.0.20",
+    "expo-intent-launcher": "~57.0.1",
     "expo-keep-awake": "~57.0.2",
     "expo-linear-gradient": "~57.0.2",
     "expo-linking": "~57.0.12",

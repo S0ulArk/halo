@@ -17,6 +17,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppProvider, useApp } from "@/state/app";
 import { ScreenTransition } from "@/state/transition";
 import { CoverableContent, OverlayHost } from "@/ui/components/Overlay";
+import { UpdatePrompt } from "@/update/UpdatePrompt";
 import { useAppFonts } from "@/ui/fonts";
 import { ThemeProvider, useTheme } from "@/ui/ThemeProvider";
 
@@ -159,6 +160,8 @@ function Gate() {
           />
         </Stack>
       </CoverableContent>
+      {/* "Halo x.y.z is available", once the person is past onboarding. */}
+      {(app.status === "ready" || app.status === "syncing") && !path.startsWith("/onboarding") && <UpdatePrompt />}
       {covered && (
         <View
           style={[

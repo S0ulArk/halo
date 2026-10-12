@@ -1,9 +1,11 @@
-// About (More), ported from the web's src/app/(app)/more/About.tsx: the version, the scoring version, "Report a bug"
-// (a new issue on Halo's GitHub) and "Contact me" (the developer's Reddit), on one white Calm card. Licence and full credits stay in
+// About (More), ported from the web's src/app/(app)/more/About.tsx: the version, the scoring version, updates ("Check
+// for updates", or "Update to x.y.z" once GitHub has a newer release; src/update), "Report a bug" (a new issue on
+// Halo's GitHub) and "Contact me" (the developer's Reddit), on one white Calm card. Licence and full credits stay in
 // LICENSE and the README.
 import * as React from "react";
 import { Linking, View } from "react-native";
-import { ArrowUpRight } from "lucide-react-native";
+import { ArrowUpRight, Download, RefreshCw } from "lucide-react-native";
+import { downloadingLabel, useUpdate } from "@/update/useUpdate";
 import { Txt } from "@/ui";
 import { CalmButton, Group, InfoLine, Rows, Sentence, useCalm } from "../settings/calmKit";
 
@@ -25,6 +27,27 @@ function LinkButton({ label, onPress, accessibilityLabel }: { label: string; onP
   );
 }
 
+/** The updates line and its button: "Up to date" and Check for updates, or the newer version and Update. */
+function Updates() {
+  const c = useCalm();
+  const { status, checking, check, progress, install } = useUpdate();
+  const r = status?.available ?? null;
+  return (
+    <>
+      <InfoLine label="Updates" value={r ? `${r.version} available` : status?.checkedAt ? "Up to date" : "Not checked yet"} valueColor={r ? c.teal : undefined} />
+      {r ? (
+        <CalmButton variant="primary" on="card" size="md" icon={Download} disabled={progress != null} onPress={() => void install(r)} style={{ marginTop: 4 }}>
+          {progress != null ? downloadingLabel(progress) : r.apkUrl ? `Update to ${r.version}` : "Open the release on GitHub"}
+        </CalmButton>
+      ) : (
+        <CalmButton variant="secondary" on="card" size="md" icon={RefreshCw} disabled={checking} onPress={() => void check()} style={{ marginTop: 4 }}>
+          {checking ? "Checking…" : "Check for updates"}
+        </CalmButton>
+      )}
+    </>
+  );
+}
+
 export function About({ version, scoringVersion }: { version: string; scoringVersion: number }) {
   return (
     <Group title="About" gap={4}>
@@ -32,6 +55,7 @@ export function About({ version, scoringVersion }: { version: string; scoringVer
       <Rows style={{ marginTop: 8 }}>
         <InfoLine label="Version" value={version} numeric />
         <InfoLine label="Scoring version" value={String(scoringVersion)} numeric />
+        <Updates />
       </Rows>
       <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
         {REPO_URL && <LinkButton label="Report a bug" onPress={() => void Linking.openURL(`${REPO_URL}/issues/new`)} accessibilityLabel="Report a bug (opens GitHub in the browser)" />}

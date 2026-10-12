@@ -2,7 +2,7 @@
 // Notifications (web push). Two cards. Background sync: the WorkManager task (src/background/task.ts), Health
 // Connect's background read permission, and the task's last runs. Notifications: "Recovery ready", "Halo can't
 // sync", the smart alerts (strain target, Health Monitor, weekly report; src/background/smart.ts), the daily check-in
-// reminder with its time, the wind-down reminder with its lead, and a test. Turning any notification on asks for
+// reminder with its time, the wind-down reminder with its lead, app updates (src/update), and a test. Turning any notification on asks for
 // Android 13's POST_NOTIFICATIONS permission first.
 import * as React from "react";
 import { AppState, Linking, View } from "react-native";
@@ -314,6 +314,11 @@ function NotificationsCard({ s }: { s: ReturnType<typeof useNotificationSettings
     await s.update(patch);
     setNext(await applyBedtime(app.store, app.timeZone));
   };
+  // On without the permission still works: the update then shows inside Halo only.
+  const setUpdates = async (on: boolean) => {
+    if (on && s.permission !== "granted" && !denied) s.setPermission(await askNotificationPermission());
+    await s.update({ updates: on });
+  };
   const windDownCaption = next
     ? `Next at ${clock(next.at * 1000, app.timeZone)}, for bed by ${clock(next.bedtime * 1000, app.timeZone)}; opens the sleep planner`
     : "Before tonight’s planned bedtime, from the sleep planner";
@@ -354,6 +359,12 @@ function NotificationsCard({ s }: { s: ReturnType<typeof useNotificationSettings
         <TimeField value={s.settings.checkInTime} onCommit={(v) => void setTime(v)} disabled={denied || !s.settings.checkIn} />
         <SwitchRow label="Wind-down reminder" caption={windDownCaption} value={s.settings.bedtime} onChange={(v) => void setWindDown({ bedtime: v })} disabled={denied} />
         <LeadField value={s.settings.bedtimeLeadMin} onChange={(m) => void setWindDown({ bedtimeLeadMin: m })} disabled={denied || !s.settings.bedtime} />
+        <SwitchRow
+          label="App updates"
+          caption="When a new version of Halo is out; Halo asks GitHub a few times a day, sending no health data"
+          value={s.settings.updates}
+          onChange={(v) => void setUpdates(v)}
+        />
       </Divided>
       <CalmButton variant="secondary" on="card" icon={BellRing} onPress={() => void test()} disabled={denied} style={{ marginTop: 8 }}>
         Test notification
@@ -361,7 +372,7 @@ function NotificationsCard({ s }: { s: ReturnType<typeof useNotificationSettings
       <View style={{ marginTop: 8, flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
         <Moon size={14} color={c.faint} strokeWidth={2} style={{ marginTop: 3 }} />
         <Sentence size={13} style={{ flex: 1 }}>
-          Alerts are checked after every sync, in the background or when Halo opens. Nothing leaves the phone.
+          Alerts are checked after every sync, in the background or when Halo opens. Nothing leaves the phone except the update check’s request to GitHub.
         </Sentence>
       </View>
     </Group>

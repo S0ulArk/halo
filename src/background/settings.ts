@@ -1,5 +1,6 @@
 // What the person chose on Settings › Notifications & background, kept in AsyncStorage like the theme (device
-// settings, not rows). Everything is off until they turn it on: nothing runs or notifies unasked.
+// settings, not rows). Everything is off until they turn it on, except the update check (src/update), which only asks
+// GitHub for Halo's latest version.
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export const SETTINGS_KEY = "pulse.background.settings";
@@ -24,6 +25,8 @@ export type BackgroundSettings = {
   healthMonitor: boolean;
   /** "Weekly report ready", Monday morning once last week's report is complete. */
   weeklyReport: boolean;
+  /** "Halo x.y.z is available": a few times a day Halo asks GitHub for its latest release (no health data is sent). */
+  updates: boolean;
 };
 
 /** The wind-down lead times Settings offers, in minutes. */
@@ -40,6 +43,7 @@ export const DEFAULT_SETTINGS: BackgroundSettings = {
   strainTarget: false,
   healthMonitor: false,
   weeklyReport: false,
+  updates: true,
 };
 
 export async function readSettings(): Promise<BackgroundSettings> {

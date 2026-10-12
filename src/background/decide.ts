@@ -84,6 +84,8 @@ export const DEEP_LINK = {
   strain: "pulse://strain",
   planner: "pulse://sleep#planner",
   monitor: "pulse://health/monitor",
+  /** More, where About offers the update. */
+  update: "pulse://more",
 } as const;
 
 /** The web's "Recovery ready" body: "78%: Green". */

@@ -2,12 +2,13 @@
 // at module scope, as TaskManager requires: index.ts imports this file, so a headless launch (WorkManager waking Pulse
 // with no UI) finds the task before anything renders. The task opens the store, checks the setting, the source and
 // its access (Health Connect's background read permission, or a connected Google account, whose token the sync gets
-// silently), runs the shared runSync, and logs the outcome (log.ts).
+// silently), runs the shared runSync, and logs the outcome (log.ts). It also checks GitHub for a Halo update.
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as BackgroundTask from "expo-background-task";
 import * as TaskManager from "expo-task-manager";
 import { googleConnection } from "@/google/auth";
 import { permissionState } from "@/health/connect";
+import { checkAndNotify } from "@/update/check";
 import { notifyAfterRun } from "./alerts";
 import { taskSkipReason, type AlertSource } from "./decide";
 import { appendLog } from "./log";
@@ -24,6 +25,8 @@ const SOURCE_KEY = "pulse.source";
 export async function runBackgroundTask(): Promise<BackgroundTask.BackgroundTaskResult> {
   const t0 = Date.now();
   try {
+    // "Halo x.y.z is available" (at most every 6 hours; never throws).
+    await checkAndNotify();
     const settings = await readSettings();
     const store = await backgroundStore();
     const [profile, rawSource] = await Promise.all([store.getProfile(), AsyncStorage.getItem(SOURCE_KEY).catch(() => null)]);
