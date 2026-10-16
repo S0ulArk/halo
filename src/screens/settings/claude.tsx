@@ -161,7 +161,10 @@ function Ready({ state, link }: { state: ConnectorState; link: string | null }) 
         </CalmButton>
       </Group>
       <Group title="Add it to Claude" gap={12}>
-        <Sentence>In Claude (the app or claude.ai): Settings › Connectors › Add custom connector. Name it Halo, paste this link, and tap Add.</Sentence>
+        <Sentence>
+          On claude.ai (a browser on this phone works) or in the Claude desktop app: Customize › Connectors › Add custom connector. Paste this link; if it asks how people sign in, choose No sign-in. Then Add. It also
+          shows up in the Claude phone app. The free plan allows one custom connector.
+        </Sentence>
         <View style={{ borderRadius: 16, backgroundColor: c.ground, padding: 14 }}>
           <Txt size={13} lineHeight={18} selectable style={{ color: c.ink, fontFamily: "monospace" }}>
             {link ?? "…"}
