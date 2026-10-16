@@ -6,7 +6,7 @@ A personal recovery, strain and sleep app for Android. Halo reads your Fitbit da
 
 ## Screenshots
 
-Taken with Halo's built-in demo data (a generated person, not real health data).
+Taken with Halo's built-in demo data (a generated person, not real health data), in the light and dark themes.
 
 <table>
   <tr>
@@ -18,32 +18,14 @@ Taken with Halo's built-in demo data (a generated person, not real health data).
     <td align="center">Today</td><td align="center">Sleep</td><td align="center">Activity</td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/light/health.png" width="250" alt="Health: Halo Age and Pace of Aging"></td>
-    <td><img src="docs/screenshots/light/recovery.png" width="250" alt="Recovery: HRV, resting heart rate and respiratory rate against baseline"></td>
-    <td><img src="docs/screenshots/light/monitor.png" width="250" alt="Health Monitor: last night's vitals"></td>
+    <td><img src="docs/screenshots/dark/health.png" width="250" alt="Health: Halo Age and Pace of Aging, dark theme"></td>
+    <td><img src="docs/screenshots/dark/recovery.png" width="250" alt="Recovery: HRV, resting heart rate and respiratory rate against baseline, dark theme"></td>
+    <td><img src="docs/screenshots/dark/monitor.png" width="250" alt="Health Monitor: last night's vitals, dark theme"></td>
   </tr>
   <tr>
-    <td align="center">Halo Age</td><td align="center">Recovery</td><td align="center">Health Monitor</td>
+    <td align="center">Halo Age (dark)</td><td align="center">Recovery (dark)</td><td align="center">Health Monitor (dark)</td>
   </tr>
 </table>
-
-<details>
-<summary>Dark theme</summary>
-
-<table>
-  <tr>
-    <td><img src="docs/screenshots/dark/today.png" width="250" alt="Today, dark theme"></td>
-    <td><img src="docs/screenshots/dark/sleep.png" width="250" alt="Sleep, dark theme"></td>
-    <td><img src="docs/screenshots/dark/activity.png" width="250" alt="Activity, dark theme"></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/dark/health.png" width="250" alt="Halo Age, dark theme"></td>
-    <td><img src="docs/screenshots/dark/recovery.png" width="250" alt="Recovery, dark theme"></td>
-    <td><img src="docs/screenshots/dark/monitor.png" width="250" alt="Health Monitor, dark theme"></td>
-  </tr>
-</table>
-
-</details>
 
 ## What it shows
 
