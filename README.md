@@ -4,6 +4,47 @@ A personal recovery, strain and sleep app for Android. Halo reads your Fitbit da
 
 **Halo is not a medical device.** Its scores are estimates for personal insight, not medical advice.
 
+## Screenshots
+
+Taken with Halo's built-in demo data (a generated person, not real health data).
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/light/today.png" width="250" alt="Today: Recovery, Sleep and Strain with the live heart-rate tile"></td>
+    <td><img src="docs/screenshots/light/sleep.png" width="250" alt="Sleep: Sleep Performance and its parts"></td>
+    <td><img src="docs/screenshots/light/activity.png" width="250" alt="Activity: Day Strain, target and heart-rate zones"></td>
+  </tr>
+  <tr>
+    <td align="center">Today</td><td align="center">Sleep</td><td align="center">Activity</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/light/health.png" width="250" alt="Health: Halo Age and Pace of Aging"></td>
+    <td><img src="docs/screenshots/light/recovery.png" width="250" alt="Recovery: HRV, resting heart rate and respiratory rate against baseline"></td>
+    <td><img src="docs/screenshots/light/monitor.png" width="250" alt="Health Monitor: last night's vitals"></td>
+  </tr>
+  <tr>
+    <td align="center">Halo Age</td><td align="center">Recovery</td><td align="center">Health Monitor</td>
+  </tr>
+</table>
+
+<details>
+<summary>Dark theme</summary>
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/dark/today.png" width="250" alt="Today, dark theme"></td>
+    <td><img src="docs/screenshots/dark/sleep.png" width="250" alt="Sleep, dark theme"></td>
+    <td><img src="docs/screenshots/dark/activity.png" width="250" alt="Activity, dark theme"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/dark/health.png" width="250" alt="Halo Age, dark theme"></td>
+    <td><img src="docs/screenshots/dark/recovery.png" width="250" alt="Recovery, dark theme"></td>
+    <td><img src="docs/screenshots/dark/monitor.png" width="250" alt="Health Monitor, dark theme"></td>
+  </tr>
+</table>
+
+</details>
+
 ## What it shows
 
 - **Today**: Recovery, Strain and Sleep at a glance, daily goals, your journal and nutrition, the week in review.
