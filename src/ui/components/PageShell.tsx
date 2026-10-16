@@ -1,3 +1,5 @@
+// The tab-root page frame (PageShell) and what every page frame shares: the solid ground, the quiet scroll throttle,
+// and the room kept clear of the tab bar at the foot of a page.
 import * as React from "react";
 import {
   ScrollView,
@@ -6,10 +8,12 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import Animated, { useAnimatedRef, useScrollOffset } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { GlassTarget } from "@/ui/glass";
 import { useTheme } from "@/ui/ThemeProvider";
-import type { DateSwitcherProps } from "./DateSwitcher";
-import { TitleHeader } from "./DetailHeader";
+import { DateSwitcher, type DateSwitcherProps } from "./DateSwitcher";
+import { LargeTitle, TitleHeader, useBarInset } from "./DetailHeader";
 import { HomeHeader, type HomeHeaderProps } from "./HomeHeader";
 import type { SyncShellStatus } from "./SyncStatus";
 import { SyncStatus } from "./SyncStatus";
@@ -85,7 +89,11 @@ export type PageShellProps = {
   children?: React.ReactNode;
 };
 
-/** Tab roots: Home, Health, Journal, More (spec §4.5). */
+/**
+ * Tab roots: Home, Health, Journal, More (spec §4.5), as iOS large-title pages: the bar floats over the content (its
+ * inline title and scroll edge follow the scroll offset on the UI thread) and the content opens with the large title,
+ * the day under it. Home keeps its own header in flow.
+ */
 export function PageShell({
   title,
   dateSwitcher,
@@ -102,57 +110,66 @@ export function PageShell({
   const { c } = useTheme();
   const clearance = useBottomClearance("tabs");
   const items = React.Children.toArray(children);
+  const homeLayout = layout === "home" && !!home;
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  const y = useScrollOffset(scrollRef);
+  const top = useBarInset();
   return (
     <View style={{ flex: 1, backgroundColor: c.background }}>
       {/* The root's own fill is the ground: no second full-screen layer. */}
       <View style={{ flex: 1 }}>
-        {layout === "home" && home ? (
-          <HomeHeader {...home} />
-        ) : (
-          <TitleHeader title={title} dateSwitcher={dateSwitcher} right={sync && <SyncStatus status={sync.status} now={sync.now} onPress={sync.onPress} />} />
-        )}
-        <ScrollView
-          onScroll={onScroll}
-          scrollEventThrottle={onScroll ? 16 : QUIET_SCROLL}
-          contentContainerStyle={[
-            {
-              paddingHorizontal: 16,
-              paddingTop: 8,
-              paddingBottom: bottomInset ?? clearance,
-            },
-            contentStyle,
-          ]}
-          contentInsetAdjustmentBehavior="never"
-        >
-          {banner && (
-            <View style={{ marginBottom: layout === "home" ? 32 : 16 }}>
-              {banner}
-            </View>
-          )}
-          {actions && (
-            <View
-              style={{
-                marginBottom: 16,
-                flexDirection: "row",
-                justifyContent: "flex-end",
-                gap: 8,
-              }}
-            >
-              {actions}
-            </View>
-          )}
-          {layout === "grid-2" ? (
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
-              {items.map((it, i) => (
-                <View key={i} style={{ width: "48%", flexGrow: 1 }}>
-                  {it}
-                </View>
-              ))}
-            </View>
-          ) : (
-            <View style={{ gap: 32 }}>{items}</View>
-          )}
-        </ScrollView>
+        {homeLayout && <HomeHeader {...home} />}
+        {/* The page is the glass's backdrop: the floating bar's round buttons (its overlay) bend what scrolls under them. */}
+        <GlassTarget style={{ flex: 1 }} overlay={homeLayout ? null : <TitleHeader title={title} right={sync && <SyncStatus status={sync.status} now={sync.now} onPress={sync.onPress} />} scrollY={y} />}>
+          <Animated.ScrollView
+            ref={scrollRef}
+            onScroll={onScroll}
+            scrollEventThrottle={16}
+            contentContainerStyle={[
+              {
+                paddingHorizontal: 16,
+                paddingTop: homeLayout ? 8 : top,
+                paddingBottom: bottomInset ?? clearance,
+              },
+              contentStyle,
+            ]}
+            contentInsetAdjustmentBehavior="never"
+          >
+            {!homeLayout && (
+              <LargeTitle title={title} y={y}>
+                {dateSwitcher ? <DateSwitcher {...dateSwitcher} /> : null}
+              </LargeTitle>
+            )}
+            {banner && (
+              <View style={{ marginBottom: layout === "home" ? 32 : 16 }}>
+                {banner}
+              </View>
+            )}
+            {actions && (
+              <View
+                style={{
+                  marginBottom: 16,
+                  flexDirection: "row",
+                  justifyContent: "flex-end",
+                  gap: 8,
+                }}
+              >
+                {actions}
+              </View>
+            )}
+            {layout === "grid-2" ? (
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+                {items.map((it, i) => (
+                  <View key={i} style={{ width: "48%", flexGrow: 1 }}>
+                    {it}
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={{ gap: 32 }}>{items}</View>
+            )}
+          </Animated.ScrollView>
+        </GlassTarget>
       </View>
     </View>
   );

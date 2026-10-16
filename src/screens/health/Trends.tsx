@@ -49,7 +49,7 @@ function MetricPicker({ current, onPick }: { current: TrendMetricKey; onPick: (k
           setExpanded(metric.group);
           setOpen(true);
         }}
-        style={({ pressed }) => ({ minHeight: 72, flexDirection: "row", alignItems: "center", gap: 14, borderRadius: 32, borderWidth: 1, borderColor: c.tintEdge[tint], backgroundColor: c.tint[tint], ...(c.shadow ? { boxShadow: c.shadow } : null), paddingHorizontal: 18, paddingVertical: 14, opacity: pressed ? 0.92 : 1 })}
+        style={({ pressed }) => ({ minHeight: 72, flexDirection: "row", alignItems: "center", gap: 14, borderRadius: 20, borderWidth: 1, borderColor: c.tintEdge[tint], backgroundColor: c.tint[tint], ...(c.shadow ? { boxShadow: c.shadow } : null), paddingHorizontal: 18, paddingVertical: 14, opacity: pressed ? 0.92 : 1 })}
       >
         <IconTile icon={ChartLine} color={c.tintInk[tint]} bg={c.chip} size={40} />
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>

@@ -217,7 +217,7 @@ export function sleepSkeleton(): Slots {
 function ActivityHeroSkeleton() {
   const c = useCalm();
   return (
-    <View style={{ alignSelf: "stretch", gap: 14, borderRadius: 32, borderWidth: 1, borderColor: c.tintEdge.peach, backgroundColor: c.tint.peach, padding: 20 }}>
+    <View style={{ alignSelf: "stretch", gap: 14, borderRadius: 20, borderWidth: 1, borderColor: c.tintEdge.peach, backgroundColor: c.tint.peach, padding: 20 }}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "flex-end", columnGap: 32, rowGap: 12 }}>
         {(
           [

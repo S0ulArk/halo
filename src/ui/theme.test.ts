@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { alpha } from "@/lib/utils";
 import { DARK, LIGHT, type ColorToken, type Tokens } from "./theme";
 
 // WCAG 2 relative luminance and contrast ratio. Translucent tokens ("rgba(…)") are composited over the surface they sit on.
@@ -34,30 +33,41 @@ const SURFACES: ColorToken[] = ["background", "backgroundTop", "inset", "card", 
 /** Raised fills inside a card (rows, chips, fields, the pressed state). */
 const FILLS: ColorToken[] = ["secondary", "field"];
 
+// The palette is iOS's (the 2026-10 iOS pass). Two of its choices sit under WCAG's 4.5:1 by design, as they do on an
+// iPhone: the light scheme's secondary label (rgba(60,60,67,0.6), 3.4:1 on white) and white on the system blue (4.0:1,
+// 3.6:1 on the dark blue). The light scheme's green, yellow, purple and blue are the system colours Apple paints big
+// numbers, glyphs and links with; words that carry meaning in colour take the increased-contrast variants instead.
+/** Secondary text in each scheme: iOS's secondary label. */
+const SECONDARY_MIN = { dark: 4.5, light: 3 } as const;
+/** Data colours set as words, which must read at 4.5:1 in each scheme. */
+const DATA_TEXT: Record<"dark" | "light", ColorToken[]> = {
+  dark: ["recoveryGreen", "recoveryYellow", "recoveryRedText", "strainText", "sleep", "optimal", "warning", "coach", "primaryInk"],
+  light: ["recoveryRedText", "strainText", "sleep", "warning"],
+};
+
 describe.each([
   ["dark", DARK],
   ["light", LIGHT],
-] as [string, Tokens][])("%s theme text contrast", (_name, c) => {
+] as ["dark" | "light", Tokens][])("%s theme text contrast", (name, c) => {
   it.each(SURFACES)("body text reaches 7:1 on %s", (s) => {
     expect(contrast(c.foreground, c[s])).toBeGreaterThanOrEqual(7);
   });
 
-  it.each([...SURFACES, ...FILLS])("secondary text reaches 4.5:1 on %s", (s) => {
-    expect(contrast(c.foregroundSecondary, c[s])).toBeGreaterThanOrEqual(4.5);
+  it.each([...SURFACES, ...FILLS])("secondary text reaches iOS's secondary-label contrast on %s", (s) => {
+    expect(contrast(c.foregroundSecondary, c[s])).toBeGreaterThanOrEqual(SECONDARY_MIN[name]);
   });
 
-  it("muted text reaches 4.5:1 on a card", () => {
-    expect(contrast(c.mutedForeground, c.card)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(c.mutedForeground, c.cardTop)).toBeGreaterThanOrEqual(4.5);
+  it("muted text reaches iOS's secondary-label contrast on a card", () => {
+    expect(contrast(c.mutedForeground, c.card)).toBeGreaterThanOrEqual(SECONDARY_MIN[name]);
+    expect(contrast(c.mutedForeground, c.cardTop)).toBeGreaterThanOrEqual(SECONDARY_MIN[name]);
   });
 
-  it("keeps the primary button's label legible across its whole face", () => {
-    for (const face of [c.primary, c.ctaFrom, c.ctaTo]) expect(contrast(c.primaryForeground, face)).toBeGreaterThanOrEqual(4.5);
+  it("keeps the primary button's label legible across its whole face (white on iOS blue)", () => {
+    for (const face of [c.primary, c.ctaFrom, c.ctaTo]) expect(contrast(c.primaryForeground, face)).toBeGreaterThanOrEqual(3.5);
   });
 
-  it("paints data text that reads on cards, the ground and the inset", () => {
-    const text: ColorToken[] = ["recoveryGreen", "recoveryYellow", "recoveryRedText", "strainText", "sleep", "optimal", "warning", "coach", "primaryInk"];
-    for (const t of text) for (const s of ["card", "background", "inset"] as ColorToken[]) expect(contrast(c[t], c[s]), `${t} on ${s}`).toBeGreaterThanOrEqual(4.5);
+  it("paints data words that read on cards, the ground and the inset", () => {
+    for (const t of DATA_TEXT[name]) for (const s of ["card", "background", "inset"] as ColorToken[]) expect(contrast(c[t], c[s]), `${t} on ${s}`).toBeGreaterThanOrEqual(4.5);
   });
 
   it("keeps the data families apart: strain is not a recovery band, nor the warning tone", () => {
@@ -124,18 +134,30 @@ describe("dark theme", () => {
 });
 
 describe("light theme", () => {
-  it("paints a flat primary face with no sheen, its 5 % card ring, a soft off-white ground under white cards", () => {
-    expect(LIGHT.background).toBe("#f2f2f0");
+  it("paints iOS's grouped surfaces: white cards with no ring on the #F2F2F7 ground, a flat blue primary", () => {
+    expect(LIGHT.background).toBe("#f2f2f7");
     expect(LIGHT.card).toBe("#ffffff");
+    expect(LIGHT.primary).toBe("#007aff");
     expect(LIGHT.ctaFrom).toBe(LIGHT.primary);
     expect(LIGHT.ctaTo).toBe(LIGHT.primary);
     expect(parse(LIGHT.ctaSheen).a).toBe(0);
-    expect(LIGHT.cardBorder).toBe(alpha(LIGHT.foreground, 0.05));
+    expect(parse(LIGHT.cardBorder).a).toBe(0);
   });
 
-  it("does not inherit the dark theme's restyled chrome", () => {
-    expect(LIGHT.actionRimFrom).toBe("#7778dd");
-    expect(LIGHT.actionRimTo).toBe("#4c94db");
+  it("takes the light system colours, not the dark scheme's", () => {
+    expect(LIGHT.recoveryGreen).toBe("#34c759");
+    expect(LIGHT.strain).toBe("#ff9500");
+    expect(LIGHT.sleep).toBe("#5856d6");
+    expect(LIGHT.actionRimFrom).not.toBe(DARK.actionRimFrom);
+  });
+});
+
+describe("dark theme surfaces", () => {
+  it("paints iOS's dark grouped surfaces: #1C1C1E cards on black, the dark system colours", () => {
+    expect(DARK.background).toBe("#000000");
+    expect(DARK.card).toBe("#1c1c1e");
+    expect(DARK.primary).toBe("#0a84ff");
+    expect(DARK.recoveryGreen).toBe("#30d158");
   });
 });
 

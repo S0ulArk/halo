@@ -1,15 +1,17 @@
+// The info trigger (a quiet "i" on a card, the round glass "i" in a bar) and the centred info card it opens.
 import * as React from "react";
 import { BackHandler, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { Info, X } from "lucide-react-native";
 import type { ChipTone } from "@/lib/bands";
-import { alpha } from "@/lib/utils";
 import { useCalm } from "@/ui/calm";
 import { REASE } from "@/ui/motion/easing";
 import { MOTION } from "@/ui/theme";
+import { useTheme } from "@/ui/ThemeProvider";
 import { Button } from "./Button";
 import { OnCard } from "./calmKit";
+import { GlassButton } from "./GlassButton";
 import { Overlay, useCoverLayer } from "./Overlay";
 import { StatusChip } from "./primitives";
 import { Txt } from "./Text";
@@ -44,10 +46,9 @@ export function InfoRows({ rows }: { rows: [swatch: string | null, text: string]
 }
 
 /**
- * The centred info card (spec §4.8), Calm: a white card with 28 px corners and no outline over a dim in the ground's
- * colour, no blur. Opens 320 ms
- * (fade, scale 0.96), closes 200 ms. It renders in the root overlay (Overlay), in the app's own window, and its
- * motion runs on the UI thread (Reanimated); Android's back closes it.
+ * The centred info card (spec §4.8), iOS's: a card with 28 px corners and no outline over the system dim, no blur, a
+ * round grey close button in its corner. Opens 320 ms (fade, scale 0.96), closes 200 ms. It renders in the root overlay
+ * (Overlay), in the app's own window, and its motion runs on the UI thread (Reanimated); Android's back closes it.
  */
 export function InfoDialog(props: InfoContent & { open: boolean; onClose: () => void }) {
   const [shown, setShown] = React.useState(props.open);
@@ -64,6 +65,7 @@ export function InfoDialog(props: InfoContent & { open: boolean; onClose: () => 
 
 function InfoCard({ open, onClose, onClosed, title, body, icon, chip, action }: InfoContent & { open: boolean; onClose: () => void; onClosed: () => void }) {
   const c = useCalm();
+  const { c: t0 } = useTheme();
   const { width } = useWindowDimensions();
   const t = useSharedValue(0);
   React.useEffect(() => {
@@ -92,12 +94,12 @@ function InfoCard({ open, onClose, onClosed, title, body, icon, chip, action }: 
   const card = useAnimatedStyle(() => ({ opacity: t.value, transform: [{ scale: 0.96 + 0.04 * t.value }] }));
   return (
     <View pointerEvents={open ? "box-none" : "none"} style={StyleSheet.absoluteFill}>
-      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: alpha(c.ground, 0.9) }, dim]}>
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: t0.dim }, dim]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
       </Animated.View>
       <View pointerEvents="box-none" style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 16 }}>
         <Animated.View accessibilityViewIsModal style={[{ width: Math.min(360, width - 32) }, card]}>
-          <View style={{ borderRadius: 32, borderWidth: 1, borderColor: c.hairline, backgroundColor: c.card, maxHeight: 560, overflow: "hidden", ...(c.shadow ? { boxShadow: c.shadow } : null) }}>
+          <View style={{ borderRadius: 28, backgroundColor: c.card, maxHeight: 560, overflow: "hidden" }}>
             <OnCard>
               <ScrollView contentContainerStyle={{ padding: 24 }} bounces={false}>
                 {icon && <View style={{ marginBottom: 16 }}>{icon}</View>}
@@ -123,8 +125,8 @@ function InfoCard({ open, onClose, onClosed, title, body, icon, chip, action }: 
                 )}
               </ScrollView>
               <View style={{ position: "absolute", top: 14, right: 14 }}>
-                <Button variant="secondary" size="icon-touch" onPress={onClose} accessibilityLabel="Close">
-                  <X size={20} color={c.ink} strokeWidth={2} />
+                <Button variant="outline-pill" size="icon-touch" onPress={onClose} accessibilityLabel="Close">
+                  <X size={18} color={c.sub} strokeWidth={2.6} />
                 </Button>
               </View>
             </OnCard>
@@ -137,27 +139,28 @@ function InfoCard({ open, onClose, onClosed, title, body, icon, chip, action }: 
 
 /**
  * Info trigger and its centred info card (spec §4.8). `card`: a quiet grey "i", 32 px inside a 44 px hit area (card
- * headers). `header`: a 44 px white round button with the "i" in ink (DetailHeader).
+ * headers). `header`: the bar's 38 px round glass button with the "i" in ink (DetailHeader).
  */
 export function InfoButton({ info, label, variant }: { info: InfoContent; label: string; variant: "card" | "header" }) {
   const c = useCalm();
   const [open, setOpen] = React.useState(false);
-  const header = variant === "header";
   return (
     <>
-      <Pressable
-        onPress={() => setOpen(true)}
-        accessibilityRole="button"
-        accessibilityLabel={`About ${label}`}
-        hitSlop={header ? 0 : 6}
-        style={({ pressed }) =>
-          header
-            ? { width: 44, height: 44, borderRadius: 22, backgroundColor: c.card, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.7 : 1 }
-            : { width: 32, height: 32, borderRadius: 16, marginVertical: -4, marginRight: -6, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? c.line : "transparent" }
-        }
-      >
-        <Info size={header ? 20 : 18} color={header ? c.ink : c.faint} strokeWidth={2} />
-      </Pressable>
+      {variant === "header" ? (
+        <GlassButton onPress={() => setOpen(true)} accessibilityLabel={`About ${label}`}>
+          <Info size={21} color={c.ink} strokeWidth={2} />
+        </GlassButton>
+      ) : (
+        <Pressable
+          onPress={() => setOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`About ${label}`}
+          hitSlop={6}
+          style={({ pressed }) => ({ width: 32, height: 32, borderRadius: 16, marginVertical: -4, marginRight: -6, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.5 : 1 })}
+        >
+          <Info size={18} color={c.tertiary} strokeWidth={2} />
+        </Pressable>
+      )}
       <InfoDialog open={open} onClose={() => setOpen(false)} {...info} />
     </>
   );

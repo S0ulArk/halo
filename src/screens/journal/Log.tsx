@@ -273,7 +273,7 @@ export function Log({ vm }: LogProps) {
       {vm.recent.length > 0 && (
         <View style={{ marginTop: 20, gap: 10 }}>
           <SectionLabel>Last 14 days</SectionLabel>
-          <View accessibilityLabel="Logged in the last 14 days" style={{ borderRadius: 32, borderWidth: 1, borderColor: c.edge, backgroundColor: c.card, ...(c.shadow ? { boxShadow: c.shadow } : null), overflow: "hidden", paddingVertical: 4 }}>
+          <View accessibilityLabel="Logged in the last 14 days" style={{ borderRadius: 20, borderWidth: 1, borderColor: c.edge, backgroundColor: c.card, ...(c.shadow ? { boxShadow: c.shadow } : null), overflow: "hidden", paddingVertical: 4 }}>
             {recent.map((e, i) => {
               // Entries read from Health Connect were logged in Fitbit: shown as such, and never deleted from here
               // (Pulse doesn't write to Health Connect; they go when they are deleted in Fitbit).

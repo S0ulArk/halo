@@ -1,9 +1,14 @@
+// The press every tappable thing in the kit shares, iOS's: the moment a finger lands the element settles to about 97 %
+// and dims a little, and on release it springs back with the faintest overshoot. Both run on the UI thread off shared
+// values (Reanimated springs, src/ui/motion/springs.ts); a press re-renders nothing. Under Reduce motion the size stays
+// put and only the dim answers.
 import * as React from "react";
-import Animated, { useAnimatedStyle } from "react-native-reanimated";
-import { useTheme } from "@/ui/ThemeProvider";
-import { useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
-import { REASE } from "@/ui/motion/easing";
-import { MOTION } from "@/ui/theme";
+import { useAnimatedStyle, useSharedValue, withSpring, type SharedValue } from "react-native-reanimated";
+import { SPRING } from "@/ui/motion/springs";
+import { reduceMotionNow } from "@/ui/motion/system";
+
+/** The kit's press: how far it settles and how far it dims (opacity at the bottom of the press). */
+export const PRESS = { scale: 0.97, dim: 0.82 } as const;
 
 export type Press = {
   /**
@@ -14,39 +19,45 @@ export type Press = {
   onPressIn: () => void;
   onPressOut: () => void;
   scale: SharedValue<number>;
+  /** How far the press has gone: 0 at rest, 1 with the finger down. */
+  progress: SharedValue<number>;
   /** The scale at the bottom of the press. */
   scaleTo: number;
 };
 
 /**
- * The press affordance every tappable kit element shares (spec §2.7): scale to 0.96 over 150 ms, ease-standard. The
- * scale runs on the UI thread (Reanimated); a press re-renders nothing.
+ * The press affordance: `scaleTo` (0.97) and the progress both spring in on press-in and spring back on release, on the
+ * UI thread. Put `animatedStyle` (the scale alone) on an `Animated.View`, or use `usePressStyle` for the scale and the
+ * dim together.
  */
-export function usePress(scaleTo = 0.96): Press {
+export function usePress(scaleTo: number = PRESS.scale): Press {
   const scale = useSharedValue(1);
+  const progress = useSharedValue(0);
   return React.useMemo(
     () => ({
       animatedStyle: { transform: [{ scale }] },
       onPressIn: () => {
-        scale.set(withTiming(scaleTo, { duration: MOTION.fast, easing: REASE.standard }));
+        progress.set(withSpring(1, SPRING.pressIn));
+        if (!reduceMotionNow()) scale.set(withSpring(scaleTo, SPRING.pressIn));
       },
       onPressOut: () => {
-        scale.set(withTiming(1, { duration: MOTION.fast, easing: REASE.standard }));
+        progress.set(withSpring(0, SPRING.release));
+        scale.set(withSpring(1, SPRING.release));
       },
       scale,
+      progress,
       scaleTo,
     }),
-    [scale, scaleTo],
+    [scale, progress, scaleTo],
   );
 }
 
 /**
- * The press highlight over a pressed surface: a faint veil (ink on light, white on dark) that follows the press's scale,
- * none at rest and full at the bottom of the press, on the UI thread. Place it last inside the pressed surface.
+ * The press's scale with its dim, as one Reanimated style: the opacity runs from `rest` (1, or a disabled control's
+ * 0.45) down to `rest × dim` as the finger lands. Put it last in the pressed `Animated.View`'s style.
  */
-export function PressGlow({ press, radius }: { press: Press; radius: number }) {
-  const dark = useTheme().scheme === "dark";
-  const { scale, scaleTo } = press;
-  const veil = useAnimatedStyle(() => ({ opacity: Math.min(1, Math.max(0, (1 - scale.value) / (1 - scaleTo))) }));
-  return <Animated.View pointerEvents="none" style={[{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, borderRadius: radius, backgroundColor: dark ? "rgba(255,255,255,0.05)" : "rgba(20,22,26,0.045)" }, veil]} />;
+export function usePressStyle(press: Press, { rest = 1, dim = PRESS.dim }: { rest?: number; dim?: number } = {}) {
+  const { scale, progress } = press;
+  // The release spring overshoots past 0 for a moment: the dim never goes brighter than rest.
+  return useAnimatedStyle(() => ({ opacity: rest * (1 - (1 - dim) * Math.max(0, progress.value)), transform: [{ scale: scale.value }] }), [rest, dim]);
 }

@@ -1,10 +1,11 @@
 // Journal `/journal?d=` (spec §7.11, journey 7), ported from the web's src/app/(app)/journal/page.tsx and its
 // loading.tsx: the day strip, then Log, Check-in, Insights and History, top to bottom as on a phone.
 //
-// The shell is the kit's PageShell (title header with the date pill) rebuilt in place, for the ScrollView's ref: a
-// History row scrolls back to the top, as the web's link does.
+// The shell is the kit's PageShell (the floating bar, the large title with the day under it) rebuilt in place, for the
+// ScrollView's ref: a History row scrolls back to the top, as the web's link does.
 import * as React from "react";
 import { Pressable, ScrollView, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { useRouter, type Href } from "expo-router";
 import { ChevronRight, CircleAlert, Sparkles } from "lucide-react-native";
 import { DAY, dayLabel, formatDay } from "@/lib/format";
@@ -13,9 +14,12 @@ import { getJournal } from "@/queries/journal";
 import { getLog } from "@/queries/log";
 import type { JournalVM } from "@/queries/types";
 import { useApp, useQuery } from "@/state/app";
-import { EmptyState, Ground, Skeleton, SkeletonText, TitleHeader, Txt } from "@/ui";
+import { DateSwitcher, EmptyState, Ground, Skeleton, SkeletonText, TitleHeader, Txt } from "@/ui";
+import { LargeTitle, useBarInset } from "@/ui/components/DetailHeader";
+import { useRevealScroll } from "@/ui/motion/Rise";
+import { GlassTarget } from "@/ui/glass";
 import { font } from "@/ui/fonts";
-import { QUIET_SCROLL, useBottomClearance } from "@/ui/components/PageShell";
+import { useBottomClearance } from "@/ui/components/PageShell";
 import { CalmButton, CalmCard, Hairline, SectionLabel, Sentence, Surface, useCalm } from "../settings/calmKit";
 import { CheckIn } from "./CheckInSheet";
 import { TagBadge } from "./controls";
@@ -58,6 +62,8 @@ export default function JournalScreen() {
   const { d, today } = useDay();
   const version = useJournalVersion();
   const scroll = React.useRef<ScrollView>(null);
+  const { setRef: setScrollRef, y: scrollY } = useRevealScroll(scroll);
+  const top = useBarInset();
   const [allHistory, setAllHistory] = React.useState(false);
   const q = useQuery((ctx) => getJournal(d, ctx), [d, version]);
   const log = useQuery((ctx) => getLog(ctx, { demo: app.source === "demo" }), [version, app.source]);
@@ -104,7 +110,7 @@ export default function JournalScreen() {
           {!vm ? (
             <HistorySkeleton />
           ) : vm.history.length ? (
-            <View style={{ borderRadius: 32, borderWidth: 1, borderColor: c.edge, backgroundColor: c.card, ...(c.shadow ? { boxShadow: c.shadow } : null), overflow: "hidden", paddingVertical: 4 }}>
+            <View style={{ borderRadius: 20, borderWidth: 1, borderColor: c.edge, backgroundColor: c.card, ...(c.shadow ? { boxShadow: c.shadow } : null), overflow: "hidden", paddingVertical: 4 }}>
               {(allHistory ? vm.history : vm.history.slice(0, RECENT)).map((h, i) => (
                 <React.Fragment key={h.day}>
                   {i > 0 && <Hairline inset={16} />}
@@ -137,24 +143,21 @@ export default function JournalScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: c.ground }}>
       <Ground />
-      <TitleHeader
-        title="Journal"
-        // Off the tab bar (it opens from Today and the check-in): back to where it was opened from, or Today.
-        onBack={() => (router.canGoBack() ? router.back() : router.navigate("/" as Href))}
-        dateSwitcher={{ mode: "day", date: d, today, firstDay: app.sync.firstDay, onChange: setDay, loading: !!q.data && !vm }}
-      />
-      <ScrollView
-        ref={scroll}
-        scrollEventThrottle={QUIET_SCROLL}
-        contentInsetAdjustmentBehavior="never"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: clearance }}
-      >
-        <View style={{ gap: 28 }}>
-          {/* Full-bleed: the strip scrolls edge to edge, its first pill keeps the 16 px gutter inside. */}
-          {strip ? <DayStrip days={strip.map((s) => ({ date: s.day, done: s.done }))} value={d} onChange={setDay} /> : <DayStripSkeleton />}
-          {body}
-        </View>
-      </ScrollView>
+      {/* Every frame's offset reaches the UI thread: the floating bar's inline title and scroll edge follow it. The page
+          is the glass's backdrop for the bar's round back button. Off the tab bar (it opens from Today and the check-in),
+          back goes to where it was opened from, or Today. */}
+      <GlassTarget style={{ flex: 1 }} overlay={<TitleHeader title="Journal" onBack={() => (router.canGoBack() ? router.back() : router.navigate("/" as Href))} scrollY={scrollY} />}>
+        <Animated.ScrollView ref={setScrollRef} scrollEventThrottle={16} contentInsetAdjustmentBehavior="never" contentContainerStyle={{ paddingHorizontal: 16, paddingTop: top, paddingBottom: clearance }}>
+          <LargeTitle title="Journal" y={scrollY}>
+            <DateSwitcher mode="day" date={d} today={today} firstDay={app.sync.firstDay} onChange={setDay} loading={!!q.data && !vm} />
+          </LargeTitle>
+          <View style={{ gap: 28 }}>
+            {/* Full-bleed: the strip scrolls edge to edge, its first pill keeps the 16 px gutter inside. */}
+            {strip ? <DayStrip days={strip.map((s) => ({ date: s.day, done: s.done }))} value={d} onChange={setDay} /> : <DayStripSkeleton />}
+            {body}
+          </View>
+        </Animated.ScrollView>
+      </GlassTarget>
     </View>
   );
 }
@@ -244,7 +247,7 @@ function InsightSkeleton() {
 function HistorySkeleton() {
   const c = useCalm();
   return (
-    <View style={{ borderRadius: 32, borderWidth: 1, borderColor: c.edge, backgroundColor: c.card, ...(c.shadow ? { boxShadow: c.shadow } : null), overflow: "hidden", paddingVertical: 4 }}>
+    <View style={{ borderRadius: 20, borderWidth: 1, borderColor: c.edge, backgroundColor: c.card, ...(c.shadow ? { boxShadow: c.shadow } : null), overflow: "hidden", paddingVertical: 4 }}>
       {Array.from({ length: RECENT }, (_, i) => (
         <React.Fragment key={i}>
           {i > 0 && <Hairline inset={16} />}

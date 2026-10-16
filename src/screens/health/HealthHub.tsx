@@ -106,7 +106,7 @@ function Tile({ tint, icon, title, label, onPress, children }: { tint?: CalmTint
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => ({ flexGrow: 1, minWidth: 0, borderRadius: 32, borderWidth: 1, borderColor: tint ? c.tintEdge[tint] : c.edge, backgroundColor: tint ? c.tint[tint] : c.card, padding: 16, gap: 12, opacity: pressed ? 0.92 : 1, transform: [{ scale: pressed ? 0.985 : 1 }], ...(c.shadow ? { boxShadow: c.shadow } : null) })}
+      style={({ pressed }) => ({ flexGrow: 1, minWidth: 0, borderRadius: 20, borderWidth: 1, borderColor: tint ? c.tintEdge[tint] : c.edge, backgroundColor: tint ? c.tint[tint] : c.card, padding: 16, gap: 12, opacity: pressed ? 0.92 : 1, transform: [{ scale: pressed ? 0.985 : 1 }], ...(c.shadow ? { boxShadow: c.shadow } : null) })}
     >
       <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" }}>
         <IconTile icon={icon} color={ink} bg={tint ? c.chip : c.tint.mint} size={40} />
@@ -333,7 +333,7 @@ function TrendsCard({ onPress }: { onPress: () => void }) {
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`Trends: ${n} metrics in ${TREND_GROUPS.length} groups, each over up to a year`}
-      style={({ pressed }) => ({ borderRadius: 32, borderWidth: 1, borderColor: c.edge, backgroundColor: c.card, ...(c.shadow ? { boxShadow: c.shadow } : null), padding: 16, gap: 12, opacity: pressed ? 0.92 : 1 })}
+      style={({ pressed }) => ({ borderRadius: 20, borderWidth: 1, borderColor: c.edge, backgroundColor: c.card, ...(c.shadow ? { boxShadow: c.shadow } : null), padding: 16, gap: 12, opacity: pressed ? 0.92 : 1 })}
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
         <IconTile icon={ChartLine} color={c.teal} bg={c.tint.mint} size={40} />
@@ -355,7 +355,7 @@ function TrendsCard({ onPress }: { onPress: () => void }) {
 /** Recovery's card while today's data loads: its mint surface at its size, so nothing moves when it arrives. */
 function RecoveryCardSkeleton() {
   const c = useCalm();
-  return <View importantForAccessibility="no-hide-descendants" style={{ height: 292, borderRadius: 32, borderWidth: 1, borderColor: c.tintEdge.mint, backgroundColor: c.tint.mint }} />;
+  return <View importantForAccessibility="no-hide-descendants" style={{ height: 292, borderRadius: 20, borderWidth: 1, borderColor: c.tintEdge.mint, backgroundColor: c.tint.mint }} />;
 }
 
 /**

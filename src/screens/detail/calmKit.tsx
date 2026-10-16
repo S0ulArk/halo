@@ -1,15 +1,16 @@
-// Building blocks for the detail and Health screens (Halo Luxe), after Home's (src/screens/home/calm.tsx). Numbers and
-// words never look alike: a number is the display serif (28 px and up) or Barlow (tabular) in its metric's ink with
-// its unit small and grey beside it; the label under a number is small widely spaced capitals; titles are 17/22
-// semibold; sentences 14/19 in the secondary grey, on a line of their own. Lead cards wear their family's pastel sheen,
-// sections are white cards with the champagne hairline, and rows sit in one grouped list per card with hairlines
-// between them.
+// Building blocks for the detail and Health screens, in Apple Health's look. Numbers and words never look alike: a
+// number is Inter bold (tabular) in its metric's system colour with its unit half its size and grey beside it; the
+// label under a number is small semibold capitals in grey; titles are 17/22 semibold; sentences 15/20 in the secondary
+// grey, on a line of their own. Lead cards wear their family's soft fill, sections are flat cards, and rows sit in one
+// grouped list per card with half-point hairlines between them.
 import * as React from "react";
 import { ActivityIndicator, Pressable, View, type StyleProp, type ViewStyle } from "react-native";
 import type { LucideIcon } from "lucide-react-native";
 import type { ChipTone, Tone } from "@/lib/bands";
+import { alpha } from "@/lib/utils";
 import { Txt } from "@/ui";
 import { CalmSurface } from "@/ui/components/CalmSurface";
+import { iconRadius } from "@/ui/components/calmKit";
 import { useCalm, type CalmPalette, type CalmTint } from "@/ui/calm";
 import { font } from "@/ui/fonts";
 
@@ -30,18 +31,19 @@ export function toneInk(c: CalmPalette, tone: Tone | ChipTone | null | undefined
 }
 
 /**
- * A number with its unit beside it on the same baseline: the numeric face in `color` (default ink), the unit small and
- * grey in the text face, so "43 ms" reads as a value with a unit, never as a phrase.
+ * A number with its unit beside it on the same baseline: Inter bold (tabular) in `color` (default ink), the unit half
+ * its size, semibold and grey, so "43 ms" reads as a value with a unit, never as a phrase.
  */
 export function Num({ value, unit, size, color, unitColor }: { value: string; unit?: string; size: number; color?: string; unitColor?: string }) {
   const c = useCalm();
+  const unitPx = Math.max(12, Math.round(size * 0.5));
   return (
     <View style={{ flexDirection: "row", alignItems: "baseline", flexShrink: 1 }}>
-      <Txt size={size} lineHeight={Math.round(size * 1.12)} style={[font.numberAt(size), { color: color ?? c.ink }]} numberOfLines={1}>
+      <Txt size={size} lineHeight={Math.round(size * 1.15)} style={[font.numberAt(size), { color: color ?? c.ink }]} numberOfLines={1}>
         {value}
       </Txt>
       {unit ? (
-        <Txt size={Math.max(12, Math.round(size * 0.42))} lineHeight={Math.round(Math.max(12, size * 0.42) * 1.3)} weight={500} style={{ color: unitColor ?? c.sub, marginLeft: 4, flexShrink: 1 }}>
+        <Txt size={unitPx} lineHeight={Math.round(unitPx * 1.3)} weight={600} style={{ color: unitColor ?? c.sub, marginLeft: 3, flexShrink: 1 }}>
           {unit}
         </Txt>
       ) : null}
@@ -49,12 +51,12 @@ export function Num({ value, unit, size, color, unitColor }: { value: string; un
   );
 }
 
-/** The small label under a number: 11 px spaced capitals in the faint grey, never mistaken for the value. Wraps, never clips. */
+/** The small label under a number: 12 px semibold capitals in the secondary grey, never mistaken for the value. Wraps, never clips. */
 export function Caption({ children, color, align, style }: { children: string; color?: string; align?: "left" | "center" | "right"; style?: StyleProp<ViewStyle> }) {
   const c = useCalm();
   return (
     <View style={style}>
-      <Txt size={11} lineHeight={15} weight={600} align={align} style={{ color: color ?? c.faint, letterSpacing: 1.4 }}>
+      <Txt size={12} lineHeight={16} weight={600} align={align} style={{ color: color ?? c.sub, letterSpacing: 0.4 }}>
         {children.toUpperCase()}
       </Txt>
     </View>
@@ -71,8 +73,8 @@ export function Title({ children, size = 17, color, lines }: { children: React.R
   );
 }
 
-/** A sentence: 14/19 in the secondary grey (a warning in its tint's ink at 600), on a line of its own. */
-export function Sentence({ children, color, weight, align, size = 14 }: { children: React.ReactNode; color?: string; weight?: 400 | 500 | 600; align?: "left" | "center" | "right"; size?: 13 | 14 }) {
+/** A sentence: 15/20 in the secondary grey (a warning in its tint's colour at 600), on a line of its own; `size` 13 for a note. */
+export function Sentence({ children, color, weight, align, size = 15 }: { children: React.ReactNode; color?: string; weight?: 400 | 500 | 600; align?: "left" | "center" | "right"; size?: 13 | 14 | 15 }) {
   const c = useCalm();
   return (
     <Txt size={size} lineHeight={size + 5} weight={weight ?? (color ? 600 : 400)} align={align} style={{ color: color ?? c.sub }}>
@@ -81,11 +83,11 @@ export function Sentence({ children, color, weight, align, size = 14 }: { childr
   );
 }
 
-/** The icon tile at a card's or row's top left. */
+/** The icon square at a card's or row's top left: `bg` under the icon in `color`, its corners a quarter of its size. */
 export function IconTile({ icon: Icon, color, bg, size = 44 }: { icon: LucideIcon; color: string; bg: string; size?: number }) {
   return (
-    <View style={{ width: size, height: size, borderRadius: Math.round(size * 0.32), backgroundColor: bg, alignItems: "center", justifyContent: "center" }}>
-      <Icon size={Math.round(size / 2)} color={color} strokeWidth={1.75} />
+    <View style={{ width: size, height: size, borderRadius: iconRadius(size), backgroundColor: bg, alignItems: "center", justifyContent: "center" }}>
+      <Icon size={Math.round(size * 0.55)} color={color} strokeWidth={2} />
     </View>
   );
 }
@@ -111,18 +113,21 @@ export type CalmCardProps = {
   children?: React.ReactNode;
 };
 
-/** A Calm card: pastel (or white), 30 px corners, no border or shadow; icon tile, title row and subtitle, then its body. */
-export function CalmCard({ tint, iconTint, icon, title, subtitle, subtitleColor, right, onPress, accessibilityLabel, gap = 18, padding = 20, style, children }: CalmCardProps) {
+/**
+ * A card: a family's soft fill (or the card colour), 20 px corners, flat; the icon square (the family's system colour
+ * with a white glyph, as iOS Health heads a card), the title row and subtitle, then its body.
+ */
+export function CalmCard({ tint, iconTint, icon, title, subtitle, subtitleColor, right, onPress, accessibilityLabel, gap = 16, padding = 16, style, children }: CalmCardProps) {
   const c = useCalm();
   const ink = tint ? c.tintInk[tint] : iconTint ? c.tintInk[iconTint] : c.teal;
   const head =
     title || icon ? (
-      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 14 }}>
-        {icon && <IconTile icon={icon} color={ink} bg={tint ? c.chip : c.tint[iconTint ?? "mint"]} />}
+      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
+        {icon && <IconTile icon={icon} color="#ffffff" bg={ink} size={36} />}
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           {title ? (
-            // With no sentence the title centres on the tile (Home's cards do the same); a long title wraps.
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: icon ? (subtitle ? 26 : 44) : 22 }}>
+            // With no sentence the title centres on the square; a long title wraps.
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: icon ? (subtitle ? 22 : 36) : 22 }}>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Title>{title}</Title>
               </View>
@@ -135,7 +140,7 @@ export function CalmCard({ tint, iconTint, icon, title, subtitle, subtitleColor,
       </View>
     ) : null;
   return (
-    <CalmSurface tint={tint} watermark={tint ? icon : undefined} onPress={onPress} accessibilityLabel={onPress ? (accessibilityLabel ?? [title, subtitle].filter(Boolean).join(". ")) : undefined} padding={padding} gap={gap} style={style}>
+    <CalmSurface tint={tint} onPress={onPress} accessibilityLabel={onPress ? (accessibilityLabel ?? [title, subtitle].filter(Boolean).join(". ")) : undefined} padding={padding} gap={gap} style={style}>
       {head}
       {children}
     </CalmSurface>
@@ -164,7 +169,7 @@ export function MiniStat({ value, unit, label, color, size = 24, note, noteColor
 /** The hairline between rows of a grouped list. */
 function Hairline({ inset = 0, color }: { inset?: number; color?: string }) {
   const c = useCalm();
-  return <View style={{ height: 1, marginLeft: inset, backgroundColor: color ?? c.line }} />;
+  return <View style={{ height: 0.5, marginLeft: inset, backgroundColor: color ?? c.line }} />;
 }
 
 /** Rows grouped in one list, a hairline between each (inset past the rows' icons with `inset`). */
@@ -182,7 +187,7 @@ export function Grouped({ children, inset = 0, lineColor }: { children: React.Re
   );
 }
 
-/** A choice pill: teal when chosen, white on the ground otherwise. */
+/** A choice pill, an iOS capsule: solid blue with white text when chosen, the card colour on the ground otherwise. */
 export function ChoicePill({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
   const c = useCalm();
   return (
@@ -190,16 +195,16 @@ export function ChoicePill({ label, on, onPress }: { label: string; on: boolean;
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected: on }}
-      style={({ pressed }) => ({ height: 38, borderRadius: 19, paddingHorizontal: 16, alignItems: "center", justifyContent: "center", backgroundColor: on ? c.teal : c.card, borderWidth: 1, borderColor: on ? c.teal : c.hairline, opacity: pressed ? 0.8 : 1 })}
+      style={({ pressed }) => ({ height: 38, borderRadius: 19, paddingHorizontal: 16, alignItems: "center", justifyContent: "center", backgroundColor: on ? c.teal : c.card, opacity: pressed ? 0.6 : 1 })}
     >
-      <Txt size={14} lineHeight={18} weight={600} style={{ color: on ? c.card : c.ink }}>
+      <Txt size={15} lineHeight={20} weight={600} style={{ color: on ? "#ffffff" : c.ink }}>
         {label}
       </Txt>
     </Pressable>
   );
 }
 
-/** A quiet action in the accent teal on a white pill ("Show older"); a spinner while `loading`. */
+/** A quiet action, iOS tinted capsule (blue at 15 %, blue text: "Show older"); a spinner while `loading`. */
 export function TealButton({ label, onPress, loading, style }: { label: string; onPress: () => void; loading?: boolean; style?: StyleProp<ViewStyle> }) {
   const c = useCalm();
   return (
@@ -208,7 +213,7 @@ export function TealButton({ label, onPress, loading, style }: { label: string; 
       disabled={loading}
       accessibilityRole="button"
       accessibilityState={{ busy: !!loading }}
-      style={({ pressed }) => [{ alignSelf: "center", height: 44, minWidth: 132, borderRadius: 22, paddingHorizontal: 20, alignItems: "center", justifyContent: "center", backgroundColor: c.card, borderWidth: 1, borderColor: c.hairline, opacity: pressed ? 0.8 : 1 }, style]}
+      style={({ pressed }) => [{ alignSelf: "center", height: 44, minWidth: 132, borderRadius: 22, paddingHorizontal: 20, alignItems: "center", justifyContent: "center", backgroundColor: alpha(c.teal, 0.15), opacity: pressed ? 0.6 : 1 }, style]}
     >
       {loading ? (
         <ActivityIndicator size="small" color={c.teal} />

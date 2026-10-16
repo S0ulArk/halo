@@ -1,12 +1,15 @@
+// The sync status in a bar's right slot: how fresh the data is ("12m", "Demo"), the band with a status dot (or turning
+// arcs while syncing), on a glass bar button.
 import * as React from "react";
-import { Animated, Easing, Pressable, View } from "react-native";
+import { Animated, Easing, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { ago, agoShort, clock } from "@/lib/format";
 import { useCalm } from "@/ui/calm";
-import { font } from "@/ui/fonts";
+import { TABULAR } from "@/ui/fonts";
 import { useTheme } from "@/ui/ThemeProvider";
 import type { ColorToken } from "@/ui/theme";
 import { BandIcon } from "./BandIcon";
+import { GlassButton } from "./GlassButton";
 import { Txt } from "./Text";
 
 /** Global shell state read by the headers and sync status (the web's ShellStatus, the parts this needs). */
@@ -63,9 +66,9 @@ function Band({ dot, syncing }: { dot: string; syncing: boolean }) {
 }
 
 /**
- * Sync freshness in the battery slot, as the Calm top bar's white round button (a pill with the text): "12m" or
- * "Demo", the band icon and a status dot. The web opens a popover; here `onPress` opens whatever the screen provides
- * (a BottomSheet with `syncView(...).line` and a Sync now button).
+ * Sync freshness in the battery slot, as a glass bar button (a capsule with the text): "12m" or "Demo", the band icon
+ * and a status dot. The web opens a popover; here `onPress` opens whatever the screen provides (a BottomSheet with
+ * `syncView(...).line` and a Sync now button).
  */
 export function SyncStatus({ status, now, onPress, hideText }: { status: SyncShellStatus; now: number | null; onPress?: () => void; hideText?: boolean }) {
   const { c } = useTheme();
@@ -74,19 +77,13 @@ export function SyncStatus({ status, now, onPress, hideText }: { status: SyncShe
   const short = status.mode === "demo" ? "Demo" : status.sync.lastSuccessAt && now ? agoShort(status.sync.lastSuccessAt, now) : "";
   const text = !hideText && !!short;
   return (
-    <Pressable
-      onPress={onPress}
-      disabled={!onPress}
-      accessibilityRole="button"
-      accessibilityLabel={status.mode === "demo" ? `Demo data. ${v.label}` : v.label}
-      style={({ pressed }) => ({ height: 44, minWidth: 44, borderRadius: 22, backgroundColor: calm.card, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingLeft: text ? 14 : 6, paddingRight: text ? 12 : 8, opacity: pressed ? 0.7 : 1 })}
-    >
+    <GlassButton onPress={onPress} accessibilityLabel={status.mode === "demo" ? `Demo data. ${v.label}` : v.label} style={text ? { paddingLeft: 13, paddingRight: 9 } : { paddingLeft: 3, paddingRight: 5 }}>
       {text && (
-        <Txt size={15} lineHeight={20} color={calm.ink} align="right" style={font.numeric(600)}>
+        <Txt size={15} lineHeight={20} weight={600} color={calm.ink} align="right" style={TABULAR}>
           {short}
         </Txt>
       )}
       <Band dot={c[v.dot]} syncing={v.syncing} />
-    </Pressable>
+    </GlassButton>
   );
 }

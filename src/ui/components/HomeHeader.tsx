@@ -1,3 +1,4 @@
+// Home's header (the kit's, for PageShell's home layout and the kit preview), the streak flame and the user's avatar.
 import * as React from "react";
 import { Image, Pressable, useWindowDimensions, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
@@ -5,10 +6,11 @@ import { CircleUserRound } from "lucide-react-native";
 import { BAND_WORD, recoveryBand } from "@/lib/bands";
 import { formatValue } from "@/lib/format";
 import { useCalm } from "@/ui/calm";
-import { font } from "@/ui/fonts";
+import { TABULAR } from "@/ui/fonts";
 import { useTheme } from "@/ui/ThemeProvider";
 import { DateSwitcher, type DateSwitcherProps } from "./DateSwitcher";
 import { HeaderFrame } from "./DetailHeader";
+import { GlassButton, GlassCapsule } from "./GlassButton";
 import { MiniRing, type MiniRingVariant } from "./MiniRing";
 import { SyncStatus, type SyncShellStatus } from "./SyncStatus";
 import { Txt } from "./Text";
@@ -65,10 +67,10 @@ export type HomeHeaderProps = {
 };
 
 /**
- * Home's header (spec §4.3) in the Calm top bar's look: the avatar in a white 44 px circle with the streak in a white
- * pill beside it, the narrow white date pill, and the sync status in its white round button, all on the solid ground.
- * When `showRings`, the mini Sleep / Recovery / Strain ring row sits under it. The web morphs the dials into the ring
- * row on scroll; here the screen toggles `showRings` from its scroll offset (the dials' top passing under the header).
+ * Home's header (spec §4.3) in iOS 26's bar look: the avatar on a round glass button with the streak in a glass capsule
+ * beside it, the date pill, and the sync status on its glass button, all on the ground. When `showRings`, the mini
+ * Sleep / Recovery / Strain ring row sits under it. The web morphs the dials into the ring row on scroll; here the
+ * screen toggles `showRings` from its scroll offset (the dials' top passing under the header).
  */
 export function HomeHeader({ dateSwitcher, sync, streak, avatar, onAvatarPress, rings, showRings }: HomeHeaderProps) {
   const c = useCalm();
@@ -76,27 +78,21 @@ export function HomeHeader({ dateSwitcher, sync, streak, avatar, onAvatarPress, 
   const narrow = width < 400;
   return (
     <HeaderFrame>
-      <View style={{ minHeight: 52, flexDirection: "row", alignItems: "center", gap: narrow ? 6 : 8, paddingHorizontal: 16, paddingVertical: 4 }}>
+      <View style={{ minHeight: 52, flexDirection: "row", alignItems: "center", gap: narrow ? 6 : 8, paddingHorizontal: 16, paddingVertical: 7 }}>
         <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 6 }}>
-          <Pressable
-            onPress={onAvatarPress}
-            accessibilityRole="button"
-            accessibilityLabel="Settings"
-            hitSlop={4}
-            style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 22, backgroundColor: c.card, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.7 : 1 })}
-          >
-            <UserAvatar src={avatar} size={avatar ? 36 : 28} />
-          </Pressable>
+          <GlassButton onPress={onAvatarPress} accessibilityLabel="Settings">
+            <UserAvatar src={avatar} size={avatar ? 34 : 24} />
+          </GlassButton>
           {streak && streak.days > 0 && (
-            <View accessibilityLabel={`${streak.days}-day streak`} style={{ height: 32, flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 16, backgroundColor: c.card, paddingHorizontal: 10 }}>
+            <GlassCapsule accessibilityLabel={`${streak.days}-day streak`} style={{ gap: 4, paddingHorizontal: 11 }}>
               <StreakFlame u={0.56} />
-              <Txt size={14} lineHeight={18} color={c.ink} style={font.numeric(700)}>
+              <Txt size={15} lineHeight={20} weight={700} color={c.ink} style={TABULAR}>
                 {streak.days}
               </Txt>
-            </View>
+            </GlassCapsule>
           )}
         </View>
-        <DateSwitcher {...dateSwitcher} narrow style={[{ backgroundColor: c.card, height: 40, borderRadius: 20, paddingHorizontal: 4 }, dateSwitcher.style]} />
+        <DateSwitcher {...dateSwitcher} narrow style={[{ height: 38, borderRadius: 19, paddingHorizontal: 2 }, dateSwitcher.style]} />
         <View style={{ flex: 1, flexDirection: "row", justifyContent: "flex-end" }}>
           <SyncStatus status={sync.status} now={sync.now} onPress={sync.onPress} hideText={width < 380 && !streak} />
         </View>

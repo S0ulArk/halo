@@ -1,133 +1,188 @@
-// The Halo palette (it grew out of "Calm", whose names it keeps so every screen follows without a rename): minimal and
-// easy on the eyes. A soft neutral off-white ground, white cards held by a faint neutral hairline and a soft two-layer
-// shadow, one quiet pastel per metric family, one deep action colour, and grey for everything that is only a label.
-// Colour is for data and actions; the chrome stays neutral. The dark scheme keeps the same structure in deep tones.
-// Screens read colours from here; the kit's theme tokens carry the ground and card so older screens sit on the same
-// surfaces.
+// The Halo palette, in Apple's system colours (the iOS look the person chose, 2026-10-17). It grew out of "Calm", whose
+// names it keeps so every screen follows without a rename: a grouped grey ground (black in the dark), flat cards in the
+// card colour with no hairline and no shadow, the system colours for data and actions, and the label greys for
+// everything that is only a label. Each old pastel "tint" is now a soft fill of a system colour (about 14 % on white;
+// a deep jewel tone on the dark card), its "ink" the system colour itself:
+//   mint → green (Recovery, good), peach → orange (Strain), lavender → indigo (Sleep), sky → blue (activity, HRV,
+//   actions), sand → yellow (warnings), rose → pink (heart, alerts).
+// Every value is an opaque "#rrggbb" (screens blend and suffix them) except the few hairlines and the track fill, which
+// are translucent the way iOS's are. Screens read colours from here; the kit's theme tokens carry the same ground and
+// card, so older screens sit on the same surfaces.
 import { useTheme } from "@/ui/ThemeProvider";
 
 export type CalmTint = "mint" | "peach" | "lavender" | "sky" | "sand" | "rose";
 
+/** iOS's system colours, by name. */
+export type SystemColor = "red" | "orange" | "yellow" | "green" | "mint" | "teal" | "cyan" | "blue" | "indigo" | "purple" | "pink" | "gray";
+
 export type CalmPalette = {
+  /** The grouped ground (systemGroupedBackground). */
   ground: string;
+  /** A card or an inset grouped list (secondarySystemGroupedBackground). */
   card: string;
-  /** A white (or raised) chip on a tinted card: icon tiles, buttons on the ground. */
+  /** A raised chip on a tinted card or a card (icon tiles, buttons): white on light, the raised grey on dark. */
   chip: string;
+  /** The label colour. */
   ink: string;
+  /** The secondary label: values, sentences, section headers. */
   sub: string;
+  /** A quiet grey a step under `sub`, for marks that only frame (empty values, axis ends). */
   faint: string;
+  /** The separator between rows, as a solid. */
   line: string;
-  /** The action colour (buttons, links, the active tab). The name is historical: a deep blue-teal on light. */
+  /** The action colour (buttons, links, the active tab): iOS blue. The name is historical. */
   teal: string;
   orange: string;
+  /** Indigo: deep banners and chart lines. The name is historical. */
   navy: string;
-  /** Small caps section labels and chevrons: a quiet grey a step stronger than `faint`. Never a data colour. */
+  /** Section headers over a grouped list: the secondary label. */
   label: string;
-  /** The hairline round a control (chips, pills, segmented tracks, sheets): barely there, so shapes stay crisp. */
+  /** A faint line round a control where one is needed at all; iOS controls mostly have none. */
   hairline: string;
   tint: Record<CalmTint, string>;
-  /** Readable ink on each tint: icons and the tint's own accents. */
+  /** Each family's system colour: icons, coloured numbers and the family's own accents. */
   tintInk: Record<CalmTint, string>;
-  /** A white card's hairline edge: keeps it crisp against the ground. */
+  /** A card's edge: none (iOS cards are flat). Kept so older screens that draw a border draw nothing. */
   edge: string;
-  /** A tinted card's edge: its own ink, faint, so a pastel never melts into the ground. */
+  /** A tinted card's edge: none, as `edge`. */
   tintEdge: Record<CalmTint, string>;
-  /** The card's lift: a tight contact shadow under a wide soft one (light); none in the dark, where the edge does it. */
+  /** The card's lift: none (iOS cards are flat). Kept for callers that spread it. */
   shadow: string | null;
-  /** A tinted card's diagonal gradient, top left → bottom right: the family's colour, fresh and luminous, never grey. */
+  /** A tinted card's two stops: the same soft fill twice (flat). Kept for callers that still paint a gradient. */
   tintGrad: Record<CalmTint, readonly [string, string]>;
-  /** A family's vivid pair for rings and fills that draw on (a gradient stroke): the colour at full strength. */
+  /** A family's pair for rings and fills that draw on: the system colour into a lighter step of it. */
   vivid: Record<CalmTint, readonly [string, string]>;
-  /** The coloured glow under a tinted card, so it floats in its own light. */
+  /** A family's glow colour: its system colour (no screen-level glow is drawn any more). */
   glow: Record<CalmTint, string>;
+  /** Every system colour of this scheme: the coloured icon squares in a list, switches, destructive buttons. */
+  system: Record<SystemColor, string>;
+  /** The tertiary label: chevrons, placeholders, a disabled glyph. */
+  tertiary: string;
+  /** A track's fill (segmented control, switch when off, slider): iOS's tertiary system fill, translucent. */
+  fill: string;
+  /** The segmented control's sliding thumb. */
+  thumb: string;
+  /** A bottom sheet's face: the grouped ground on light, the elevated card grey on dark. */
+  sheet: string;
+  /** A quiet fill sitting straight on a sheet (fields, chips, rows): the card colour one level up from `sheet`. */
+  sheetFill: string;
 };
 
-const edges = (ink: Record<CalmTint, string>, a: number) =>
-  Object.fromEntries(Object.entries(ink).map(([k, v]) => [k, `${v}${Math.round(a * 255).toString(16).padStart(2, "0")}`])) as Record<CalmTint, string>;
+const LIGHT_SYSTEM: Record<SystemColor, string> = {
+  red: "#ff3b30",
+  orange: "#ff9500",
+  yellow: "#ffcc00",
+  green: "#34c759",
+  mint: "#00c7be",
+  teal: "#30b0c7",
+  cyan: "#32ade6",
+  blue: "#007aff",
+  indigo: "#5856d6",
+  purple: "#af52de",
+  pink: "#ff2d55",
+  gray: "#8e8e93",
+};
+const DARK_SYSTEM: Record<SystemColor, string> = {
+  red: "#ff453a",
+  orange: "#ff9f0a",
+  yellow: "#ffd60a",
+  green: "#30d158",
+  mint: "#63e6e2",
+  teal: "#40c8e0",
+  cyan: "#64d2ff",
+  blue: "#0a84ff",
+  indigo: "#5e5ce6",
+  purple: "#bf5af2",
+  pink: "#ff375f",
+  gray: "#8e8e93",
+};
 
-// "Vivid pastel" (the look the person chose, 2026-10-09): the old tints were so pale they read as grey and the app looked
-// dull. Each family now has a fresh pastel, a gradient on its cards, a coloured glow under them, and a vivid pair for
-// the rings, while text stays ink and the chrome stays neutral.
-const LIGHT_INK: Record<CalmTint, string> = { mint: "#0b7a55", peach: "#c2491f", lavender: "#5b3fd6", sky: "#0b6fa8", sand: "#94640a", rose: "#c0284f" };
-const DARK_INK: Record<CalmTint, string> = { mint: "#7ff0c8", peach: "#ffb28a", lavender: "#c3b1ff", sky: "#8fd6ff", sand: "#ffd27a", rose: "#ff9ab6" };
-const VIVID_LIGHT: Record<CalmTint, readonly [string, string]> = {
-  mint: ["#0fae76", "#22d39a"],
-  peach: ["#ff6a3d", "#ffa24c"],
-  lavender: ["#6a4dff", "#9b7bff"],
-  sky: ["#1499e6", "#3ccfff"],
-  sand: ["#e29a12", "#ffc844"],
-  rose: ["#f0386b", "#ff7a9c"],
-};
-const VIVID_DARK: Record<CalmTint, readonly [string, string]> = {
-  mint: ["#22d39a", "#7ff0c8"],
-  peach: ["#ff7a4d", "#ffb35c"],
-  lavender: ["#8a6dff", "#b9a2ff"],
-  sky: ["#2ab0ff", "#6fdcff"],
-  sand: ["#f0b43c", "#ffd77a"],
-  rose: ["#ff4f7f", "#ff92ae"],
-};
-const GLOW: Record<CalmTint, string> = { mint: "#22c98b", peach: "#ff8a5c", lavender: "#8a6dff", sky: "#38b6ff", sand: "#f0b43c", rose: "#ff6f93" };
+const NONE = "rgba(0,0,0,0)";
+const noEdges: Record<CalmTint, string> = { mint: NONE, peach: NONE, lavender: NONE, sky: NONE, sand: NONE, rose: NONE };
+const flat = (tint: Record<CalmTint, string>) =>
+  Object.fromEntries(Object.entries(tint).map(([k, v]) => [k, [v, v] as const])) as unknown as Record<CalmTint, readonly [string, string]>;
+
+// Yellow is unreadable as text on white, so the light scheme's sand ink is a deeper amber; every other ink is the system
+// colour itself, as Apple's own apps colour their numbers. The dark scheme's indigo ink is iOS's brighter indigo, so a
+// Sleep number reads on the near-black card.
+const LIGHT_INK: Record<CalmTint, string> = { mint: "#34c759", peach: "#ff9500", lavender: "#5856d6", sky: "#007aff", sand: "#c48a00", rose: "#ff2d55" };
+const DARK_INK: Record<CalmTint, string> = { mint: "#30d158", peach: "#ff9f0a", lavender: "#7d7aff", sky: "#0a84ff", sand: "#ffd60a", rose: "#ff375f" };
+
+const LIGHT_TINT: Record<CalmTint, string> = { mint: "#e3f7e8", peach: "#fff0db", lavender: "#e8e7f9", sky: "#dbecff", sand: "#fff8db", rose: "#ffe2e7" };
+const DARK_TINT: Record<CalmTint, string> = { mint: "#214b2d", peach: "#573e19", lavender: "#2d2d52", sky: "#173758", sand: "#574c19", rose: "#57232f" };
 
 const LIGHT: CalmPalette = {
-  // A soft neutral off-white: lighter than the old warm grey, never yellow.
-  ground: "#f4f5f7",
+  ground: "#f2f2f7",
   card: "#ffffff",
   chip: "#ffffff",
-  ink: "#15171a",
-  sub: "#5f646a",
-  faint: "#9a9fa4",
-  line: "#ebebe8",
-  teal: "#1e5157",
-  orange: "#f2992e",
-  navy: "#1f2a5c",
-  label: "#7d8288",
-  hairline: "rgba(21,23,26,0.08)",
-  tint: { mint: "#d3f5e5", peach: "#ffe1d4", lavender: "#e6deff", sky: "#d6effc", sand: "#fbeccd", rose: "#ffdbe4" },
+  ink: "#000000",
+  // rgba(60,60,67,0.6), rgba(60,60,67,0.18) and friends composited on white.
+  sub: "#8a8a8e",
+  faint: "#aeaeb2",
+  line: "#dcdcdd",
+  teal: LIGHT_SYSTEM.blue,
+  orange: LIGHT_SYSTEM.orange,
+  navy: LIGHT_SYSTEM.indigo,
+  label: "#8a8a8e",
+  hairline: "rgba(60,60,67,0.12)",
+  tint: LIGHT_TINT,
   tintInk: LIGHT_INK,
-  edge: "rgba(21,23,26,0.06)",
-  tintEdge: edges(LIGHT_INK, 0.1),
-  shadow: "0 1px 2px rgba(17,24,39,0.04), 0 10px 28px rgba(17,24,39,0.06)",
-  tintGrad: {
-    mint: ["#bff0d8", "#e6fbf1"],
-    peach: ["#ffd6c4", "#fff1ea"],
-    lavender: ["#dcd2ff", "#f2eeff"],
-    sky: ["#c9e9fb", "#ecf7fe"],
-    sand: ["#f8e2b6", "#fdf5e6"],
-    rose: ["#ffd0dc", "#fff0f3"],
+  edge: NONE,
+  tintEdge: noEdges,
+  shadow: null,
+  tintGrad: flat(LIGHT_TINT),
+  vivid: {
+    mint: ["#34c759", "#71d88b"],
+    peach: ["#ff9500", "#ffb54c"],
+    lavender: ["#5856d6", "#8a89e2"],
+    sky: ["#007aff", "#4ca2ff"],
+    sand: ["#ffcc00", "#ffdb4c"],
+    rose: ["#ff2d55", "#ff6c88"],
   },
-  vivid: VIVID_LIGHT,
-  glow: GLOW,
+  glow: { mint: LIGHT_SYSTEM.green, peach: LIGHT_SYSTEM.orange, lavender: LIGHT_SYSTEM.indigo, sky: LIGHT_SYSTEM.blue, sand: LIGHT_SYSTEM.yellow, rose: LIGHT_SYSTEM.pink },
+  system: LIGHT_SYSTEM,
+  tertiary: "#c4c4c7",
+  fill: "rgba(118,118,128,0.12)",
+  thumb: "#ffffff",
+  sheet: "#f2f2f7",
+  sheetFill: "#ffffff",
 };
 
 const DARK: CalmPalette = {
-  // The darker ground the person asked for; cards one step up.
-  ground: "#090b0f",
-  card: "#14171d",
-  chip: "#1c2027",
-  ink: "#f2f3f4",
-  sub: "#a3a9ae",
-  faint: "#6e757b",
-  line: "#25292d",
-  teal: "#79c7cc",
-  orange: "#f5a54a",
-  navy: "#97a6ff",
-  label: "#8b9298",
-  hairline: "rgba(255,255,255,0.09)",
-  tint: { mint: "#123d2e", peach: "#3d2016", lavender: "#271f55", sky: "#10314a", sand: "#3a2c10", rose: "#3d1624" },
+  ground: "#000000",
+  card: "#1c1c1e",
+  chip: "#2c2c2e",
+  ink: "#ffffff",
+  // rgba(235,235,245,0.6), rgba(84,84,88,0.6) and friends composited on the card.
+  sub: "#98989f",
+  faint: "#636366",
+  line: "#3d3d40",
+  teal: DARK_SYSTEM.blue,
+  orange: DARK_SYSTEM.orange,
+  navy: DARK_SYSTEM.indigo,
+  label: "#98989f",
+  hairline: "rgba(84,84,88,0.45)",
+  tint: DARK_TINT,
   tintInk: DARK_INK,
-  edge: "rgba(255,255,255,0.08)",
-  tintEdge: edges(DARK_INK, 0.16),
+  edge: NONE,
+  tintEdge: noEdges,
   shadow: null,
-  tintGrad: {
-    mint: ["#0f4a36", "#0d2a22"],
-    peach: ["#4a2416", "#2a1710"],
-    lavender: ["#2f2466", "#1c1838"],
-    sky: ["#0f3a5a", "#0c2234"],
-    sand: ["#4a3712", "#2a1f0c"],
-    rose: ["#4d1a2c", "#2b1019"],
+  tintGrad: flat(DARK_TINT),
+  vivid: {
+    mint: ["#30d158", "#6edf8a"],
+    peach: ["#ff9f0a", "#ffbc54"],
+    lavender: ["#5e5ce6", "#8e8dee"],
+    sky: ["#0a84ff", "#54a9ff"],
+    sand: ["#ffd60a", "#ffe254"],
+    rose: ["#ff375f", "#ff738f"],
   },
-  vivid: VIVID_DARK,
-  glow: GLOW,
+  glow: { mint: DARK_SYSTEM.green, peach: DARK_SYSTEM.orange, lavender: DARK_SYSTEM.indigo, sky: DARK_SYSTEM.blue, sand: DARK_SYSTEM.yellow, rose: DARK_SYSTEM.pink },
+  system: DARK_SYSTEM,
+  tertiary: "#5a5a5e",
+  fill: "rgba(118,118,128,0.24)",
+  thumb: "#636366",
+  sheet: "#1c1c1e",
+  sheetFill: "#2c2c2e",
 };
 
 export function useCalm(): CalmPalette {
@@ -137,7 +192,7 @@ export function useCalm(): CalmPalette {
 
 export const CALM = { light: LIGHT, dark: DARK };
 
-/** The halo: the icon's ring, mint → sky → lavender → peach. Used once, small: the active tab's line. */
-export const HALO = ["#5ef2c0", "#6cc7ff", "#b9a6ff", "#ffb38a"] as const;
+/** The halo: the icon's ring, green → cyan → indigo → orange in the system colours. Used once, small. */
+export const HALO = ["#30d158", "#64d2ff", "#7d7aff", "#ff9f0a"] as const;
 /** The halo a step deeper, for strokes on a white card (the bright ring washes out on white). */
-export const HALO_DEEP = ["#22b98a", "#3c9fe0", "#8a74f0", "#ee8a5a"] as const;
+export const HALO_DEEP = ["#34c759", "#32ade6", "#5856d6", "#ff9500"] as const;

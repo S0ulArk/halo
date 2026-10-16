@@ -425,7 +425,7 @@ export function Coach({ id, initial, prefill, auto, providerLabel, suggestions, 
       <KeyboardStickyView offset={{ closed: 0, opened: bottom - 8 }} pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}>
         <LinearGradient pointerEvents="none" colors={[alpha(c.ground, 0), c.ground]} locations={[0, 0.45]} style={{ position: "absolute", left: 0, right: 0, top: -32, bottom: 0 }} />
         <View style={{ paddingHorizontal: 16, paddingBottom: bottom }} onLayout={(e) => setComposerH(e.nativeEvent.layout.height - bottom)}>
-          <View style={{ borderRadius: 32, borderWidth: 1, borderColor: c.edge, backgroundColor: c.card }}>
+          <View style={{ borderRadius: 20, borderWidth: 1, borderColor: c.edge, backgroundColor: c.card }}>
             <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 6, padding: 6 }}>
               <TextInput
                 ref={area}
@@ -442,7 +442,7 @@ export function Coach({ id, initial, prefill, auto, providerLabel, suggestions, 
                 cursorColor={c.teal}
                 selectionColor={alpha(c.teal, 0.3)}
                 allowFontScaling={false}
-                style={{ flex: 1, minWidth: 0, minHeight: 44, maxHeight: 160, paddingVertical: 10, paddingLeft: 14, paddingRight: 4, fontSize: 16, lineHeight: 24, color: c.ink, fontFamily: "Figtree_400Regular", textAlignVertical: "center" }}
+                style={{ flex: 1, minWidth: 0, minHeight: 44, maxHeight: 160, paddingVertical: 10, paddingLeft: 14, paddingRight: 4, fontSize: 16, lineHeight: 24, color: c.ink, fontFamily: "Inter_400Regular", textAlignVertical: "center" }}
               />
               {busy ? (
                 <ComposerButton variant="stop" onPress={() => stop()} label="Stop">
