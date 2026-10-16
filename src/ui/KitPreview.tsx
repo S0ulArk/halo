@@ -1,3 +1,5 @@
+// The component kit's preview (app/kit.tsx): every kit piece with deterministic sample data, in either scheme, so a
+// change to the look can be checked in one scroll.
 import * as React from "react";
 import { ScrollView, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -45,7 +47,7 @@ import { TonightPlan } from "./components/TonightPlan";
 import { TrendChart, type TrendPoint } from "./components/TrendChart";
 import { Wordmark } from "./components/Wordmark";
 import { ZoneBars } from "./components/ZoneBars";
-import { HaloLine, HaloRing, RollingNumber } from "./components/Halo";
+import { ActivityRings, HaloLine, HaloRing, RollingNumber, ScoreRings } from "./components/Halo";
 import { CalmSurface } from "./components/CalmSurface";
 import { useCalm } from "./calm";
 import { font, useAppFonts } from "./fonts";
@@ -224,6 +226,18 @@ function Preview() {
             <HaloRing size={56} stroke={5} progress={1} track={calm.tint.mint} color={calm.tintInk.mint} celebrateKey="kit:ring" />
             <HaloRing size={56} stroke={5} progress={null} track={calm.line} />
             <RollingNumber text="72" lineHeight={60} style={[font.numberAt(56), { color: calm.tintInk.mint, letterSpacing: -1 }]} />
+          </Row>
+          <Sub>Activity rings: Today’s three scores (Recovery, Sleep, Strain of 21), a yellow day with no sleep score, a gauge</Sub>
+          <Row gap={16}>
+            <ScoreRings recovery={74} sleep={85} strain={11.1} size={148} />
+            <View style={{ gap: 12 }}>
+              <ScoreRings recovery={39} sleep={null} strain={4.2} size={84} />
+              <ActivityRings size={84} arc={{ start: 235, sweep: 250 }} rings={[{ progress: 1.4 / 3, color: c.stressMedium }]} accessibilityLabel="Stress 1.4 of 3">
+                <Txt size={16} lineHeight={20} style={[font.numeric(700), { color: calm.ink }]}>
+                  1.4
+                </Txt>
+              </ActivityRings>
+            </View>
           </Row>
           <HaloLine width={120} style={{ marginTop: 12 }} />
           <CalmSurface tint="lavender" breathe style={{ marginTop: 12 }}>

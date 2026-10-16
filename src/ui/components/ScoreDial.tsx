@@ -1,3 +1,5 @@
+// A score in every size the app shows one: the detail screen's hero (one big Apple Activity ring with the number in its
+// middle), Home's tile, the small centred block and the inline form (a number over a capsule meter).
 import * as React from "react";
 import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
 import Animated from "react-native-reanimated";
@@ -12,7 +14,7 @@ import { font } from "@/ui/fonts";
 import { useTheme } from "@/ui/ThemeProvider";
 import type { ColorToken, Tokens } from "@/ui/theme";
 import { CalmSurface } from "./CalmSurface";
-import { HaloRing, RollingNumber } from "./Halo";
+import { ActivityRings, RING_LAND_MS, RollingNumber, type RingSegment } from "./Halo";
 import { unitSize as calmUnit } from "./calmKit";
 import { CapsuleMeter, type MeterSegment } from "./CapsuleMeter";
 import { MetricTags, type TagKind } from "./primitives";
@@ -57,18 +59,23 @@ export type ScoreDialProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-// Every size is a number first, then a capsule meter (src/ui/components/CapsuleMeter) in the family or band colour.
-// The lg hero's number rolls into place while a thin ring beside it draws on and the meter grows, all in step on the
-// UI thread (src/ui/components/Halo.tsx).
+// The sm, md and compact sizes are a number first, then a capsule meter (src/ui/components/CapsuleMeter) in the
+// family or band colour. The lg hero is Apple's detail ring: one big Activity ring (src/ui/components/Halo.tsx) with
+// the number rolling into place in its middle and the band word under it, the ring sweeping in on its spring as the
+// number lands, all on the UI thread. The Strain Target and the value's band zone are stretches of the ring's track;
+// the stress gauge is the same ring opened at the bottom.
 
 /** The hero number: well past valueHero's 32 px, so the score reads before anything else on the screen. */
 const HERO_SIZE = 56;
 const HERO_LINE = 60;
-/** The hero's ring, as tall as the number's line so it never adds height. */
-const HERO_RING = 60;
+/** The hero's ring and its stroke (10.5 %, the Activity ring's proportion); the number sits in its 136 px hole. */
+const HERO_RING = 172;
+const HERO_STROKE = 18;
+/** The stress gauge: the ring opened at the bottom, 235° → 125° clockwise from 12 o'clock (a 250° sweep). */
+const GAUGE = { start: 235, sweep: 250 } as const;
 /** The lg hero card's height, the same on every detail tab whatever optional rows it shows. */
-const HERO_CARD_MIN = 228;
-const METER = { lg: 12, md: 6, sm: 6, compact: 6 } as const;
+const HERO_CARD_MIN = 314;
+const METER = { md: 6, sm: 6, compact: 6 } as const;
 const COMPACT_METER_W = 40;
 const ICON: Record<DialVariant, LucideIcon> = { sleep: Moon, recovery: HeartPulse, strain: Flame, gauge: Gauge, stat: Gauge };
 /** Sleep status chip colours: the same tokens as the Sleep screen's status legend. */
@@ -182,15 +189,18 @@ export function ScoreDial(props: ScoreDialProps) {
   // --- The meter ---
   const frac = empty || loading ? null : Math.min(Math.max(value, 0), r.max) / r.max;
   const ticks: number[] = [];
-  /** The track's faint stretches (the Strain Target, the value's band zone) in `fill`. */
-  const segmentsIn = (fill: string): MeterSegment[] => {
+  /**
+   * The track's faint stretches in `fill`: the Strain Target at `targetA` opacity and (lg only) the value's band zone
+   * at `zoneA`. A meter's track is grey, so they are fainter there than on the hero ring's track of the same hue.
+   */
+  const segmentsIn = (fill: string, targetA = 0.32, zoneA = 0.22): MeterSegment[] => {
     const out: MeterSegment[] = [];
     if (target) {
       const lo = Math.min(Math.max(target[0], 0), r.max);
       const hi = Math.min(Math.max(target[1], lo), r.max);
-      out.push({ from: lo / r.max, to: hi / r.max, color: alpha(fill, 0.32) });
+      out.push({ from: lo / r.max, to: hi / r.max, color: alpha(fill, targetA) });
     }
-    if (lg && r.zone && frac !== null) out.push({ from: r.zone[0] / r.max, to: r.zone[1] / r.max, color: alpha(fill, 0.22) });
+    if (lg && r.zone && frac !== null) out.push({ from: r.zone[0] / r.max, to: r.zone[1] / r.max, color: alpha(fill, zoneA) });
     return out;
   };
   const segments = segmentsIn(r.fill);
@@ -206,7 +216,7 @@ export function ScoreDial(props: ScoreDialProps) {
   const tint: CalmTint = variant === "sleep" ? "lavender" : variant === "strain" ? "peach" : variant === "recovery" ? (heroBand === "yellow" ? "sand" : heroBand === "red" ? "rose" : "mint") : variant === "gauge" ? "lavender" : "sky";
 
   const hasTags = !!((!empty && props.provisional) || (!empty && props.tags?.length) || props.extraTags?.length);
-  const tags = !loading && hasTags && <MetricTags provisional={!empty && props.provisional} tags={empty ? undefined : props.tags} extra={props.extraTags} align={size === "sm" && !lg ? "center" : "flex-start"} />;
+  const tags = !loading && hasTags && <MetricTags provisional={!empty && props.provisional} tags={empty ? undefined : props.tags} extra={props.extraTags} align={lg || size === "sm" ? "center" : "flex-start"} />;
   // The number in the numeric face and ink; the unit small, grey and in the text face beside it.
   const numberColor = empty ? calm.faint : calm.ink;
   const number = (role: "valueXl" | "value", unitSize: number) => (
@@ -229,17 +239,19 @@ export function ScoreDial(props: ScoreDialProps) {
       </View>
     );
 
-  // --- lg: the detail screen's hero block, left-aligned, full width ---
+  // --- lg: the detail screen's hero block, full width, the big ring centred ---
   if (lg) {
     const ReasonIcon = reason ? REASON_ICON[reason.code] : null;
     const headline = reason ? (reason.code === "no_data" ? reason.long : reason.short) : null;
-    // The hero is a soft card in its family's pastel (recovery by band), the number in that pastel's ink, rolling into
-    // place as the ring beside it draws on and the meter grows, with a slow breathing light across the card.
+    // The hero is a soft card in its family's pastel (recovery by band) holding one big ring in the score's colour,
+    // the number in its middle rolling into place as the ring sweeps in, with a slow breathing light across the card.
     const ink = calm.tintInk[tint];
     const HeroIcon = ICON[variant];
+    // The ring's track is its own hue at 18 %; the value's band zone and the Strain Target are stronger stretches of it.
+    const ringSegments: RingSegment[] = segmentsIn(r.fill, 0.42, 0.3);
     const body = (
       // One height for every hero (Sleep, Activity, Recovery), with room for the tags row whether or not it's there, so
-      // the tabs' first cards match: 20 + header 44 + 16 + number 60 + 14 + meter 12 + 16 + tags 26 + 20.
+      // the tabs' first cards match: 20 + header 44 + 16 + ring 172 + 16 + tags 26 + 20.
       <CalmSurface tint={tint} watermark={HeroIcon} gap={16} breathe style={[{ alignSelf: "stretch", width: "100%", minHeight: HERO_CARD_MIN }, !onPress && props.style]}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
           <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: calm.chip, alignItems: "center", justifyContent: "center" }}>
@@ -257,42 +269,50 @@ export function ScoreDial(props: ScoreDialProps) {
             </>
           )}
         </View>
-        <View accessible accessibilityRole="image" accessibilityLabel={aria} style={{ gap: 14 }}>
-          <View style={{ minHeight: HERO_LINE, flexDirection: "row", alignItems: "center", gap: 12 }}>
+        <View accessible accessibilityRole="image" accessibilityLabel={aria} style={{ alignItems: "center" }}>
+          <ActivityRings
+            size={HERO_RING}
+            stroke={HERO_STROKE}
+            arc={gauge ? GAUGE : undefined}
+            rings={[{ progress: frac, color: r.fill, track: alpha(r.fill, 0.18), segments: ringSegments, ticks, tickColor: alpha(calm.ink, 0.85) }]}
+          >
             {loading ? (
               <SkeletonText role="valueHero" size={HERO_SIZE} lineHeight={HERO_LINE} chars={2.4} />
-            ) : empty && headline ? (
-              <View style={{ flexShrink: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>
-                {ReasonIcon && <ReasonIcon size={20} color={calm.sub} strokeWidth={1.75} />}
-                <Txt size={16} lineHeight={21} weight={600} color={calm.sub} style={{ flexShrink: 1 }}>
-                  {headline}
-                </Txt>
-              </View>
+            ) : empty ? (
+              ReasonIcon && <ReasonIcon size={28} color={calm.faint} strokeWidth={1.75} />
             ) : (
-              <View style={{ flexDirection: "row", alignItems: "flex-end" }}>
-                <RollingNumber text={r.text} lineHeight={HERO_LINE} style={[font.numberAt(HERO_SIZE), { color: empty ? calm.faint : ink, letterSpacing: -1 }]} />
-                {r.unit && !empty && (
-                  <Txt size={calmUnit(HERO_SIZE)} lineHeight={30} weight={500} style={{ color: calm.sub, marginLeft: r.unit === "%" ? 2 : 6, marginBottom: 8 }}>
-                    {r.unit}
+              <View style={{ alignItems: "center" }}>
+                <View style={{ flexDirection: "row", alignItems: "flex-end" }}>
+                  <RollingNumber text={r.text} lineHeight={HERO_LINE} duration={RING_LAND_MS} style={[font.numberAt(HERO_SIZE), { color: calm.ink, letterSpacing: -1 }]} />
+                  {r.unit && (
+                    <Txt size={calmUnit(HERO_SIZE)} lineHeight={30} weight={500} style={{ color: calm.sub, marginLeft: r.unit === "%" ? 2 : 6, marginBottom: 8 }}>
+                      {r.unit}
+                    </Txt>
+                  )}
+                </View>
+                {r.word && (
+                  <Txt size={15} lineHeight={20} weight={600} align="center" color={r.word.ink} style={{ marginTop: -2, maxWidth: HERO_RING - 2 * HERO_STROKE - 16 }}>
+                    {r.word.text}
                   </Txt>
                 )}
               </View>
             )}
-            {!loading && !empty && r.word && <BandChip word={r.word} />}
-            <View style={{ flex: 1 }} />
-            {/* The score's share of its scale as a thin ring in the family's ink, drawing on with the number. */}
-            <HaloRing size={HERO_RING} stroke={5} progress={frac} track={calm.chip} color={ink} colors={calm.vivid[tint]} />
-          </View>
-          <CapsuleMeter frac={frac} color={r.fill} height={METER.lg} segments={segments} ticks={ticks} tickColor={alpha(calm.ink, 0.85)} track={calm.chip} grow />
-          {gauge && (
-            <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: -8 }}>
-              <Txt role="numericSmall">0.0</Txt>
-              <Txt role="numericSmall">3.0</Txt>
-            </View>
-          )}
+            {/* The gauge's two ends, under its open arc's caps. */}
+            {gauge && (
+              <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom: 6, flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 18 }}>
+                <Txt role="numericSmall">0.0</Txt>
+                <Txt role="numericSmall">3.0</Txt>
+              </View>
+            )}
+          </ActivityRings>
         </View>
+        {!loading && empty && headline && (
+          <Txt size={16} lineHeight={21} weight={600} color={calm.sub} align="center">
+            {headline}
+          </Txt>
+        )}
         {!loading && empty && reason && reason.long !== headline && (
-          <Txt size={14} lineHeight={19} color={calm.sub}>
+          <Txt size={14} lineHeight={19} color={calm.sub} align="center" style={{ marginTop: -8 }}>
             {reason.long}
           </Txt>
         )}

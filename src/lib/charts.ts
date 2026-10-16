@@ -1,5 +1,7 @@
 // Data helpers for the hand-drawn SVG charts, ported from the web app (where Recharts drew the shapes), plus the
-// geometry the mobile charts need in their place: scales, curve paths and the dial arcs (spec §5.0, §5.1, §5.6).
+// geometry the mobile charts need in their place: scales, curve paths, the dial arcs (spec §5.0, §5.1, §5.6), the
+// Activity-style rings' gradient halves and the heart-rate range buckets.
+import { mix } from "@/lib/utils";
 
 /** A colour band: values at or above `from` take `color` (bands ascending). `color` is a resolved colour string. */
 export type Band = { from: number; color: string };
@@ -227,4 +229,111 @@ export function runs<T>(items: (T | null)[]): T[][] {
 export function areaPath(linePathD: string, first: XY, last: XY, floorY: number) {
   if (!linePathD) return "";
   return `${linePathD}L${last.x.toFixed(2)} ${floorY.toFixed(2)}L${first.x.toFixed(2)} ${floorY.toFixed(2)}Z`;
+}
+
+// --- Activity rings (angles in degrees clockwise from 12 o'clock, as a watch face reads) ---
+
+/** The point at `deg` degrees clockwise from 12 o'clock on a circle of radius `r` around (cx, cy). */
+export function clockPoint(cx: number, cy: number, r: number, deg: number): XY {
+  const a = (deg * Math.PI) / 180;
+  return { x: cx + r * Math.sin(a), y: cy - r * Math.cos(a) };
+}
+
+/**
+ * One half of a ring's arc. `d` is the arc's path, `length` its length; `from` → `to` is its chord, the axis of the
+ * linear gradient that colours it; each stop sits at `offset` along that chord and takes the colour at `t` (0-1) of
+ * the whole ring's sweep.
+ */
+export type RingHalf = { d: string; length: number; from: XY; to: XY; stops: { offset: number; t: number }[] };
+
+/**
+ * A ring from `startDeg` sweeping `sweepDeg` clockwise, split into two halves of at most 180° each. SVG has no sweep
+ * (conic) gradient, but along an arc of 180° or less a point's projection on the arc's chord only grows, so a linear
+ * gradient on each half's chord, its stops at the projections of evenly spaced angles, colours the arc by its angle:
+ * darker where the ring starts, lighter where it ends. `overlap` degrees are added to the first half's path (not its
+ * length) so the two halves meet without an anti-aliased seam; the second half covers them.
+ */
+export function ringHalves(cx: number, cy: number, r: number, startDeg: number, sweepDeg: number, samples = 5, overlap = 1): RingHalf[] {
+  const sweep = Math.max(0, Math.min(360, sweepDeg));
+  const half = sweep / 2;
+  const n = Math.max(2, samples);
+  return [0, 1].map((k) => {
+    const a0 = startDeg + k * half;
+    const a1 = a0 + half;
+    const from = clockPoint(cx, cy, r, a0);
+    const to = clockPoint(cx, cy, r, a1);
+    const end = k === 0 && half > 0 ? clockPoint(cx, cy, r, a1 + overlap) : to;
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const len2 = dx * dx + dy * dy;
+    const stops = Array.from({ length: n }, (_, i) => {
+      const u = i / (n - 1);
+      const p = clockPoint(cx, cy, r, a0 + half * u);
+      const offset = len2 > 1e-6 ? ((p.x - from.x) * dx + (p.y - from.y) * dy) / len2 : u;
+      return { offset: Math.min(1, Math.max(0, offset)), t: sweep > 0 ? (k * half + half * u) / sweep : 0 };
+    });
+    const f = (v: number) => v.toFixed(3);
+    return { d: `M${f(from.x)} ${f(from.y)}A${r} ${r} 0 0 1 ${f(end.x)} ${f(end.y)}`, length: (Math.PI * r * half) / 180, from, to, stops };
+  });
+}
+
+/** An SVG arc from `fromDeg` to `toDeg` (clockwise from 12 o'clock, `toDeg` > `fromDeg`, under a full turn): a stretch of a ring's track. */
+export function clockArcPath(cx: number, cy: number, r: number, fromDeg: number, toDeg: number): string {
+  const sweep = Math.max(0, Math.min(359.99, toDeg - fromDeg));
+  if (sweep <= 0) return "";
+  const a = clockPoint(cx, cy, r, fromDeg);
+  const b = clockPoint(cx, cy, r, fromDeg + sweep);
+  const f = (v: number) => v.toFixed(3);
+  return `M${f(a.x)} ${f(a.y)}A${r} ${r} 0 ${sweep > 180 ? 1 : 0} 1 ${f(b.x)} ${f(b.y)}`;
+}
+
+/** The colour at `t` (0-1) along evenly spaced `colors`: a straight sRGB blend between the two either side of it. */
+export function colorAt(colors: readonly string[], t: number): string {
+  if (!colors.length) return "#000000";
+  if (colors.length === 1) return colors[0];
+  const x = Math.min(1, Math.max(0, t)) * (colors.length - 1);
+  const i = Math.min(colors.length - 2, Math.floor(x));
+  return mix(colors[i + 1], colors[i], x - i);
+}
+
+/**
+ * An Activity ring's gradient from one colour: a few percent darker where the ring starts, the colour itself at the
+ * middle, a little lighter where it ends, so the arc reads as lit and its head stands off its tail.
+ */
+export const ringShades = (color: string): [string, string, string] => [mix(color, "#000000", 0.84), color, mix(color, "#ffffff", 0.8)];
+
+// --- Heart-rate ranges ---
+
+/** One bucket of readings: its time span, its lowest and highest reading and how many readings it holds. */
+export type RangeBucket = { start: number; end: number; min: number; max: number; count: number };
+
+/**
+ * Readings (ascending `t`) gathered into buckets `stepMs` wide, counted from `origin`: each bucket's low and high, the
+ * stretch a range capsule spans. Buckets with no reading are left out, so a gap stays a gap.
+ */
+export function rangeBuckets(points: readonly { t: number; v: number | null }[], stepMs: number, origin = points[0]?.t ?? 0): RangeBucket[] {
+  const out: RangeBucket[] = [];
+  if (!(stepMs > 0)) return out;
+  let cur: RangeBucket | null = null;
+  for (const p of points) {
+    if (p.v === null || !Number.isFinite(p.v)) continue;
+    const start = origin + Math.floor((p.t - origin) / stepMs) * stepMs;
+    if (!cur || cur.start !== start) {
+      cur = { start, end: start + stepMs, min: p.v, max: p.v, count: 0 };
+      out.push(cur);
+    }
+    cur.min = Math.min(cur.min, p.v);
+    cur.max = Math.max(cur.max, p.v);
+    cur.count++;
+  }
+  return out;
+}
+
+const BUCKET_MINUTES = [5, 10, 15, 20, 30, 60, 120];
+
+/** The finest bucket (5, 10, 15, 20, 30, 60 or 120 min) whose capsules sit at least `minPitch` px apart when `spanMs` fills `widthPx`. */
+export function bucketMinutes(spanMs: number, widthPx: number, minPitch: number): number {
+  const perMinute = spanMs > 0 ? widthPx / (spanMs / 60_000) : Infinity;
+  for (const m of BUCKET_MINUTES) if (m * perMinute >= minPitch) return m;
+  return BUCKET_MINUTES[BUCKET_MINUTES.length - 1];
 }

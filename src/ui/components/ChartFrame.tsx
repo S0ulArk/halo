@@ -1,3 +1,8 @@
+// The pieces every chart shares, drawn on the GPU with Skia: a measured figure that waits for the screen's open
+// transition, the chart typefaces, the tap / scrub gestures (run on the UI thread), the draw-in progress and the
+// shared marks in the Apple Health chart language: faint dashed hairline grid rows, axis text in the caption size and
+// the secondary grey (the value axis on the right), full-capsule bar tops with the past at 35 % of the series colour,
+// thin dashed guides with a small label pill, and a solid hairline scrub cursor with a dot and a readout.
 import * as React from "react";
 import { Dimensions, Pressable, View, type StyleProp, type ViewStyle } from "react-native";
 import { Barlow_500Medium, Barlow_600SemiBold, Barlow_700Bold } from "@expo-google-fonts/barlow";
@@ -34,26 +39,27 @@ import { useReduceMotion } from "@/ui/motion";
 import { useAfterTransition } from "./AfterTransition";
 import { softFill, useSoftFill } from "./calmKit";
 
-// The pieces every chart shares, drawn on the GPU with Skia: a measured figure that waits for the screen's open
-// transition, the chart typefaces, the tap / scrub gestures (run on the UI thread), the draw-in progress and the
-// shared marks in the Calm chart language (dotted grid, pills, gradients, the scrub cursor, dot and readout).
-
 export type { Band };
 
-/** Axis text: Barlow 500 at 12 px in the Calm faint grey, the tick 8 px off the axis. */
-export const AXIS = { fontSize: 12, tickMargin: 8, xAxisHeight: 30 } as const;
+/**
+ * Axis text: the caption size (11 px) in the secondary grey. `tickMargin` is the gap from the plot to the time labels'
+ * line box, `xAxisHeight` the band under the plot that holds them, `gap` the room between the plot's right edge and
+ * the value labels on the right.
+ */
+export const AXIS = { fontSize: 11, tickMargin: 6, xAxisHeight: 26, gap: 6 } as const;
 
-// --- The Calm chart colours ---
+// --- The chart colours ---
 
 /**
- * What every chart paints with, from the Calm palette (src/ui/calm.ts): a dotted grid and axis text in the faint grey,
- * guides and the scrub cursor in the ink at low opacity, marked points ringed in the card colour, the readout a white
- * pill (a raised chip on dark) with a soft edge. One object per scheme, so a chart's memo deps stay stable.
+ * What every chart paints with, from the active palette (src/ui/calm.ts): a dashed hairline grid in the separator
+ * tone, axis text in the secondary grey, guides and the scrub cursor in the ink at low opacity, marked points ringed in
+ * the card colour, the readout a raised rounded card with a soft edge. One object per scheme, so a chart's memo deps
+ * stay stable.
  */
 export type ChartInk = {
-  /** The grid's dots: the faint grey, softened. */
+  /** The grid's dashed hairlines: the ink at a separator's strength. */
   grid: string;
-  /** Axis text. */
+  /** Axis text: the secondary grey. */
   axis: string;
   /** Emphasised axis text (the shown day, bed and wake). */
   axisStrong: string;
@@ -63,7 +69,7 @@ export type ChartInk = {
   sub: string;
   faint: string;
   card: string;
-  /** The dashed scrub cursor: the ink at 30 %. */
+  /** The scrub cursor's hairline: the ink at 30-40 %. */
   cursor: string;
   /** Dashed reference lines (average, goal, now, bed and wake). */
   guide: string;
@@ -82,23 +88,23 @@ export type ChartInk = {
   /** The highlight accent ("this one") and the secondary series hue. */
   orange: string;
   navy: string;
-  /** Opacity of past / non-selected bars; the selected or latest bar is at full ink. */
+  /** Opacity of past / non-selected bars (Apple Health's 35 %); the selected or latest bar is at full ink. */
   dim: number;
   palette: CalmPalette;
 };
 
 function makeInk(c: CalmPalette, dark: boolean): ChartInk {
   return {
-    grid: alpha(c.faint, dark ? 0.5 : 0.6),
-    axis: c.faint,
+    grid: alpha(c.ink, dark ? 0.2 : 0.16),
+    axis: c.sub,
     axisStrong: c.ink,
     label: c.sub,
     ink: c.ink,
     sub: c.sub,
     faint: c.faint,
     card: c.card,
-    cursor: alpha(c.ink, 0.3),
-    guide: alpha(c.ink, dark ? 0.32 : 0.36),
+    cursor: alpha(c.ink, dark ? 0.4 : 0.3),
+    guide: alpha(c.ink, dark ? 0.42 : 0.38),
     ring: c.card,
     scrubRing: dark ? c.ink : c.card,
     readout: c.chip,
@@ -108,7 +114,7 @@ function makeInk(c: CalmPalette, dark: boolean): ChartInk {
     track: c.line,
     orange: c.orange,
     navy: c.navy,
-    dim: dark ? 0.45 : 0.4,
+    dim: 0.35,
     palette: c,
   };
 }
@@ -708,13 +714,19 @@ export function DashLine({ x1, y1, x2, y2, color, dash, width = 1, round = false
   );
 }
 
-/** The Calm guide: a soft dashed line in the ink at low opacity, round-capped (averages, goals, now, bed and wake). */
+/** A guide: a thin dashed line in the ink at low opacity (averages, goals, now, bed and wake). */
 export function GuideLine({ x1, y1, x2, y2, color }: { x1: number; y1: number; x2: number; y2: number; color?: string }) {
   const k = useChartInk();
-  return <DashLine x1={x1} y1={y1} x2={x2} y2={y2} color={color ?? k.guide} dash={[3, 5]} width={1.5} round />;
+  return <DashLine x1={x1} y1={y1} x2={x2} y2={y2} color={color ?? k.guide} dash={GUIDE_DASH} width={1} />;
 }
 
-/** Dot spacing and size of the Calm grid: round dots on each row, never a solid rule. */
+/** A guide's dashes, px on and off. */
+export const GUIDE_DASH = [4, 3];
+
+/** The grid rows: dashed hairlines (on, off px) a little under a point wide, so they sit behind the data, never on it. */
+export const GRID = { width: 0.75, dash: [2.5, 3] };
+
+/** Dot spacing and size of a dotted guide (the explorer's grid). */
 export const GRID_DOT = { gap: 6, size: 1.6 } as const;
 
 /** A row of round dots from `x1` to `x2` at `y` (a zero-length dash with round caps is a dot). */
@@ -726,17 +738,38 @@ export function DotLine({ x1, x2, y, color }: { x1: number; x2: number; y: numbe
   );
 }
 
-/** The Calm grid: dotted rows at `ys` from `x1` to `x2`, in the faint grey. */
+/** The grid: a dashed hairline at each of `ys` from `x1` to `x2`, in the separator tone. */
 export function Grid({ ys, x1, x2 }: { ys: number[]; x1: number; x2: number }) {
   const k = useChartInk();
   return (
     <Group>
       {ys.map((y, i) => (
-        <DotLine key={i} x1={x1} x2={x2} y={y} color={k.grid} />
+        <DashLine key={i} x1={x1} x2={x2} y1={y} y2={y} color={k.grid} dash={GRID.dash} width={GRID.width} />
       ))}
     </Group>
   );
 }
+
+/** Width of the value axis on the right: the widest of `labels` in `font`, the gap to the plot and 2 px of air at the edge. */
+export const rightAxisWidth = (font: SkFont, labels: readonly string[]) => Math.ceil(Math.max(0, ...labels.map((t) => measure(font, t)))) + AXIS.gap + 2;
+
+/**
+ * The value axis on the right, Apple Health's way: each tick's label left-aligned `AXIS.gap` px right of the plot
+ * (`x` is the plot's right edge), vertically centred on its grid row, in the secondary grey (or a colour per label).
+ * `skip` leaves out the labels a guide's pill sits on.
+ */
+export function RightAxis({ x, ys, texts, font, color, skip }: { x: number; ys: readonly number[]; texts: readonly string[]; font: SkFont; color?: string | readonly string[]; skip?: (y: number) => boolean }) {
+  const k = useChartInk();
+  const size = font.getSize();
+  return (
+    <Group>
+      {ys.map((y, i) => (skip?.(y) ? null : <SText key={i} x={x + AXIS.gap} y={y + size * 0.35} text={texts[i]} font={font} color={typeof color === "string" ? color : (color?.[i] ?? k.axis)} />))}
+    </Group>
+  );
+}
+
+/** A whole-hour tick's label on a time axis: the two-digit hour of the app's 24-hour clock ("06", "18"). */
+export const hourText = (ms: number, timeZone?: string) => clock(ms, timeZone).slice(0, 2);
 
 /** A filled pill at (x, y), vertically centred: the label of a reference line or a marked point. */
 export function Pill({ x, y, text, fill, color, anchor = "start" }: { x: number; y: number; text: string; fill?: string; color?: string; anchor?: "start" | "middle" }) {
@@ -858,30 +891,20 @@ export function barPath(x: number, y: number, w: number, h: number, top: number,
   return `${d}Z`;
 }
 
-/** The Calm bar's corner radius at width `w`: a full capsule top while thin, a soft 8 px round once wide. */
-export const barRadius = (w: number) => Math.min(w / 2, 8);
+/** A bar's top corner radius at width `w`: Apple Health's fully rounded top, half the width. */
+export const barRadius = (w: number) => w / 2;
 
 // --- Scrub layers (React Native views over the canvas, moved on the UI thread) ---
 
-/** A dashed vertical line `height` tall: 4 on, 4 off, 1.5 px wide with round ends. */
-function Dashes({ height, color }: { height: number; color: string }) {
-  const n = Math.max(1, Math.floor(height / 8) + 1);
-  return (
-    <>
-      {Array.from({ length: n }, (_, i) => (
-        <View key={i} style={{ position: "absolute", left: 0, top: i * 8, width: 1.5, height: Math.max(0, Math.min(4, height - i * 8)), borderRadius: 0.75, backgroundColor: color }} />
-      ))}
-    </>
-  );
-}
-
-const DOT = 14;
-const HALO = 24;
+/** The scrub cursor's width: a hairline a point wide, as Apple Health's selection rule. */
+const CURSOR_W = 1;
+const DOT = 12;
+const HALO = 22;
 
 /**
- * The scrub marks bound to the scrubbed index, on the UI thread: a dashed cursor (the ink at 30 %) through the plot and
- * a dot with a white ring at the point. `xs`/`ys` are each index's point (NaN y: no dot), `colors` its dot colour.
- * Native views: moving them is a transform, the chart under them is never redrawn.
+ * The scrub marks bound to the scrubbed index, on the UI thread: a solid hairline cursor (the ink at 30-40 %) through
+ * the plot and a dot ringed in the card colour at the point. `xs`/`ys` are each index's point (NaN y: no dot), `colors`
+ * its dot colour. Native views: moving them is a transform, the chart under them is never redrawn.
  */
 export function ScrubCursor({
   active,
@@ -910,7 +933,7 @@ export function ScrubCursor({
   const lineStyle = useAnimatedStyle(() => {
     const i = active.value;
     const on = i >= 0 && i < xs.length;
-    return { opacity: on ? 1 : 0, transform: [{ translateX: on ? xs[i] - 0.75 : -100 }] };
+    return { opacity: on ? 1 : 0, transform: [{ translateX: on ? xs[i] - CURSOR_W / 2 : -100 }] };
   });
   const dotStyle = useAnimatedStyle(() => {
     const i = active.value;
@@ -923,14 +946,12 @@ export function ScrubCursor({
   return (
     <>
       {line && (
-        <Animated.View pointerEvents="none" style={[{ position: "absolute", left: 0, top, width: 1.5, height: Math.max(0, bottom - top) }, lineStyle]}>
-          <Dashes height={Math.max(0, bottom - top)} color={k.cursor} />
-        </Animated.View>
+        <Animated.View pointerEvents="none" style={[{ position: "absolute", left: 0, top, width: CURSOR_W, height: Math.max(0, bottom - top), backgroundColor: k.cursor }, lineStyle]} />
       )}
       {dot && (
         <Animated.View pointerEvents="none" style={[{ position: "absolute", left: 0, top: 0, width: HALO, height: HALO }, dotStyle]}>
           <Animated.View style={[{ position: "absolute", left: 0, top: 0, width: HALO, height: HALO, borderRadius: HALO / 2 }, halo]} />
-          <Animated.View style={[{ position: "absolute", left: (HALO - DOT) / 2, top: (HALO - DOT) / 2, width: DOT, height: DOT, borderRadius: DOT / 2, borderWidth: 3, borderColor: k.scrubRing }, fill]} />
+          <Animated.View style={[{ position: "absolute", left: (HALO - DOT) / 2, top: (HALO - DOT) / 2, width: DOT, height: DOT, borderRadius: DOT / 2, borderWidth: 2.5, borderColor: k.scrubRing }, fill]} />
         </Animated.View>
       )}
     </>
@@ -981,11 +1002,11 @@ export function ScrubBars({ active, width, height, layers }: { active: SharedVal
 /** SVG path strings to Skia paths (null for none), for ScrubBars. */
 export const toPaths = (ds: readonly (string | null)[]): (SkPath | null)[] => ds.map((d) => (d ? Skia.Path.MakeFromSVGString(sp(d)) : null));
 
-/** The readout pill's height and padding. */
-const READOUT = { h: 22, pad: 9, gap: 6, margin: 4 } as const;
+/** The readout's height, corner radius and padding: a small rounded card, as Apple Health's selection label. */
+const READOUT = { h: 24, r: 8, pad: 9, gap: 6, margin: 4 } as const;
 
 /**
- * The Calm readout bound to the scrubbed index: a small white pill with a soft edge, centred over its point and kept
+ * The readout bound to the scrubbed index: a small raised rounded card with a soft edge, centred over its point and kept
  * inside [minX, maxX], the value in the numeric face (`texts`, in `color`) and an optional label after it in the grey
  * (`labels`). Every index's text is precomputed with its width; it is a small canvas of its own, moved by a transform
  * and redrawn only when the index changes, never the chart. `y` is the pill's vertical centre.
@@ -1018,7 +1039,7 @@ export function ScrubLabel({
   color: string;
 }) {
   const k = useChartInk();
-  const { h, pad, gap, margin: m } = READOUT;
+  const { h, r: radius, pad, gap, margin: m } = READOUT;
   const pills = React.useMemo(() => widths.map((w, i) => Math.ceil(w + (labels?.[i] ? gap + (labelWidths?.[i] ?? 0) : 0) + 2 * pad)), [widths, labels, labelWidths, gap, pad]);
   const boxW = React.useMemo(() => Math.max(0, ...pills) + 2 * m, [pills, m]);
   const mounted = useScrubArmed(active);
@@ -1040,10 +1061,10 @@ export function ScrubLabel({
   return (
     <Animated.View pointerEvents="none" style={[{ position: "absolute", left: 0, top: y - h / 2 - m, width: boxW, height: h + 2 * m }, style]}>
       <Canvas style={{ width: boxW, height: h + 2 * m }}>
-        <RoundedRect x={m} y={m} width={pillW} height={h} r={h / 2} color={k.readout}>
+        <RoundedRect x={m} y={m} width={pillW} height={h} r={radius} color={k.readout}>
           <Shadow dx={0} dy={1} blur={3} color={k.readoutShadow} />
         </RoundedRect>
-        <RoundedRect x={m + 0.5} y={m + 0.5} width={edgeW} height={h - 1} r={(h - 1) / 2} color={k.readoutEdge} style="stroke" strokeWidth={1} />
+        <RoundedRect x={m + 0.5} y={m + 0.5} width={edgeW} height={h - 1} r={radius - 0.5} color={k.readoutEdge} style="stroke" strokeWidth={1} />
         <SkText x={m + pad} y={base} text={text} font={font} color={color} />
         {labels && <SkText x={labelX} y={m + h / 2 + lf.getSize() * 0.35} text={label} font={lf} color={k.sub} />}
       </Canvas>
