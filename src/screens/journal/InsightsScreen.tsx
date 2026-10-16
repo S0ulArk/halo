@@ -1,8 +1,11 @@
 // Behaviour insights `/journal/insights?m=` (spec §7.12, journey 7), ported from the web's
-// src/app/(app)/journal/insights/{page,Impacts,loading}.tsx: the heading and explainer over the Recovery / HRV / Sleep
-// toggle, the impact list (a row opens its detail sheet), then "Keep logging to unlock" and the footnote.
+// src/app/(app)/journal/insights/{page,Impacts,loading}.tsx, in the iOS look: the heading and explainer over the
+// Recovery / HRV / Sleep segmented control, the impact list (a row opens its detail sheet: the effect as a Health
+// number over an inset list of the figures behind it), then "Keep logging to unlock" as Health cards, each with a
+// capsule that grows to how many of the ten days are logged, and the footnote.
 import * as React from "react";
-import { View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { Lock } from "lucide-react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { formatValue } from "@/lib/format";
 import { getJournalInsights } from "@/queries/journal";
@@ -13,8 +16,8 @@ import { font } from "@/ui/fonts";
 import { ActivityCostSection } from "@/screens/detail/ActivityCost";
 import { DetailScreen, LoadError } from "@/screens/detail/DetailScreen";
 import { useBack, useRefresh } from "@/screens/detail/nav";
-import { CalmSegmented, Hairline, Num, Sentence, Surface, Title, useCalm } from "../settings/calmKit";
-import { Progress } from "./controls";
+import { CapsuleMeter } from "@/ui/components/CapsuleMeter";
+import { CalmSegmented, Num, Sentence, Surface, Title, useCalm } from "../settings/calmKit";
 import { openCheckIn, useJournalVersion } from "./state";
 
 const METRICS: { key: ImpactMetricKey; label: string; word: string }[] = [
@@ -109,13 +112,13 @@ function ImpactList({ vm }: { vm: JournalInsightsVM }) {
         {item && (
           <View style={{ gap: 18 }}>
             {/* The effect as the headline number, its unit small beside it, the outcome under it. */}
-            <View accessible accessibilityLabel={`${fx(item.delta)} next-day ${word}`} style={{ gap: 4 }}>
+            <View accessible accessibilityLabel={`${fx(item.delta)} next-day ${word}`} style={{ gap: 2 }}>
               <Num value={sd ? formatValue("signed1", item.delta) : formatValue("signedInt", item.delta)} unit={sd ? "SD" : "%"} size={40} color={tone} />
-              <Txt size={11} lineHeight={15} weight={600} style={{ color: c.faint, letterSpacing: 1.4 }}>
-                {`NEXT-DAY ${word.toUpperCase()}`}
+              <Txt size={15} lineHeight={20} style={{ color: c.sub }}>
+                {`Next-day ${word}`}
               </Txt>
             </View>
-            <View style={{ borderRadius: 22, backgroundColor: c.ground, paddingHorizontal: 16, paddingVertical: 4 }}>
+            <View style={{ borderRadius: 14, backgroundColor: c.sheetFill, paddingHorizontal: 16 }}>
               {(
                 [
                   ["Days with", String(item.yes ?? "--")],
@@ -126,13 +129,13 @@ function ImpactList({ vm }: { vm: JournalInsightsVM }) {
                 ] as const
               ).map(([k, v], i) => (
                 <React.Fragment key={k}>
-                  {i > 0 && <Hairline />}
+                  {i > 0 && <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.line }} />}
                   {/* The name and the number share their first line, whichever wraps. */}
                   <View style={{ minHeight: 48, flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12, paddingVertical: (48 - 22) / 2 }}>
-                    <Txt size={15} lineHeight={20} weight={500} style={{ color: c.ink, flexShrink: 1, marginTop: 1 }}>
+                    <Txt size={16} lineHeight={21} style={{ color: c.ink, flexShrink: 1, marginTop: 0.5 }}>
                       {k}
                     </Txt>
-                    <Txt size={17} lineHeight={22} align="right" style={[font.numeric(700), { color: c.ink, flexShrink: 1 }]}>
+                    <Txt size={16} lineHeight={22} align="right" style={[font.numeric(500), { color: c.sub, flexShrink: 1 }]}>
                       {v}
                     </Txt>
                   </View>
@@ -147,28 +150,31 @@ function ImpactList({ vm }: { vm: JournalInsightsVM }) {
   );
 }
 
-/** The reference app's "Keep logging to unlock" group: one white card per behaviour with its progress to ten days. */
+/** The reference app's "Keep logging to unlock" group: one Health card per behaviour, its capsule growing to its days logged of ten. */
 function Unlock({ needsMore, word }: { needsMore: JournalInsightsVM["needsMore"]; word: string }) {
   const c = useCalm();
   return (
     <View style={{ gap: 12 }}>
       <View style={{ gap: 4, paddingHorizontal: 4 }}>
-        <Title header>Keep logging to unlock</Title>
+        <Title header size={22}>
+          Keep logging to unlock
+        </Title>
         <Sentence>{`Log a behaviour as Yes on at least 5 days and No on at least 5 to see how it changes your next-day ${word}.`}</Sentence>
       </View>
       <View style={{ gap: 10 }}>
         {needsMore.map((n) => {
           const have = Math.min(5, n.yes) + Math.min(5, n.no);
           return (
-            <Surface key={n.key} padding={18}>
+            <Surface key={n.key} padding={16}>
               <View style={{ gap: 10 }} accessibilityLabel={`${n.label}: ${have} of 10 days logged`}>
-                <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-                  <Txt size={16} lineHeight={21} weight={600} style={{ color: c.ink, flexShrink: 1 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+                  <Lock size={16} color={c.tintInk.lavender} strokeWidth={2.4} />
+                  <Txt size={16} lineHeight={21} weight={600} style={{ color: c.tintInk.lavender, flex: 1, minWidth: 0 }}>
                     {n.label}
                   </Txt>
                   <Num value={String(have)} unit="/ 10" size={20} />
                 </View>
-                <Progress value={(have / 10) * 100} />
+                <CapsuleMeter frac={have / 10} color={c.tintInk.lavender} height={8} track={c.fill} grow />
                 <Txt size={13} lineHeight={18} style={{ color: c.sub, fontVariant: ["tabular-nums"] }}>
                   {`${Math.min(5, n.yes)} of 5 days with, ${Math.min(5, n.no)} of 5 without`}
                 </Txt>

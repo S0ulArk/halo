@@ -1,14 +1,24 @@
-// The form primitives the Journal uses (the web's shadcn Badge, Toggle, Input, Switch, Progress, Dialog) in the Calm
-// style, plus the toast and haptic the web's sonner and haptic() give: pastel tags, large pill options (grey on a
-// white card or sheet, solid teal or ink when chosen), 16 px rounded fields with the label above, a teal switch, and a
-// white 28 px dialog. Every colour comes from useCalm().
+// The form primitives the Journal uses (the web's shadcn Badge, Toggle, Input, Switch, Dialog) in the iOS
+// look, plus the toast and haptic the web's sonner and haptic() give: tinted capsule tags, the check-in's No / Yes
+// capsules (the quiet fill, blue when Yes is chosen and ink when No is), iOS's fields with the label above, its switch,
+// and the iOS alert: a centred card that springs in over the dim, its actions as full-width rows divided by
+// hairlines. Every colour comes from useCalm(); every press and transition runs on the UI thread.
 import * as React from "react";
-import { Animated, Easing, Platform, Pressable, StyleSheet, TextInput, ToastAndroid, useWindowDimensions, View, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from "react-native";
+import { Platform, Pressable, StyleSheet, TextInput, ToastAndroid, useWindowDimensions, View, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from "react-native";
+import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 import { OverlayModal } from "@/ui/components/Overlay";
+import { usePress, usePressStyle } from "@/ui/components/press";
+import { iosSpring } from "@/ui/motion/springs";
+import { reduceMotionNow } from "@/ui/motion/system";
 import * as Haptics from "expo-haptics";
 import { Txt } from "@/ui";
+import { font } from "@/ui/fonts";
+import { haptic as tick } from "@/ui/motion/haptics";
 import { useTheme } from "@/ui/ThemeProvider";
-import { CalmChip, CalmField, CalmInput, CalmProgress, CalmSwitch, useCalm, type CalmTint, type On } from "../settings/calmKit";
+import { CalmChip, CalmField, CalmInput, CalmSwitch, useCalm, type CalmTint, type On } from "../settings/calmKit";
+
+const PressableView = Animated.createAnimatedComponent(Pressable);
 
 /** sonner's toast on Android: a short system toast. */
 export function toast(message: string) {
@@ -18,11 +28,11 @@ export function toast(message: string) {
 /** The web's haptic() on a saved check-in. */
 export const haptic = () => void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
-/** A behaviour's tag: a pastel pill (recovery's mint by default) with its ink. Wraps rather than cut. */
+/** A behaviour's tag: a capsule in the family's soft fill (green by default) with its colour. Wraps rather than cut. */
 export function TagBadge({ children, tint = "mint" }: { children: string; tint?: CalmTint }) {
   const c = useCalm();
   return (
-    <View style={{ minHeight: 28, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5, justifyContent: "center", backgroundColor: c.tint[tint], flexShrink: 1 }}>
+    <View style={{ minHeight: 26, borderRadius: 13, paddingHorizontal: 10, paddingVertical: 4, justifyContent: "center", backgroundColor: c.tint[tint], flexShrink: 1 }}>
       <Txt size={13} lineHeight={18} weight={600} style={{ color: c.tintInk[tint] }}>
         {children}
       </Txt>
@@ -31,39 +41,58 @@ export function TagBadge({ children, tint = "mint" }: { children: string; tint?:
 }
 
 /**
- * The check-in's No / Yes pair: two large pill options side by side, filling the row. Off they take the ground's grey
- * (white on a grey card with `on="ground"`); No chosen is solid ink, Yes chosen is solid teal. Tapping the chosen one
- * clears it (Radix single toggle).
+ * One answer of the check-in's pair: a capsule in the quiet fill that fills its colour when chosen (a short cross-fade
+ * on the UI thread, a selection tick); its width never changes, so the row beside it never reflows. Settles and dims
+ * while pressed.
  */
-export function YesNo({ value, onChange, label, on = "card" }: { value: number | undefined; onChange: (v: number | undefined) => void; label: string; on?: On }) {
+function Answer({ word, chosen, color, ink, onPress, grow }: { word: string; chosen: boolean; color: string; ink: string; onPress: () => void; grow: boolean }) {
   const c = useCalm();
-  const item = (v: 0 | 1, word: string) => {
-    const sel = value !== undefined && (v === 1 ? value > 0 : value === 0);
-    const bg = sel ? (v === 1 ? c.teal : c.ink) : on === "card" ? c.ground : c.card;
-    return (
-      <Pressable
-        key={word}
-        onPress={() => onChange(sel ? undefined : v)}
-        accessibilityRole="radio"
-        accessibilityLabel={word}
-        accessibilityState={{ checked: sel }}
-        style={({ pressed }) => ({ flex: 1, minHeight: 48, minWidth: 64, paddingHorizontal: 12, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: bg, opacity: pressed ? 0.8 : 1 })}
-      >
-        <Txt size={16} lineHeight={20} weight={600} style={{ color: sel ? c.card : c.ink }}>
-          {word}
-        </Txt>
-      </Pressable>
-    );
-  };
+  const sel = useSharedValue(chosen ? 1 : 0);
+  React.useEffect(() => {
+    sel.set(reduceMotionNow() ? (chosen ? 1 : 0) : withTiming(chosen ? 1 : 0, { duration: 160 }));
+  }, [chosen, sel]);
+  const press = usePress(0.94);
+  const pressed = usePressStyle(press, { dim: 0.75 });
+  const face = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(sel.value, [0, 1], [c.fill, color]) }), [c.fill, color]);
+  const words = useAnimatedStyle(() => ({ color: interpolateColor(sel.value, [0, 1], [c.ink, ink]) }), [c.ink, ink]);
   return (
-    <View accessibilityRole="radiogroup" accessibilityLabel={label} style={{ flexDirection: "row", gap: 8 }}>
-      {item(0, "No")}
-      {item(1, "Yes")}
+    <PressableView
+      onPress={() => {
+        tick.select();
+        onPress();
+      }}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      accessibilityRole="radio"
+      accessibilityLabel={word}
+      accessibilityState={{ checked: chosen }}
+      hitSlop={4}
+      style={[{ minHeight: 40, minWidth: 64, paddingHorizontal: 14, borderRadius: 20, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5 }, grow && { flex: 1 }, face, pressed]}
+    >
+      <Animated.Text style={[font.sans(600), { fontSize: 16, lineHeight: 20, letterSpacing: -0.25, includeFontPadding: false }, words]}>{word}</Animated.Text>
+    </PressableView>
+  );
+}
+
+/**
+ * The check-in's No / Yes pair, iOS's: two capsules side by side, in the quiet fill until chosen; Yes chosen fills
+ * blue, No chosen fills ink. Tapping the chosen one clears it (Radix single toggle), so an unanswered behaviour stays
+ * unanswered rather than "No". `compact` keeps the pair at its own width (beside a row's name); otherwise it fills the
+ * row. `on` is kept for API compatibility: the translucent fill reads on any surface.
+ */
+export function YesNo({ value, onChange, label, compact = false }: { value: number | undefined; onChange: (v: number | undefined) => void; label: string; on?: On; compact?: boolean }) {
+  const c = useCalm();
+  const no = value === 0;
+  const yes = value !== undefined && value > 0;
+  return (
+    <View accessibilityRole="radiogroup" accessibilityLabel={label} style={{ flexDirection: "row", gap: 6 }}>
+      <Answer word="No" chosen={no} color={c.ink} ink={c.card} grow={!compact} onPress={() => onChange(no ? undefined : 0)} />
+      <Answer word="Yes" chosen={yes} color={c.teal} ink="#ffffff" grow={!compact} onPress={() => onChange(yes ? undefined : 1)} />
     </View>
   );
 }
 
-/** The log sheets' chips: 44 px pills, grey on the sheet and solid teal when chosen, single or multiple. */
+/** The log sheets' chips: 44 px capsules in the quiet fill, solid blue when chosen, single or multiple. */
 export function Chips({
   label,
   options,
@@ -107,21 +136,16 @@ export function Field({ label, hint, children, style }: { label: string; hint?: 
   );
 }
 
-/** The Calm switch (a teal pill when on, a white thumb); the hit area is 48 px tall. */
+/** iOS's switch (green when on, the white knob springing across); the hit area is 48 px tall. */
 export function Switch({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label: string }) {
   return <CalmSwitch value={value} onChange={onChange} label={label} />;
 }
 
-/** A thin progress bar, 0–100, teal on the line grey. */
-export function Progress({ value }: { value: number }) {
-  return <CalmProgress value={value / 100} />;
-}
-
-/** The inline alert the sheets use: a rose block with rose ink, and an optional action beside it. */
+/** The inline alert the sheets use: a soft red block with red words, and an optional action beside it. */
 export function ErrorAlert({ children, action }: { children: string; action?: React.ReactNode }) {
   const c = useCalm();
   return (
-    <View accessibilityRole="alert" style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, borderRadius: 16, backgroundColor: c.tint.rose, paddingHorizontal: 14, paddingVertical: 10 }}>
+    <View accessibilityRole="alert" style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, borderRadius: 14, backgroundColor: c.tint.rose, paddingHorizontal: 14, paddingVertical: 10 }}>
       <Txt size={14} lineHeight={19} weight={500} style={{ color: c.tintInk.rose, flexShrink: 1 }}>
         {children}
       </Txt>
@@ -130,36 +154,34 @@ export function ErrorAlert({ children, action }: { children: string; action?: Re
   );
 }
 
-/** A dialog's button: a 48 px pill in the ground's grey, or a rose wash with rose ink for the destructive one. */
-export function DialogAction({ label, onPress, danger, disabled }: { label: string; onPress: () => void; /** The web's bordered face for the destructive action; Calm draws both flat. */ variant?: "secondary" | "outline"; danger?: boolean; disabled?: boolean }) {
+/**
+ * An alert's action, iOS's: a full-width 48 px row with its word centred in blue (red for the destructive one, which
+ * iOS sets in the regular weight), the row greying while pressed.
+ */
+export function DialogAction({ label, onPress, danger, disabled }: { label: string; onPress: () => void; /** The web's bordered face for the destructive action; iOS draws both as plain rows. */ variant?: "secondary" | "outline"; danger?: boolean; disabled?: boolean }) {
   const c = useCalm();
-  const bg = danger ? c.tint.rose : c.ground;
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityState={{ disabled }}
-      style={({ pressed }) => ({
-        minHeight: 48,
-        borderRadius: 24,
-        paddingHorizontal: 20,
-        alignItems: "center",
-        justifyContent: "center",
-        opacity: disabled ? 0.45 : pressed ? 0.8 : 1,
-        backgroundColor: bg,
-      })}
+      style={({ pressed }) => ({ minHeight: 48, paddingHorizontal: 16, alignItems: "center", justifyContent: "center", opacity: disabled ? 0.4 : 1, backgroundColor: pressed ? c.fill : "transparent" })}
     >
-      <Txt size={15} lineHeight={20} weight={600} style={{ color: danger ? c.tintInk.rose : c.ink }}>
+      <Txt size={17} lineHeight={22} weight={danger ? 400 : 600} align="center" style={{ color: danger ? c.system.red : c.teal }}>
         {label}
       </Txt>
     </Pressable>
   );
 }
 
+/** The alert's entrance: iOS's, a quick spring from a touch larger with no visible bounce, the fade alongside. */
+const ALERT_IN = iosSpring(0.32, 0.9);
+
 /**
- * The web's confirm ("Discard changes?", "Delete this entry?") as a Calm dialog: a white 28 px card over the dim,
- * title and sentence, then the actions stacked full width (`flex-col-reverse`: the last one on top).
+ * The web's confirm ("Discard changes?", "Delete this entry?") as iOS's alert: a centred 290 px card (the sheet's
+ * material, 16 px corners) over the dim, the title and sentence centred, then the actions as full-width rows divided by
+ * hairlines (`flex-col-reverse`: the last one on top). It springs in from 108 % and fades out, on the UI thread.
  */
 export function ConfirmDialog({
   open,
@@ -177,48 +199,47 @@ export function ConfirmDialog({
   const theme = useTheme();
   const c = useCalm();
   const { width } = useWindowDimensions();
-  const t = React.useState(() => new Animated.Value(0))[0];
+  const fade = useSharedValue(0);
+  const scale = useSharedValue(1.08);
   const [shown, setShown] = React.useState(open);
   // Mount on open while rendering (no effect-driven setState); unmount once the fade-out ends.
   if (open && !shown) setShown(true);
   React.useEffect(() => {
+    const still = reduceMotionNow();
     if (open) {
-      Animated.timing(t, { toValue: 1, duration: 100, easing: Easing.out(Easing.ease), useNativeDriver: true }).start();
+      fade.set(withTiming(1, { duration: still ? 0 : 160 }));
+      scale.set(still ? 1 : withSpring(1, ALERT_IN));
     } else {
-      Animated.timing(t, { toValue: 0, duration: 100, easing: Easing.in(Easing.ease), useNativeDriver: true }).start(() => setShown(false));
+      scale.set(1);
+      fade.set(withTiming(0, { duration: still ? 0 : 140 }, (done) => {
+        if (done) scheduleOnRN(setShown, false);
+      }));
     }
-  }, [open, t]);
+  }, [open, fade, scale]);
+  const dim = useAnimatedStyle(() => ({ opacity: fade.value }));
+  const card = useAnimatedStyle(() => ({ opacity: fade.value, transform: [{ scale: scale.value }] }));
   if (!shown) return null;
   return (
     <OverlayModal onRequestClose={onClose}>
-      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: theme.c.dimStrong, opacity: t }]}>
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: theme.c.dim }, dim]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
       </Animated.View>
       <View pointerEvents="box-none" style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 16 }}>
-        <Animated.View
-          accessibilityViewIsModal
-          style={{
-            width: Math.min(384, width - 32),
-            borderRadius: 28,
-            backgroundColor: c.card,
-            overflow: "hidden",
-            padding: 24,
-            gap: 20,
-            opacity: t,
-            transform: [{ scale: t.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) }],
-          }}
-        >
-          <View style={{ gap: 8 }}>
-            <Txt size={17} lineHeight={22} weight={600} accessibilityRole="header" style={{ color: c.ink }}>
+        <Animated.View accessibilityViewIsModal style={[{ width: Math.min(300, width - 48), borderRadius: 16, backgroundColor: c.sheetFill, overflow: "hidden" }, card]}>
+          <View style={{ gap: 4, paddingHorizontal: 18, paddingTop: 20, paddingBottom: 18 }}>
+            <Txt size={17} lineHeight={22} weight={600} align="center" accessibilityRole="header" style={{ color: c.ink }}>
               {title}
             </Txt>
-            <Txt size={14} lineHeight={19} style={{ color: c.sub }}>
+            <Txt size={13} lineHeight={18} align="center" style={{ color: c.ink }}>
               {description}
             </Txt>
           </View>
-          <View style={{ flexDirection: "column-reverse", gap: 8 }}>
+          <View style={{ flexDirection: "column-reverse" }}>
             {actions.map((a, i) => (
-              <React.Fragment key={i}>{a}</React.Fragment>
+              <React.Fragment key={i}>
+                {a}
+                <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.line }} />
+              </React.Fragment>
             ))}
           </View>
         </Animated.View>

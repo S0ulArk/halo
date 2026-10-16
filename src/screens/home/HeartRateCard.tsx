@@ -1,30 +1,38 @@
-// Home's "Heart rate" card. Two sources:
+// Today's Heart Rate card, the first of the Pinned cards: Apple Health's highlight card for the newest heart rate. Two
+// sources:
 //
-// - Live, over Bluetooth (src/state/liveBle.tsx): while the band shares heart rate and Pulse is connected, the card
-//   shows the band's own bpm with the heart beating at that rate, a "Live · Fitbit Air" pill, the last 2 minutes as a
-//   trace and the live RMSSD when the band sends RR intervals. Display-only: scores never see these readings.
-// - Otherwise the newest reading Health Connect holds, which is as live as the Google Health sync makes it (the web's
-//   LiveHeartRate hero, cut down to a card). The app state's foreground ticker refreshes it every minute; the heart
-//   beats at the reading's rate while it is under 5 minutes old, and past 10 minutes a line says where the number
-//   comes from, so a stale reading never passes for a live one. A "Go live" button opens the Bluetooth sheet.
+// - Live, over Bluetooth (src/state/liveBle.tsx): while the band shares heart rate and Halo is connected, the card says
+//   "Live", shows the band's own bpm, the RMSSD line when the band sends RR intervals (or the skin-contact warning), and
+//   the last 2 minutes as a line whose "now" dot breathes. Display-only: scores never see these readings.
+// - Otherwise the newest reading Health Connect holds, as live as the Google Health sync makes it, refreshed by the
+//   app's foreground ticker every minute: how long ago it was taken, the low and high of the last 30 minutes, and those
+//   minutes as heart-rate range capsules (Health's min-max bars). Past 10 minutes a line says where the number comes
+//   from, so a stale reading never passes for a live one.
+//
+// "Go live" (or "Stop live") sits at the card's foot today; the Bluetooth sheet is drawn outside the card, so its
+// touches never reach the card's press. The card opens the Heart rate screen (today only, as before).
 import * as React from "react";
 import { View } from "react-native";
-import { minuteMeanHr } from "@/core/algorithms/stress";
-import { ago, clock, MISSING } from "@/lib/format";
+import { Heart } from "lucide-react-native";
+import { ago, clock } from "@/lib/format";
 import { localDay } from "@/lib/time";
 import { RECENT_MINUTES } from "@/health/live";
 import { useApp, useLiveHr } from "@/state/app";
-import { showsLive, useLiveBle, type LiveControl, type LiveData } from "@/state/liveBle";
-import { SectionShell, SkeletonText, Sparkline, Txt, useTheme, ValueUnit } from "@/ui";
-import { BeatingHeart, GoLiveButton, GoLiveSheet, LivePill, LiveTrace, rmssdLine } from "../settings/liveHr";
+import { showsLive, useLiveBle } from "@/state/liveBle";
+import { useCalm } from "@/ui/calm";
+import { HeartTrace } from "@/ui/components/BandHero";
+import { SkeletonText } from "@/ui";
+import { GoLiveButton, GoLiveSheet, rmssdLine, StopLiveButton } from "../settings/liveHr";
+import { MINI_H, MINI_W, MiniCapsules, type MiniRange } from "./miniCharts";
+import { HealthCard, HealthContext, HealthValue } from "./pinned";
 import { useNow } from "./status";
 
-/** A reading this recent counts as live: the band, the phone and Health Connect take a minute or three between them. */
-const LIVE_MS = 5 * 60_000;
 /** Older than this, the card says the number is a sync, not a pulse. */
 const STALE_MS = 10 * 60_000;
+/** The capsules: the last 30 minutes in stretches of 5. */
+const SLOTS = 6;
 
-/** "2 minutes ago" under an hour; "Updated 14:32" later the same day; "14 hours ago" / "2 days ago" beyond. */
+/** "2 min ago" under an hour; "Updated 14:32" later the same day; "14 hours ago" / "2 days ago" beyond. */
 export function readingAge(ts: number, now: number, timeZone: string) {
   const ms = ts * 1000;
   if (now - ms < 60 * 60_000) return ago(ms, now);
@@ -32,134 +40,95 @@ export function readingAge(ts: number, now: number, timeZone: string) {
   return ago(ms, now);
 }
 
-/** Minute means of the 30 minutes ending at the newest sample's minute; a minute without a sample is a gap. */
-export function recentMinutes(samples: { ts: number; bpm: number }[], latestTs: number): (number | null)[] {
-  const end = Math.floor(latestTs / 60) * 60 + 60;
-  const start = end - RECENT_MINUTES * 60;
-  return minuteMeanHr(samples, start, end).map((v) => (v === null ? null : Math.round(v)));
+/** The recent readings (unix seconds) as SLOTS equal stretches ending at the newest one, each its low and high. */
+export function rangeSlots(samples: readonly { ts: number; bpm: number }[], latestTs: number, slots = SLOTS, minutes = RECENT_MINUTES): (MiniRange | null)[] {
+  const span = (minutes * 60) / slots;
+  const start = latestTs - minutes * 60;
+  const out: (MiniRange | null)[] = Array.from({ length: slots }, () => null);
+  for (const s of samples) {
+    if (s.ts <= start || s.ts > latestTs || !(s.bpm > 0)) continue;
+    const k = Math.min(slots - 1, Math.floor((s.ts - start) / span));
+    const r = out[k];
+    out[k] = r ? { min: Math.min(r.min, s.bpm), max: Math.max(r.max, s.bpm) } : { min: s.bpm, max: s.bpm };
+  }
+  return out;
 }
 
-/** The live body: the band's bpm, the pill, the 2-minute trace and the HRV line. */
-function LiveBody({ live }: { live: LiveControl & LiveData }) {
-  const { c } = useTheme();
-  // A band that goes quiet is caught by the controller (15 s without a beat → "lost", reconnecting).
-  const lost = live.status !== "live";
-  const name = live.device?.name ?? null;
-  const note = live.contact === false ? "No skin contact: wear the band snug." : rmssdLine(live);
-  return (
-    <View>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-        <View style={{ flexShrink: 0, maxWidth: "55%" }}>
-          <View
-            style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-            accessible
-            accessibilityLabel={`${lost ? "Reconnecting. Last live reading" : "Live heart rate"} ${live.bpm ?? "unknown"} beats per minute${name ? ` from ${name}` : ""}`}
-          >
-            <BeatingHeart bpm={live.bpm ?? 60} live={!lost} color={c.heart} />
-            <ValueUnit value={live.bpm === null ? MISSING : String(live.bpm)} unit="bpm" role="valueXl" size={36} lineHeight={40} color={lost ? c.mutedForeground : undefined} />
-          </View>
-          <LivePill name={name} lost={lost} style={{ marginTop: 6 }} />
-        </View>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <LiveTrace history={live.history} />
-        </View>
-      </View>
-      {!!note && (
-        <Txt role="caption" color={live.contact === false ? "warning" : "mutedForeground"} style={{ marginTop: 10, fontVariant: ["tabular-nums"] }}>
-          {note}
-        </Txt>
-      )}
-    </View>
-  );
-}
-
-/**
- * The card. `phoneOnly` is Home's "no band, phone steps only" day (spec §11 CD2): with no reading at all the card
- * stays out of the way there, as the monitor cards do, unless the band is live. Tapping refreshes the Health Connect
- * reading and opens the Heart rate screen.
- */
-export function HeartRateCard({ phoneOnly, onOpen }: { phoneOnly?: boolean; onOpen: () => void }) {
+export function HeartRateCard({ today, onOpen }: { today: boolean; onOpen: () => void }) {
+  const c = useCalm();
   const app = useApp();
-  const liveHrCtx = useLiveHr();
+  const { liveHr, refreshLiveHr } = useLiveHr();
   const live = useLiveBle();
-  const { c } = useTheme();
   const now = useNow(30_000);
-  const { latest, recent, updatedAt, error } = liveHrCtx.liveHr;
-  const demo = app.source === "demo";
-  const isLive = showsLive(live);
+  const streaming = showsLive(live);
   const [sheet, setSheet] = React.useState(false);
-  const open = () => {
-    void app.refreshLiveHr();
-    onOpen();
-  };
+  const { latest, recent, updatedAt, error } = liveHr;
+  const color = c.tintInk.rose;
 
-  if (!latest && phoneOnly && !isLive) return null;
+  const ranges = React.useMemo(() => (latest ? rangeSlots(recent, latest.ts) : []), [recent, latest]);
+  const trace = React.useMemo(() => (streaming ? live.history.map((h) => ({ t: h.t / 1000, bpm: h.bpm })) : []), [streaming, live.history]);
+  const lows = ranges.filter((r): r is MiniRange => r !== null);
+  const lo = lows.length ? Math.min(...lows.map((r) => r.min)) : null;
+  const hi = lows.length ? Math.max(...lows.map((r) => r.max)) : null;
 
-  let body: React.ReactNode;
-  if (isLive) {
-    body = <LiveBody live={live} />;
-  } else if (latest) {
-    const age = now - latest.ts * 1000;
-    const fresh = age < LIVE_MS;
-    const values = recentMinutes(recent, latest.ts);
-    const note =
-      age >= STALE_MS
-        ? demo
-          ? "Demo data; nothing is read from Health Connect."
-          : app.source === "google"
-            ? "From Google Health; your Fitbit uploads it every 15–20 minutes."
-            : "From Health Connect; Google Health syncs it every 15–20 minutes."
-        : null;
-    body = (
-      <View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-          <View style={{ flexShrink: 0 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <BeatingHeart bpm={latest.bpm} live={fresh} color={c.strain} />
-              <ValueUnit value={String(latest.bpm)} unit="bpm" role="valueXl" size={36} lineHeight={40} />
-            </View>
-            <Txt role="caption" style={{ marginTop: 2, fontVariant: ["tabular-nums"] }} accessibilityLabel={`${fresh ? "Recent, " : ""}${readingAge(latest.ts, now, app.timeZone)}`}>
-              {readingAge(latest.ts, now, app.timeZone)}
-            </Txt>
-          </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Sparkline values={values} color={c.strain} caption={`Last ${RECENT_MINUTES} min`} style={{ height: 56 }} />
-          </View>
-        </View>
-        {note && (
-          <Txt role="caption" style={{ marginTop: 10 }}>
-            {note}
-          </Txt>
-        )}
-      </View>
-    );
-  } else if (updatedAt === null) {
-    // Before the first live read: the value's shape, nothing to say yet.
-    body = (
-      <View importantForAccessibility="no-hide-descendants" style={{ gap: 6 }}>
-        <SkeletonText role="valueXl" size={36} lineHeight={40} chars={3} />
-        <SkeletonText role="caption" width={112} />
-      </View>
-    );
-  } else {
-    const reason = error ?? (demo ? "The demo has no readings yet." : app.source === "google" ? "Nothing from Google Health yet." : "Nothing synced from Health Connect yet.");
-    body = (
-      <View style={{ gap: 2 }}>
-        <Txt role="bodyMedium">No heart rate yet</Txt>
-        <Txt role="caption">{reason}</Txt>
-      </View>
-    );
+  const bpm = streaming ? live.bpm : (latest?.bpm ?? null);
+  const lost = streaming && live.status !== "live";
+  const when = streaming ? (lost ? "Reconnecting" : "Live") : latest ? readingAge(latest.ts, now, app.timeZone) : null;
+  const stale = !streaming && !!latest && now - latest.ts * 1000 >= STALE_MS;
+  const source =
+    app.source === "demo" ? "Demo data; nothing is read from Health Connect." : app.source === "google" ? "From Google Health; your Fitbit uploads it every 15–20 minutes." : "From Health Connect; Google Health syncs it every 15–20 minutes.";
+
+  let context: React.ReactNode;
+  if (streaming) {
+    const note = live.contact === false ? "No skin contact: wear the band snug." : rmssdLine(live);
+    context = <HealthContext color={live.contact === false ? c.tintInk.sand : undefined}>{note ?? `Live from ${live.device?.name ?? "your band"}`}</HealthContext>;
+  } else if (latest && lo !== null && hi !== null) {
+    context = <HealthContext>{`${lo}–${hi} last ${RECENT_MINUTES} min`}</HealthContext>;
+  } else if (!latest && updatedAt === null) {
+    // Before the first read: the line's shape, nothing to say yet.
+    context = <SkeletonText size={14} lineHeight={19} width={120} />;
+  } else if (!latest) {
+    context = <HealthContext>{error ?? (app.source === "demo" ? "The demo has no readings yet." : app.source === "google" ? "Nothing from Google Health yet." : "Nothing synced from Health Connect yet.")}</HealthContext>;
   }
 
+  const chart = streaming ? (
+    trace.length > 1 ? <HeartTrace width={MINI_W} height={MINI_H} points={trace} live={!lost} /> : null
+  ) : ranges.some((r) => r !== null) ? (
+    <MiniCapsules ranges={ranges} color={color} />
+  ) : null;
+
+  const spoken = bpm
+    ? `Heart rate ${bpm} beats per minute, ${streaming ? (lost ? "reconnecting to the band" : "live from your band") : when}${lo !== null && !streaming ? `. ${lo} to ${hi} over the last ${RECENT_MINUTES} minutes` : ""}`
+    : "Heart rate, no reading yet";
   return (
     <>
-      {/* No "refreshing" affordance: the ticker's read takes a blink every minute, and a flicker there would read as a change. */}
-      <SectionShell variant="card" title="Heart rate" onPress={open}>
-        {body}
-        {!isLive && <GoLiveButton onPress={() => setSheet(true)} style={{ marginTop: 12 }} />}
-      </SectionShell>
-      {/* Outside the card: the sheet's touches would otherwise bubble up to the card's press. */}
-      <GoLiveSheet open={sheet} onClose={() => setSheet(false)} />
+      <HealthCard
+        icon={Heart}
+        filled
+        color={color}
+        title="Heart Rate"
+        when={when}
+        onPress={
+          today
+            ? () => {
+                void refreshLiveHr();
+                onOpen();
+              }
+            : undefined
+        }
+        accessibilityLabel={today ? `${spoken}. Opens heart rate` : spoken}
+        value={<HealthValue text={bpm ? String(bpm) : null} unit="BPM" color={lost ? c.sub : undefined} />}
+        context={context}
+        chart={chart}
+      >
+        {stale && (
+          <View style={{ marginTop: 8 }}>
+            <HealthContext>{source}</HealthContext>
+          </View>
+        )}
+        {today && <View style={{ marginTop: 12, flexDirection: "row" }}>{streaming ? <StopLiveButton /> : <GoLiveButton onPress={() => setSheet(true)} />}</View>}
+      </HealthCard>
+      {today && <GoLiveSheet open={sheet} onClose={() => setSheet(false)} />}
     </>
   );
 }

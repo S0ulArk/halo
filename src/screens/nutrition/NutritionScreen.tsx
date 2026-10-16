@@ -2,9 +2,14 @@
 // (protein 1.6 g per kg of their weight by default, worded in pounds when they chose them; all four editable), their
 // 7- and 30-day daily averages, daily protein and calories over the last month, and today's food: Pulse's entries to
 // edit or delete, Fitbit's read-only.
-// Opened from the Journal's food sheet and from Today's journal card. Calm: the sand pastel of nutrition.
+// Opened from the Journal's food sheet and from Today's journal card.
+//
+// In the Apple Health look: today's card leads with a ring for the calories (it sweeps in on the ring spring, the number
+// rolling into place in its middle) beside capsule meters for protein, carbs and fat (each growing in its own colour),
+// then "Add food", today's food as inset grouped lists by meal, the targets as an iOS list with "Edit", the averages as
+// Health cards and the month as Apple Health's bars. The food and targets sheets are iOS sheets.
 import * as React from "react";
-import { Pressable, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { Camera, ChartColumn, Pencil, Plus, Sparkles, Trash2, TriangleAlert, Utensils, type LucideIcon } from "lucide-react-native";
 import { FORMATS } from "@/lib/format";
 import type { Metric } from "@/lib/reasons";
@@ -16,15 +21,18 @@ import { useActionCtx } from "@/screens/journal/AddBehaviour";
 import { ConfirmDialog, DialogAction, ErrorAlert, Field, TextField, toast } from "@/screens/journal/controls";
 import { when } from "@/screens/journal/forms";
 import { bumpJournal, useJournalVersion } from "@/screens/journal/state";
-import { CalmCard as LeadCard } from "@/screens/detail/calmKit";
 import { DetailScreen, LoadError } from "@/screens/detail/DetailScreen";
 import { useBack, useRefresh } from "@/screens/detail/nav";
-import { CalmButton, CalmCard, CalmProgress, CalmSegmented, Caption, Hairline, IconTile, Notice, Num, SectionLabel, Sentence, Surface, useCalm } from "@/screens/settings/calmKit";
+import { EditLink, HomeCard } from "@/screens/home/controls";
+import { CalmButton, CalmSegmented, IconTile, LIST_RADIUS, Notice, Num, SectionLabel, Sentence, Surface, useCalm } from "@/screens/settings/calmKit";
 import { getNutrition, type Averages, type FoodItem, type MealGroup, type NutritionVM } from "@/queries/nutrition";
 import { useApp, useQuery } from "@/state/app";
 import { useNutritionTargets } from "@/state/nutrition";
 import { BottomSheet, Skeleton, SkeletonText, TrendChart, Txt, type TrendPoint } from "@/ui";
-import { PillAction } from "@/ui/components/CalmSurface";
+import { CapsuleMeter } from "@/ui/components/CapsuleMeter";
+import { HaloRing, RING_LAND_MS, RollingNumber } from "@/ui/components/Halo";
+import { font } from "@/ui/fonts";
+import type { CalmTint } from "@/ui/calm";
 import { FoodSheet, foodRequest, type FoodRequest } from "./FoodSheet";
 
 const grouped = (v: number) => FORMATS.grouped(v);
@@ -34,67 +42,92 @@ const show = (v: number | null, f: (x: number) => string) => (v === null ? "--" 
 
 // ── Today ───────────────────────────────────────────────────────────────────
 
-/** A macro against its target: the caps label, "82 g of 128 g" and a thin sand bar. */
-function MacroBar({ label, value, target, wide }: { label: string; value: number | null; target: number; wide?: boolean }) {
+/** Each macro's colour, so the three meters read apart at a glance: protein blue, carbs orange, fat indigo. */
+const MACRO_TINT: Record<"protein" | "carbs" | "fat", CalmTint> = { protein: "sky", carbs: "peach", fat: "lavender" };
+
+/** "46 g to go", "12 g over your target" or "Target reached": what is left of a target. */
+const leftText = (left: number, unit: string) => (left > 0 ? `${unit === "kcal" ? grouped(left) : grams(left)} ${unit} left of your target` : left < 0 ? `${unit === "kcal" ? grouped(-left) : grams(-left)} ${unit} over your target` : "Target reached");
+
+/**
+ * A macro against its target, Apple Health's way: its name in its colour, "82 g of 128 g", and a capsule growing in to
+ * its share (the first frame shows the track).
+ */
+function MacroBar({ macro, label, value, target }: { macro: keyof typeof MACRO_TINT; label: string; value: number | null; target: number }) {
   const c = useCalm();
+  const ink = c.tintInk[MACRO_TINT[macro]];
   const p = progressOf(value, target) ?? 0;
-  const left = value === null ? target : target - value;
   return (
-    <View
-      accessible
-      accessibilityLabel={`${label}: ${value === null ? "none" : `${grams(value)} g`} of ${grams(target)} g`}
-      style={{ flex: wide ? undefined : 1, minWidth: 0, borderRadius: 20, backgroundColor: c.chip, padding: 14, gap: 8 }}
-    >
-      <Caption>{label}</Caption>
+    <View accessible accessibilityLabel={`${label}: ${value === null ? "none" : `${grams(value)} g`} of ${grams(target)} g`} style={{ gap: 5 }}>
       <View style={{ flexDirection: "row", alignItems: "baseline", flexWrap: "wrap", columnGap: 6 }}>
-        <Num value={show(value, grams)} unit="g" size={wide ? 28 : 22} />
-        <Txt size={13} lineHeight={18} weight={500} style={{ color: c.sub }}>
+        <Txt size={15} lineHeight={20} weight={600} style={{ color: ink }}>
+          {label}
+        </Txt>
+        <Txt size={15} lineHeight={20} style={[font.numeric(700), { color: c.ink }]}>
+          {`${show(value, grams)} g`}
+        </Txt>
+        <Txt size={13} lineHeight={18} style={{ color: c.sub }}>
           {`of ${grams(target)} g`}
         </Txt>
       </View>
-      <CalmProgress value={p} color={c.tintInk.sand} track={c.line} height={6} />
-      {wide && (
-        <Txt size={13} lineHeight={18} style={{ color: c.sub }}>
-          {left > 0 ? `${grams(left)} g to go` : left < 0 ? `${grams(-left)} g over your target` : "Target reached"}
-        </Txt>
-      )}
+      <CapsuleMeter frac={p} color={ink} height={8} track={c.fill} grow />
     </View>
   );
 }
 
-/** Today's card: calories big against the target, protein on its own row, carbs and fat beside each other, fiber when known. */
+/** The calories ring's size. */
+const RING = 132;
+
+/**
+ * Today's card: the calories as a ring against the target (the number rolling into place in its middle), the three
+ * macros as capsule meters beside it, what is left of the target, and the fiber when known.
+ */
 function TodayCard({ vm }: { vm: NutritionVM }) {
   const c = useCalm();
   const { totals: t, targets } = vm;
   const kcal = targets.kcal.value;
   const left = t.kcal === null ? kcal : kcal - t.kcal;
+  const proteinLeft = t.protein === null ? targets.protein.value : targets.protein.value - t.protein;
   return (
-    <LeadCard tint="sand" icon={Utensils} title={t.kcal === null ? "Nothing logged today" : "Today so far"} gap={16} style={{ alignSelf: "stretch" }}>
-      <View accessible accessibilityLabel={`${show(t.kcal, grouped)} of ${grouped(kcal)} kcal`} style={{ gap: 10 }}>
-        <View style={{ flexDirection: "row", alignItems: "baseline", flexWrap: "wrap", columnGap: 8 }}>
-          <Num value={show(t.kcal, grouped)} unit="kcal" size={44} color={c.tintInk.sand} />
-          <Txt size={14} lineHeight={19} weight={500} style={{ color: c.sub }}>
-            {`of ${grouped(kcal)}`}
-          </Txt>
+    <HomeCard icon={Utensils} iconTint="sand" title={t.kcal === null ? "Nothing logged today" : "Today so far"} gap={16} style={{ alignSelf: "stretch" }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
+        <View accessible accessibilityLabel={`${show(t.kcal, grouped)} of ${grouped(kcal)} kcal`}>
+          <HaloRing size={RING} stroke={14} progress={progressOf(t.kcal, kcal)} track={c.tint.sand} color={c.tintInk.sand} colors={c.vivid.sand} delay={120} celebrateKey={t.kcal !== null && t.kcal >= kcal ? `${vm.today}:kcal` : null}>
+            <View style={{ alignItems: "center" }}>
+              {t.kcal === null ? (
+                <Txt size={26} lineHeight={30} style={[font.numberAt(26), { color: c.faint }]}>
+                  --
+                </Txt>
+              ) : (
+                <RollingNumber text={grouped(t.kcal)} lineHeight={30} delay={120} duration={RING_LAND_MS} style={[font.numberAt(26, 800), { color: c.ink }]} />
+              )}
+              <Txt size={12} lineHeight={15} style={[font.numeric(500), { color: c.sub }]}>
+                {`of ${grouped(kcal)} kcal`}
+              </Txt>
+            </View>
+          </HaloRing>
         </View>
-        <CalmProgress value={progressOf(t.kcal, kcal) ?? 0} color={c.tintInk.sand} track={c.chip} />
-        <Sentence>{left > 0 ? `${grouped(left)} kcal left of your target` : left < 0 ? `${grouped(-left)} kcal over your target` : "Calorie target reached"}</Sentence>
+        <View style={{ flex: 1, minWidth: 0, gap: 12 }}>
+          <MacroBar macro="protein" label="Protein" value={t.protein} target={targets.protein.value} />
+          <MacroBar macro="carbs" label="Carbs" value={t.carbs} target={targets.carbs.value} />
+          <MacroBar macro="fat" label="Fat" value={t.fat} target={targets.fat.value} />
+        </View>
       </View>
-      <MacroBar label="Protein" value={t.protein} target={targets.protein.value} wide />
-      <View style={{ flexDirection: "row", gap: 10 }}>
-        <MacroBar label="Carbs" value={t.carbs} target={targets.carbs.value} />
-        <MacroBar label="Fat" value={t.fat} target={targets.fat.value} />
+      <View style={{ gap: 2 }}>
+        <Sentence>{left === 0 ? "Calorie target reached" : `Calories: ${leftText(left, "kcal")}`}</Sentence>
+        <Sentence>{proteinLeft === 0 ? "Protein target reached" : `Protein: ${proteinLeft > 0 ? `${grams(proteinLeft)} g to go` : `${grams(-proteinLeft)} g over your target`}`}</Sentence>
       </View>
       {t.fiber !== null && (
-        <View accessible style={{ flexDirection: "row", alignItems: "baseline", flexWrap: "wrap", columnGap: 8, paddingHorizontal: 2 }}>
-          <Caption>Fiber</Caption>
-          <Num value={grams(t.fiber)} unit="g" size={18} />
+        <View accessible style={{ flexDirection: "row", alignItems: "baseline", flexWrap: "wrap", columnGap: 6 }}>
+          <Txt size={15} lineHeight={20} weight={600} style={{ color: c.ink }}>
+            Fiber
+          </Txt>
+          <Num value={grams(t.fiber)} unit="g" size={17} />
           <Txt size={13} lineHeight={18} style={{ color: c.sub }}>
             from food logged in Halo
           </Txt>
         </View>
       )}
-    </LeadCard>
+    </HomeCard>
   );
 }
 
@@ -104,22 +137,26 @@ const TARGET_LABEL: Record<TargetKey, string> = { kcal: "Calories", protein: "Pr
 const unitOf = (k: TargetKey) => TARGET_LIMITS[k].unit;
 const valueText = (k: TargetKey, v: number) => `${k === "kcal" ? grouped(v) : grams(v)} ${unitOf(k)}`;
 
-/** The four targets, each with where it comes from. */
+/** The four targets as an iOS list, each with where it comes from, "Edit" beside the header. */
 function TargetsCard({ targets, onEdit }: { targets: Targets; onEdit: () => void }) {
   const c = useCalm();
   return (
-    <View style={{ gap: 10 }}>
-      <SectionLabel right={<PillAction label="Edit" onPress={onEdit} accessibilityLabel="Edit targets" />}>Daily targets</SectionLabel>
-      <Surface padding={0}>
+    <View style={{ gap: 6 }}>
+      <SectionLabel right={<EditLink accessibilityLabel="Edit targets" onPress={onEdit} />} style={{ alignItems: "center", minHeight: 30 }}>
+        Daily targets
+      </SectionLabel>
+      <View style={{ borderRadius: LIST_RADIUS, backgroundColor: c.card, overflow: "hidden" }}>
         {TARGET_KEYS.map((k, i) => (
           <React.Fragment key={k}>
-            {i > 0 && <Hairline inset={16} />}
-            <View accessible accessibilityLabel={`${TARGET_LABEL[k]} target ${valueText(k, targets[k].value)}. ${targets[k].basis}`} style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 2 }}>
+            {i > 0 && <View style={{ height: StyleSheet.hairlineWidth, marginLeft: 16, backgroundColor: c.line }} />}
+            <View accessible accessibilityLabel={`${TARGET_LABEL[k]} target ${valueText(k, targets[k].value)}. ${targets[k].basis}`} style={{ minHeight: 52, paddingHorizontal: 16, paddingVertical: 11, gap: 2 }}>
               <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-                <Txt size={15} lineHeight={20} weight={600} style={{ color: c.ink, flexShrink: 1 }}>
+                <Txt size={16} lineHeight={21} style={{ color: c.ink, flexShrink: 1 }}>
                   {TARGET_LABEL[k]}
                 </Txt>
-                <Num value={k === "kcal" ? grouped(targets[k].value) : grams(targets[k].value)} unit={unitOf(k)} size={18} />
+                <Txt size={16} lineHeight={21} style={[font.numeric(500), { color: c.sub }]}>
+                  {valueText(k, targets[k].value)}
+                </Txt>
               </View>
               <Txt size={13} lineHeight={18} style={{ color: targets[k].custom ? c.tintInk.sand : c.sub }}>
                 {targets[k].basis}
@@ -127,7 +164,7 @@ function TargetsCard({ targets, onEdit }: { targets: Targets; onEdit: () => void
             </View>
           </React.Fragment>
         ))}
-      </Surface>
+      </View>
     </View>
   );
 }
@@ -166,15 +203,11 @@ function TargetsSheet({ open, onClose, suggested, custom, onSave }: { open: bool
       onClose={() => !saving && onClose()}
       title="Daily targets"
       description="Leave a field blank for Halo’s suggestion"
+      done={{ label: saving ? "Saving…" : "Save", onPress: () => void save(), disabled: saving }}
       footer={
-        <View style={{ gap: 10, alignSelf: "stretch" }}>
-          <CalmButton onPress={() => void save()} disabled={saving} style={{ alignSelf: "stretch", minHeight: 56, borderRadius: 28 }}>
-            {saving ? "Saving…" : "Save"}
-          </CalmButton>
-          <CalmButton variant="quiet" on="card" onPress={() => void save({ kcal: null, protein: null, carbs: null, fat: null })} disabled={saving} style={{ alignSelf: "stretch" }}>
-            Use Halo’s suggestions
-          </CalmButton>
-        </View>
+        <CalmButton variant="secondary" onPress={() => void save({ kcal: null, protein: null, carbs: null, fat: null })} disabled={saving} style={{ alignSelf: "stretch" }}>
+          Use Halo’s suggestions
+        </CalmButton>
       }
     >
       <View style={{ gap: 16, paddingTop: 4 }}>
@@ -206,17 +239,19 @@ function TargetsSheet({ open, onClose, suggested, custom, onSave }: { open: bool
 
 // ── Averages ────────────────────────────────────────────────────────────────
 
-/** One period's daily averages as a tile: calories, then each macro with its word, then how many days had food. */
+/** One period's daily averages as a Health tile: its name in the nutrition colour, the calories, each macro in its colour, then how many days had food. */
 function AverageTile({ title, a }: { title: string; a: Averages }) {
   const c = useCalm();
   return (
     <Surface padding={16} gap={8} style={{ flex: 1, minWidth: 0 }}>
-      <Caption>{title}</Caption>
+      <Txt size={15} lineHeight={20} weight={600} style={{ color: c.tintInk.sand }}>
+        {title}
+      </Txt>
       {a.days === 0 ? (
         <Sentence size={13}>No days with food logged yet.</Sentence>
       ) : (
         <>
-          <Num value={show(a.kcal, grouped)} unit="kcal" size={22} color={c.tintInk.sand} />
+          <Num value={show(a.kcal, grouped)} unit="kcal" size={24} />
           <View style={{ gap: 4 }}>
             {(
               [
@@ -225,10 +260,13 @@ function AverageTile({ title, a }: { title: string; a: Averages }) {
                 ["fat", "fat"],
               ] as const
             ).map(([k, word]) => (
-              <Num key={k} value={show(a[k], grams)} unit={`g ${word}`} size={17} />
+              <View key={k} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: c.tintInk[MACRO_TINT[k]] }} />
+                <Num value={show(a[k], grams)} unit={`g ${word}`} size={16} />
+              </View>
             ))}
           </View>
-          <Txt size={12} lineHeight={16} weight={500} style={{ color: c.sub }}>
+          <Txt size={13} lineHeight={18} style={{ color: c.sub }}>
             {`${a.days} of ${a.span} days logged`}
           </Txt>
         </>
@@ -247,7 +285,7 @@ function HistoryChart({ vm }: { vm: NutritionVM }) {
   const data: Metric<TrendPoint[]> = points.some((p) => p.value !== null) ? { value: points, reason: null, provisional: false } : { value: null, reason: "no_data", provisional: false };
   const target = key === "protein" ? vm.targets.protein.value : vm.targets.kcal.value;
   return (
-    <View style={{ gap: 10 }}>
+    <View style={{ gap: 6 }}>
       <SectionLabel>Daily protein and calories</SectionLabel>
       <Surface gap={16}>
         <CalmSegmented
@@ -285,12 +323,12 @@ const VIA_ICON: Record<NonNullable<FoodItem["via"]>, LucideIcon> = { photo: Came
 const numbersOf = (f: FoodItem) =>
   [`${grouped(f.kcal)} kcal`, f.protein !== null && `${grams(f.protein)} g protein`, f.carbs !== null && `${grams(f.carbs)} g carbs`, f.fat !== null && `${grams(f.fat)} g fat`].filter(Boolean).join(" · ");
 
-/** A small teal text button under a row's lines. */
+/** A small blue text button under a row's lines. */
 function RowLink({ label, onPress, accessibilityLabel }: { label: string; onPress: () => void; accessibilityLabel: string }) {
   const c = useCalm();
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={accessibilityLabel} hitSlop={{ top: 12, bottom: 12, left: 4, right: 12 }} style={({ pressed }) => ({ alignSelf: "flex-start", marginTop: 4, opacity: pressed ? 0.6 : 1 })}>
-      <Txt size={14} lineHeight={19} weight={600} style={{ color: c.teal }}>
+      <Txt size={14} lineHeight={19} weight={500} style={{ color: c.teal }}>
         {label}
       </Txt>
     </Pressable>
@@ -317,16 +355,16 @@ function FoodRow({ f, today, timeZone, onEdit, onDelete, onSeparate }: { f: Food
             ? "From a description"
             : null;
   return (
-    <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, paddingLeft: 16, paddingRight: 6, paddingVertical: 12 }}>
+    <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, paddingLeft: 16, paddingRight: 6, paddingVertical: 11 }}>
       <View style={{ marginTop: 2 }}>
-        <IconTile icon={mine ? VIA_ICON[f.via ?? "manual"] : Utensils} tint={mine ? "sand" : "sky"} size={40} />
+        <IconTile icon={mine ? VIA_ICON[f.via ?? "manual"] : Utensils} tint={mine ? "sand" : "sky"} size={30} />
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Txt size={16} lineHeight={21} weight={600} style={{ color: f.duplicateOf ? c.sub : c.ink }}>
+        <Txt size={16} lineHeight={21} style={{ color: f.duplicateOf ? c.sub : c.ink }}>
           {f.title}
           {f.portion ? <Txt size={15} lineHeight={21} weight={400} style={{ color: c.sub }}>{`  ${f.portion}`}</Txt> : null}
         </Txt>
-        <Txt size={14} lineHeight={19} style={{ color: f.duplicateOf ? c.faint : c.ink, fontVariant: ["tabular-nums"], textDecorationLine: f.duplicateOf ? "line-through" : "none" }}>
+        <Txt size={14} lineHeight={19} style={{ color: f.duplicateOf ? c.faint : c.sub, fontVariant: ["tabular-nums"], textDecorationLine: f.duplicateOf ? "line-through" : "none" }}>
           {numbersOf(f)}
         </Txt>
         <Txt size={13} lineHeight={18} style={{ color: f.duplicateOf ? c.tintInk.sand : c.sub, fontVariant: ["tabular-nums"] }}>
@@ -337,11 +375,11 @@ function FoodRow({ f, today, timeZone, onEdit, onDelete, onSeparate }: { f: Food
       </View>
       {mine ? (
         <View style={{ flexDirection: "row" }}>
-          <Pressable onPress={onEdit} accessibilityRole="button" accessibilityLabel={`Edit ${f.title}`} style={({ pressed }) => ({ width: 40, height: 44, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? c.ground : "transparent" })}>
-            <Pencil size={18} color={c.faint} strokeWidth={1.75} />
+          <Pressable onPress={onEdit} accessibilityRole="button" accessibilityLabel={`Edit ${f.title}`} style={({ pressed }) => ({ width: 40, height: 44, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? c.fill : "transparent" })}>
+            <Pencil size={18} color={c.teal} strokeWidth={2} />
           </Pressable>
-          <Pressable onPress={onDelete} accessibilityRole="button" accessibilityLabel={`Delete ${f.title}`} style={({ pressed }) => ({ width: 40, height: 44, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? c.ground : "transparent" })}>
-            <Trash2 size={18} color={c.faint} strokeWidth={1.75} />
+          <Pressable onPress={onDelete} accessibilityRole="button" accessibilityLabel={`Delete ${f.title}`} style={({ pressed }) => ({ width: 40, height: 44, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? c.fill : "transparent" })}>
+            <Trash2 size={18} color={c.sub} strokeWidth={2} />
           </Pressable>
         </View>
       ) : (
@@ -356,7 +394,7 @@ function MealList({ vm, google, onEdit, onDelete, onSeparate, onAdd }: { vm: Nut
   const { meals, unlisted } = vm;
   if (!meals.length && !unlisted)
     return (
-      <View style={{ gap: 10 }}>
+      <View style={{ gap: 6 }}>
         <SectionLabel>Today’s food</SectionLabel>
         <Surface gap={14} style={{ alignItems: "center" }}>
           <Sentence align="center" style={{ maxWidth: 300 }}>
@@ -369,18 +407,18 @@ function MealList({ vm, google, onEdit, onDelete, onSeparate, onAdd }: { vm: Nut
       </View>
     );
   return (
-    <View style={{ gap: 10 }}>
-      <SectionLabel>Today’s food</SectionLabel>
+    <View style={{ gap: 18 }}>
+      <Txt size={22} lineHeight={28} weight={700} accessibilityRole="header" style={{ color: c.ink, paddingHorizontal: 4 }}>
+        Today’s food
+      </Txt>
       {meals.map((g: MealGroup) => (
-        <View key={g.meal} style={{ gap: 8 }}>
-          <View style={{ borderRadius: 20, borderWidth: 1, borderColor: c.edge, backgroundColor: c.card, ...(c.shadow ? { boxShadow: c.shadow } : null), overflow: "hidden", paddingVertical: 4 }}>
-            <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 12, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 2 }}>
-              <Caption>{g.label}</Caption>
-              <Num value={grouped(g.kcal)} unit="kcal" size={15} />
-            </View>
+        <View key={g.meal} style={{ gap: 6 }}>
+          {/* The meal as the list's header, its calories on the right. */}
+          <SectionLabel right={<Txt size={13} lineHeight={18} style={[font.numeric(600), { color: c.sub }]}>{`${grouped(g.kcal)} KCAL`}</Txt>}>{g.label}</SectionLabel>
+          <View style={{ borderRadius: LIST_RADIUS, backgroundColor: c.card, overflow: "hidden" }}>
             {g.items.map((f, i) => (
               <React.Fragment key={f.id}>
-                {i > 0 && <Hairline inset={16 + 40 + 12} />}
+                {i > 0 && <View style={{ height: StyleSheet.hairlineWidth, marginLeft: 16 + 30 + 12, backgroundColor: c.line }} />}
                 <FoodRow f={f} today={vm.today} timeZone={vm.timeZone} onEdit={() => onEdit(f)} onDelete={() => onDelete(f)} onSeparate={(x) => onSeparate(f, x)} />
               </React.Fragment>
             ))}
@@ -413,21 +451,25 @@ function MealList({ vm, google, onEdit, onDelete, onSeparate, onAdd }: { vm: Nut
 
 // ── The screen ──────────────────────────────────────────────────────────────
 
+/** Today's card while it loads: its head, the ring's bare track beside three meters' bars, the line under them. */
 function Loading() {
+  const c = useCalm();
   return (
-    <View style={{ alignSelf: "stretch", gap: 14 }}>
-      <Surface tint="sand" gap={14}>
-        <View style={{ flexDirection: "row", gap: 14, alignItems: "center" }}>
-          <Skeleton radius={14} style={{ width: 44, height: 44 }} />
-          <SkeletonText role="body" width="40%" />
+    <View style={{ alignSelf: "stretch" }}>
+      <Surface gap={16}>
+        <SkeletonText role="body" width="40%" />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
+          <View style={{ width: RING, height: RING, borderRadius: RING / 2, borderWidth: 14, borderColor: c.tint.sand }} />
+          <View style={{ flex: 1, gap: 14 }}>
+            {[0, 1, 2].map((i) => (
+              <View key={i} style={{ gap: 6 }}>
+                <SkeletonText size={15} lineHeight={20} width="70%" />
+                <Skeleton radius={4} style={{ height: 8 }} />
+              </View>
+            ))}
+          </View>
         </View>
-        <SkeletonText role="value" size={44} lineHeight={50} chars={5} />
-        <Skeleton radius={4} style={{ height: 8 }} />
-        <Skeleton radius={20} style={{ height: 110 }} />
-        <View style={{ flexDirection: "row", gap: 10 }}>
-          <Skeleton radius={20} style={{ flex: 1, height: 84 }} />
-          <Skeleton radius={20} style={{ flex: 1, height: 84 }} />
-        </View>
+        <SkeletonText role="body" width="60%" />
       </Surface>
     </View>
   );
@@ -496,7 +538,7 @@ export default function NutritionScreen() {
               </CalmButton>
               <MealList vm={vm} google={app.source === "google"} onEdit={(f) => openFood(f)} onDelete={setRemove} onSeparate={(f, on) => void separate(f, on)} onAdd={() => openFood()} />
               <TargetsCard targets={vm.targets} onEdit={openTargets} />
-              <View style={{ gap: 10 }}>
+              <View style={{ gap: 6 }}>
                 <SectionLabel>Daily averages</SectionLabel>
                 <View style={{ flexDirection: "row", gap: 10 }}>
                   <AverageTile title="Last 7 days" a={vm.week} />
@@ -512,14 +554,14 @@ export default function NutritionScreen() {
         }
         footer={
           vm ? (
-            <CalmCard icon={ChartColumn} iconTint="sand" title="How Halo counts food" gap={12}>
+            <HomeCard icon={ChartColumn} iconTint="sand" title="How Halo counts food" gap={10}>
               <Sentence>
                 {app.source === "google"
                   ? "Totals add what you log in Halo to the food your Google account reports from Fitbit. Halo can’t see Fitbit’s single foods there, so log each meal in one app."
                   : "Totals add what you log in Halo to the food logged in Fitbit (read from Health Connect). A food logged in both apps counts once: when Fitbit has the same food at the same meal, or the same calories within an hour and a half, Halo leaves its own entry out."}
               </Sentence>
               <Sentence>Photo and description estimates come from your own AI provider and are approximate. Halo never keeps the photo.</Sentence>
-            </CalmCard>
+            </HomeCard>
           ) : null
         }
       />

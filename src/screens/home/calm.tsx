@@ -1,273 +1,297 @@
-// Home in the Calm style: a soft off-white ground, the day's three scores as pastel cards (each number rolling into
-// place, its bar growing in) beside a live heart tile, then "Your week" (Sleep with its week of nights against the goal, Recovery with its vitals and week,
-// Strain on a half gauge, one at a time under a segmented control) and the vitals row (Health Monitor and Stress).
-// Every number keeps its unit small beside it.
+// Today's top in the iOS look (the mockups' Today): the floating bar (a Liquid Glass streak capsule on the left, the
+// sync status and the profile button on the right, the inline title fading in once the large title has folded under
+// it), the date eyebrow over the large title with the day's steppers, and the hero: the day's three scores as Apple's
+// triple Activity rings (Recovery outermost, Sleep, Strain of 21) with the three values beside them, each rolling into
+// place as its ring sweeps in. Also the two week cards the Sleep and Health tabs show (Sleep's week of nights against
+// the goal, Recovery with its vitals and its week), drawn as Apple Health cards with rounded bars.
+//
+// Every scroll-driven change (the title folding, the inline title, the bar's edge) is an animated style off the page's
+// scroll offset on the UI thread; nothing here runs JS per frame.
 import * as React from "react";
+import { ActivityIndicator, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
+import Animated, { Extrapolation, interpolate, useAnimatedStyle, type SharedValue } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Line } from "react-native-svg";
 import { useRouter, type Href } from "expo-router";
-import { Pressable, View } from "react-native";
-import { BatteryCharging, ChevronRight, Flame, HeartPulse, Moon } from "lucide-react-native";
-import { recoveryBand } from "@/lib/bands";
-import { formatDay, formatValue, MISSING } from "@/lib/format";
+import { ChevronDown, ChevronLeft, ChevronRight, HeartPulse, Moon } from "lucide-react-native";
+import { BAND_WORD, recoveryBand } from "@/lib/bands";
+import { DAY, dayLabel, formatDay, formatValue, MISSING } from "@/lib/format";
 import { reasonCopy } from "@/lib/reasons";
+import { mix } from "@/lib/utils";
 import { getTrends, type HomeVM, type KeyStat } from "@/queries";
-import { useApp, useQuery, useLiveHr } from "@/state/app";
-import { DateSwitcher, SyncStatus, Txt, type DateSwitcherProps, type SyncShellStatus } from "@/ui";
-import { useCalm, type CalmTint } from "@/ui/calm";
-import { CapsuleMeter } from "@/ui/components/CapsuleMeter";
-import { RollingNumber } from "@/ui/components/Halo";
-import { GrowIn } from "@/ui/motion/Rise";
-import { HeartTrace } from "@/ui/components/BandHero";
+import { useApp, useQuery } from "@/state/app";
+import { SyncStatus, Txt, type SyncShellStatus } from "@/ui";
+import { useCalm } from "@/ui/calm";
+import { CalendarSheet } from "@/ui/components/CalendarSheet";
 import { CalmSurface, PillAction } from "@/ui/components/CalmSurface";
-import { StreakFlame, UserAvatar } from "@/ui/components/HomeHeader";
+import { stepDay } from "@/ui/components/DateSwitcher";
+import { BAR_ROW } from "@/ui/components/DetailHeader";
 import { GlassButton, GlassCapsule } from "@/ui/components/GlassButton";
-import { GoLiveButton, GoLiveSheet, StopLiveButton } from "@/screens/settings/liveHr";
-import { ACTIVITY_TAB, HEALTH_TAB, SLEEP_TAB } from "./tabs";
+import { RING_LAND_MS, RING_STAGGER, RollingNumber, ScoreRings } from "@/ui/components/Halo";
+import { StreakFlame, UserAvatar } from "@/ui/components/HomeHeader";
+import { usePress, usePressStyle } from "@/ui/components/press";
+import { font } from "@/ui/fonts";
+import { haptic } from "@/ui/motion/haptics";
+import { useTheme } from "@/ui/ThemeProvider";
 import { chartHref } from "@/screens/chart/href";
-import { showsLive, useLiveBle } from "@/state/liveBle";
-import { font, TABULAR } from "@/ui/fonts";
+import { HomeCard, RowRule } from "./controls";
+import { Grow } from "./miniCharts";
+import { ACTIVITY_TAB, HEALTH_TAB, SLEEP_TAB } from "./tabs";
 
 type Go = { at: (p: string) => string; go: (h: string) => void };
 
-/** "06h 11m". */
+const PressableView = Animated.createAnimatedComponent(Pressable);
+
+/** How far the page scrolls before the inline title has fully replaced the large one. */
+export const TITLE_FOLD = 64;
+
+/** "6h 11m", or null. */
 const hm = (min: number | null | undefined) => {
   if (min == null || !Number.isFinite(min)) return null;
   const m = Math.round(min);
-  return { h: String(Math.floor(m / 60)).padStart(2, "0"), m: String(m % 60).padStart(2, "0") };
+  return { h: Math.floor(m / 60), m: m % 60 };
+};
+const hmText = (min: number | null | undefined) => {
+  const t = hm(min);
+  return t ? `${t.h}h ${String(t.m).padStart(2, "0")}m` : null;
 };
 
-/**
- * A number with its unit beside it, sharing the baseline. Numbers are set apart from words: the numeric face (Barlow,
- * bold, tabular) in the number's colour, the unit small and grey in the text face, so "43 ms" reads as a value with a
- * unit, never as a phrase.
- */
-function Num({ value, unit, size, color }: { value: string; unit?: string; size: number; color?: string; weight?: 500 | 600 | 700 }) {
-  const c = useCalm();
-  const ink = color ?? c.ink;
-  return (
-    <View style={{ flexDirection: "row", alignItems: "baseline" }}>
-      <Txt size={size} lineHeight={Math.round(size * 1.12)} style={[font.numberAt(size), { color: ink }]} numberOfLines={1}>
-        {value}
-      </Txt>
-      {unit ? (
-        <Txt size={Math.max(12, Math.round(size * 0.42))} lineHeight={Math.round(size * 0.6)} weight={500} style={{ color: c.sub, marginLeft: 4 }}>
-          {unit}
-        </Txt>
-      ) : null}
-    </View>
-  );
-}
-
-/** The small grey caption under a number: capitals with air between letters, never mistaken for the value; wraps, never cut. */
-function Caption({ children }: { children: string }) {
-  const c = useCalm();
-  return (
-    <Txt size={11} lineHeight={15} weight={600} style={{ color: c.faint, letterSpacing: 1.4, marginTop: 4 }}>
-      {children.toUpperCase()}
-    </Txt>
-  );
-}
-
-/** "06h 11m" as a Num pair. */
-function Duration({ min, size, color }: { min: number | null | undefined; size: number; color?: string }) {
+/** "6 hours 11 minutes", for a screen reader. */
+const spokenHm = (min: number | null) => {
   const t = hm(min);
-  if (!t) return <Num value={MISSING} size={size} color={color} />;
-  return (
-    <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}>
-      <Num value={t.h} unit="h" size={size} color={color} />
-      <Num value={t.m} unit="m" size={size} color={color} />
-    </View>
-  );
-}
+  return t ? `${t.h} hours ${t.m} minutes` : "no sleep recorded";
+};
 
-// ── Top bar ──────────────────────────────────────────────────────────────────
+// ── The bar ──────────────────────────────────────────────────────────────────
 
-export function CalmTopBar({
-  dateSwitcher,
-  sync,
-  streak,
-  onAvatar,
-}: {
-  dateSwitcher: DateSwitcherProps;
-  sync: { status: SyncShellStatus; now: number | null; onPress?: () => void };
-  streak: { days: number } | null;
-  onAvatar: () => void;
-}) {
+/** The streak, a glass capsule: the flame, the count in bold figures and "day streak" in grey. */
+function StreakCapsule({ days }: { days: number }) {
   const c = useCalm();
-  // iOS 26's bar: round glass buttons and a glass capsule for the streak, the day pill between them.
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44 }}>
-      <GlassButton onPress={onAvatar} accessibilityLabel="Settings">
-        <UserAvatar src={null} size={24} />
-      </GlassButton>
-      {streak && streak.days > 0 ? (
-        <GlassCapsule accessibilityLabel={`${streak.days}-day streak`} style={{ gap: 4, paddingHorizontal: 11 }}>
-          <StreakFlame u={0.56} />
-          <Txt size={15} lineHeight={20} weight={700} style={[TABULAR, { color: c.ink }]}>
-            {streak.days}
-          </Txt>
-        </GlassCapsule>
-      ) : null}
-      <View style={{ flex: 1, alignItems: "center" }}>
-        <DateSwitcher {...dateSwitcher} narrow style={{ height: 38, borderRadius: 19, paddingHorizontal: 2 }} />
-      </View>
-      <SyncStatus status={sync.status} now={sync.now} onPress={sync.onPress} hideText />
-    </View>
+    <GlassCapsule accessibilityLabel={`${days}-day streak`} style={{ gap: 6, paddingLeft: 12, paddingRight: 14 }}>
+      <StreakFlame u={0.62} />
+      <Txt size={15} lineHeight={20} weight={600} numberOfLines={1} style={{ color: c.sub }}>
+        <Txt size={15} lineHeight={20} weight={700} style={[font.numeric(700), { color: c.ink }]}>
+          {String(days)}
+        </Txt>
+        {" day streak"}
+      </Txt>
+    </GlassCapsule>
   );
 }
-
-// ── Hero: the day's scores and the live heart ───────────────────────────────
 
 /**
- * One of the day's three scores as its own small pastel card, so the three never run together: a round icon and the
- * score's name, the number large in the family's ink rolling into place, and a bar of how full the score is growing
- * in with it. `order` staggers the three, so they land one after another; each breathes a slow light.
+ * Today's floating bar, iOS 26's: Liquid Glass chrome over the page (render it as the page GlassTarget's overlay so
+ * the glass bends what scrolls under it), the streak capsule on the left, the sync status and the profile button on the
+ * right, and the inline title, centred, fading in once the large title has folded under the bar.
  */
-function ScoreCard({ tint, icon: Icon, label, value, unit, fill, spoken, onPress, order }: { tint: CalmTint; icon: typeof Moon; label: string; value: string; unit?: string; fill: number | null; spoken: string; onPress: () => void; order: number }) {
+export function TodayBar({ y, title, streak, sync, onAvatar }: { y: SharedValue<number> | null; title: string; streak: { days: number } | null; sync: { status: SyncShellStatus; now: number | null; onPress?: () => void }; onAvatar: () => void }) {
   const c = useCalm();
-  const ink = c.tintInk[tint];
-  const empty = value === MISSING;
+  const insets = useSafeAreaInsets();
+  const inline = useAnimatedStyle(() => {
+    const p = y ? interpolate(y.value, [TITLE_FOLD - 20, TITLE_FOLD], [0, 1], Extrapolation.CLAMP) : 0;
+    return { opacity: p, transform: [{ translateY: (1 - p) * 6 }] };
+  });
   return (
-    <CalmSurface tint={tint} onPress={onPress} accessibilityLabel={spoken} padding={12} radius={22} gap={6} breathe>
-      {/* The name on the round icon's line; at a large text size it wraps under itself rather than being cut. */}
-      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 6 }}>
-        <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: c.card, alignItems: "center", justifyContent: "center" }}>
-          <Icon size={14} color={ink} strokeWidth={2.25} />
-        </View>
-        <Txt size={11} lineHeight={14} weight={600} style={{ color: c.sub, letterSpacing: 1.2, flexShrink: 1, marginTop: (24 - 14) / 2 }}>
-          {label.toUpperCase()}
+    <View pointerEvents="box-none" style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 20 }}>
+      <Animated.View pointerEvents="none" importantForAccessibility="no-hide-descendants" style={[{ position: "absolute", left: 96, right: 96, top: insets.top, height: BAR_ROW, alignItems: "center", justifyContent: "center" }, inline]}>
+        <Txt size={17} lineHeight={22} weight={600} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} align="center" style={{ color: c.ink }}>
+          {title}
         </Txt>
+      </Animated.View>
+      <View pointerEvents="box-none" style={{ marginTop: insets.top, height: BAR_ROW, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16 }}>
+        {streak && streak.days > 0 ? <StreakCapsule days={streak.days} /> : null}
+        <View style={{ flex: 1 }} />
+        <SyncStatus status={sync.status} now={sync.now} onPress={sync.onPress} hideText />
+        <GlassButton onPress={onAvatar} accessibilityLabel="Settings">
+          <UserAvatar src={null} size={22} />
+        </GlassButton>
       </View>
-      <View importantForAccessibility="no-hide-descendants" style={{ flexDirection: "row", alignItems: "flex-end" }}>
-        {empty ? (
-          <Txt size={30} lineHeight={34} style={[font.numberAt(30), { color: c.faint }]}>
-            {value}
+    </View>
+  );
+}
+
+// ── The large title ──────────────────────────────────────────────────────────
+
+/** A round step button beside the large title: the quiet fill with the blue chevron, faint where the days stop. */
+function StepButton({ dir, disabled, onPress }: { dir: -1 | 1; disabled: boolean; onPress: () => void }) {
+  const c = useCalm();
+  const press = usePress(0.9);
+  const pressed = usePressStyle(press, { rest: disabled ? 0.35 : 1, dim: 0.6 });
+  const Icon = dir < 0 ? ChevronLeft : ChevronRight;
+  return (
+    <PressableView
+      onPress={() => {
+        haptic.select();
+        onPress();
+      }}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={dir < 0 ? "Previous day" : "Next day"}
+      accessibilityState={{ disabled }}
+      hitSlop={4}
+      style={[{ width: 34, height: 34, borderRadius: 17, backgroundColor: c.fill, alignItems: "center", justifyContent: "center" }, pressed]}
+    >
+      <Icon size={19} color={c.teal} strokeWidth={2.5} style={dir < 0 ? { marginLeft: -2 } : { marginRight: -2 }} />
+    </PressableView>
+  );
+}
+
+/**
+ * The page's opening, iOS's large title: the day as a caps eyebrow ("FRIDAY, OCTOBER 17") over "Today" (or
+ * "Yesterday", or the day) in 34 px bold, with the previous and next day beside it. A tap on the title opens the month
+ * calendar. As the page scrolls the block shrinks toward its left edge and fades as it slides under the bar, where the
+ * inline title takes over (UI thread).
+ */
+export function TodayTitle({ y, day, today, firstDay, loading, onChange }: { y: SharedValue<number> | null; day: string; today: string; firstDay?: string | null; loading?: boolean; onChange: (day: string) => void }) {
+  const c = useCalm();
+  const [calendar, setCalendar] = React.useState(false);
+  const title = dayLabel(day, today);
+  const fold = useAnimatedStyle(() => {
+    const v = y ? y.value : 0;
+    return {
+      opacity: interpolate(v, [0, TITLE_FOLD - 10], [1, 0], Extrapolation.CLAMP),
+      transform: [{ scale: interpolate(v, [0, TITLE_FOLD], [1, 0.94], Extrapolation.CLAMP) }],
+    };
+  });
+  return (
+    <Animated.View style={[{ transformOrigin: "left bottom", marginBottom: 4 }, fold]}>
+      <Txt size={13} lineHeight={18} weight={600} style={{ color: c.sub, letterSpacing: 0.2 }}>
+        {formatDay(day, DAY.long).toUpperCase()}
+      </Txt>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <Pressable
+          onPress={() => setCalendar(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`${title}. Open calendar`}
+          accessibilityState={{ busy: !!loading }}
+          style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1, opacity: pressed ? 0.6 : 1 })}
+        >
+          <Txt size={34} lineHeight={41} weight={700} accessibilityRole="header" style={{ color: c.ink, flexShrink: 1 }}>
+            {title}
           </Txt>
-        ) : (
-          <RollingNumber text={value} lineHeight={34} delay={order * 120} style={[font.numberAt(30), { color: ink, letterSpacing: -0.5 }]} />
-        )}
-        {unit && !empty ? (
-          <Txt size={13} lineHeight={17} weight={500} style={{ color: c.sub, marginLeft: unit === "%" ? 1 : 4, marginBottom: 4 }}>
-            {unit}
+          {loading ? <ActivityIndicator size="small" color={c.sub} /> : <ChevronDown size={20} color={c.tertiary} strokeWidth={2.6} style={{ marginTop: 6 }} />}
+        </Pressable>
+        <View style={{ flex: 1 }} />
+        <StepButton dir={-1} disabled={!!firstDay && day <= firstDay} onPress={() => onChange(stepDay(day, -1, today, firstDay))} />
+        <StepButton dir={1} disabled={day >= today} onPress={() => onChange(stepDay(day, 1, today, firstDay))} />
+      </View>
+      <CalendarSheet
+        open={calendar}
+        onClose={() => setCalendar(false)}
+        selected={day}
+        today={today}
+        firstDay={firstDay}
+        onSelect={(picked) => {
+          setCalendar(false);
+          if (picked !== day) onChange(stepDay(picked, 0, today, firstDay));
+        }}
+      />
+    </Animated.View>
+  );
+}
+
+// ── The hero: the three rings ────────────────────────────────────────────────
+
+/** The rings start once the card has begun to rise; each value lands with its own ring. */
+const RINGS_DELAY = 120;
+
+/**
+ * One score beside the rings: its name, then the number in its ring's colour (rolling into place as the ring sweeps
+ * in) with its unit, and a grey word after it ("Ready", "7h 12m", "of 21"); it wraps under the number rather than
+ * being cut. The line opens the score's tab.
+ */
+function ScoreLine({ label, value, unit, word, color, order, spoken, onPress }: { label: string; value: number | null; unit?: string; word?: string | null; color: string; order: number; spoken: string; onPress: () => void }) {
+  const c = useCalm();
+  const press = usePress(0.97);
+  const pressed = usePressStyle(press, { dim: 0.6 });
+  const text = value === null ? MISSING : label === "Strain" ? formatValue("decimal1", value) : formatValue("int", value);
+  return (
+    <PressableView onPress={onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut} accessibilityRole="button" accessibilityLabel={spoken} style={[{ alignSelf: "stretch" }, pressed]}>
+      <Txt size={15} lineHeight={19} weight={600} style={{ color: c.ink }}>
+        {label}
+      </Txt>
+      <View importantForAccessibility="no-hide-descendants" style={{ flexDirection: "row", alignItems: "flex-end", flexWrap: "wrap", columnGap: 5 }}>
+        <View style={{ flexDirection: "row", alignItems: "flex-end" }}>
+          {value === null ? (
+            <Txt size={28} lineHeight={32} style={[font.numberAt(28), { color: c.faint }]}>
+              {text}
+            </Txt>
+          ) : (
+            <RollingNumber text={text} lineHeight={32} delay={RINGS_DELAY + order * RING_STAGGER} duration={RING_LAND_MS} style={[font.numberAt(28, 800), { color }]} />
+          )}
+          {unit && value !== null ? (
+            <Txt size={15} lineHeight={20} weight={700} style={{ color, marginLeft: 1, marginBottom: 3 }}>
+              {unit}
+            </Txt>
+          ) : null}
+        </View>
+        {word ? (
+          <Txt size={14} lineHeight={20} weight={500} style={{ color: c.sub, marginBottom: 3 }}>
+            {word}
           </Txt>
         ) : null}
       </View>
-      <CapsuleMeter frac={fill === null ? null : Math.max(0.04, Math.min(1, fill))} color={ink} height={6} track={c.card} grow />
-    </CalmSurface>
+    </PressableView>
   );
 }
 
-const TILE_W = 160;
-/** The heart-rate tile's line: the last 10 minutes of Health Connect's readings. */
-const TRACE_S = 10 * 60;
-
-/** The live trace: the newest heart rate large over a line of the recent readings: live over Bluetooth when streaming, else Health Connect's latest. */
-function BandTile({ height, today, onPress }: { height: number; today: boolean; onPress: () => void }) {
+/**
+ * Today's hero, the mockup's: a card with the triple Activity rings on the left (Recovery outermost in its band's
+ * colour, Sleep indigo, Strain orange as a share of 21), sweeping in on the ring spring 80 ms apart, and the three
+ * values on the right, each opening its tab. Why a score is missing follows under them, then "See data" to Trends.
+ */
+export function TodayHero({ vm, at, go, asleepMin }: { vm: HomeVM; asleepMin: number | null } & Go) {
   const c = useCalm();
-  const { liveHr } = useLiveHr();
-  const live = useLiveBle();
-  const streaming = showsLive(live);
-  const bpm = streaming ? live.bpm : (liveHr.latest?.bpm ?? null);
-  // The line under the number: the band's last 2 minutes while live, else Health Connect's last 10 (30 was too dense
-  // for a narrow tile).
-  const trace = React.useMemo(() => {
-    if (streaming) return live.history.map((h) => ({ t: h.t / 1000, bpm: h.bpm }));
-    const end = liveHr.latest?.ts ?? 0;
-    return liveHr.recent.filter((r) => r.ts >= end - TRACE_S).map((r) => ({ t: r.ts, bpm: r.bpm }));
-  }, [streaming, live.history, liveHr.recent, liveHr.latest]);
-  const [sheet, setSheet] = React.useState(false);
-  const [tileH, setTileH] = React.useState(0);
-  // Against the last refresh (once a minute), so render stays pure.
-  const ago = liveHr.latest && liveHr.updatedAt ? Math.max(0, Math.round((liveHr.updatedAt / 1000 - liveHr.latest.ts) / 60)) : null;
-  const when = streaming ? "Live" : ago === null ? "No reading yet" : ago < 1 ? "Just now" : `${ago} min ago`;
-  // Today the heart rate sits at the tile's foot; the band is centred in what's above it.
-  const PILL = today ? 58 : 0;
-  return (
-    <View style={{ width: TILE_W, height, gap: 10 }}>
-      {/* The whole tile opens the heart-rate screen. */}
-      <Pressable
-        onPress={today ? onPress : undefined}
-        disabled={!today}
-        accessibilityRole="button"
-        accessibilityLabel={bpm ? `Heart rate ${bpm} beats per minute, ${when}. Opens heart rate` : "Heart rate. Opens heart rate"}
-        style={({ pressed }) => ({ flex: 1, opacity: pressed ? 0.88 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] })}
-        onLayout={(e) => setTileH(Math.round(e.nativeEvent.layout.height))}
-      >
-        {tileH > 0 && (
-          <HeartTrace width={TILE_W} height={tileH} footer={PILL} bpm={bpm} live={streaming} points={trace} caption={streaming ? "last 2 min" : "last 10 min"}>
-            {today && (
-              // How fresh the reading is, on the tile's foot.
-              <View style={{ position: "absolute", left: 8, right: 8, bottom: 8, borderRadius: 18, backgroundColor: c.card, paddingHorizontal: 12, paddingVertical: 6, boxShadow: "0 2px 10px rgba(17,24,39,0.08)" }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                  <HeartPulse size={18} color={c.tintInk.rose} strokeWidth={2} />
-                  <Txt size={14} lineHeight={18} weight={600} style={{ color: c.ink }}>
-                    Heart rate
-                  </Txt>
-                </View>
-                <Txt size={12} lineHeight={16} numberOfLines={1} style={{ color: streaming ? c.tintInk.mint : c.sub }}>
-                  {streaming ? "Live from your band" : when}
-                </Txt>
-              </View>
-            )}
-          </HeartTrace>
-        )}
-      </Pressable>
-      {today && !streaming && <GoLiveButton onPress={() => setSheet(true)} style={{ alignSelf: "center" }} />}
-      {today && streaming && <StopLiveButton style={{ alignSelf: "center" }} />}
-      {today && <GoLiveSheet open={sheet} onClose={() => setSheet(false)} />}
-    </View>
-  );
-}
-
-export function CalmHero({ vm, at, go }: { vm: HomeVM } & Go) {
-  const c = useCalm();
+  const { width } = useWindowDimensions();
   const { dials } = vm;
   const recovery = dials.recovery.value;
   const sleep = dials.sleep.value;
   const strain = dials.strain.value;
   const band = recovery === null ? null : recoveryBand(recovery);
-  // Recovery's card takes its band's pastel: mint when ready, sand in the middle, rose when low.
-  const recoveryTint: CalmTint = band === "yellow" ? "sand" : band === "red" ? "rose" : "mint";
-  // The band's tile matches the three cards' height, whatever the font size makes it.
-  const [colH, setColH] = React.useState(300);
+  const recoveryInk = band === "yellow" ? c.tintInk.sand : band === "red" ? c.tintInk.rose : c.tintInk.mint;
+  // The rings take a little under half the card, never so small the three read as one.
+  const size = Math.round(Math.max(116, Math.min(168, (width - 64) * 0.48)));
+  const hours = hmText(asleepMin);
   return (
-    <View style={{ gap: 14 }}>
-      <View style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
-        <View onLayout={(e) => setColH(Math.round(e.nativeEvent.layout.height))} style={{ flex: 1, minWidth: 0, gap: 8 }}>
-          <ScoreCard
-            tint={recoveryTint}
-            icon={BatteryCharging}
+    <CalmSurface padding={16} gap={14}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
+        <Pressable onPress={() => go("/trends")} accessibilityRole="button" accessibilityLabel="Open your data in Trends" style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
+          <ScoreRings recovery={recovery} sleep={sleep} strain={strain} size={size} delay={RINGS_DELAY} />
+        </Pressable>
+        <View style={{ flex: 1, minWidth: 0, gap: 10 }}>
+          <ScoreLine
             label="Recovery"
-            value={recovery === null ? MISSING : formatValue("int", recovery)}
-            unit={recovery === null ? undefined : "%"}
-            fill={recovery === null ? null : recovery / 100}
+            value={recovery}
+            unit="%"
+            word={band ? BAND_WORD[band] : null}
+            color={recoveryInk}
             order={0}
-            spoken={recovery === null ? "Recovery, no score" : `Recovery ${formatValue("int", recovery)} percent`}
+            spoken={recovery === null ? "Recovery, no score. Opens Health" : `Recovery ${formatValue("int", recovery)} percent, ${BAND_WORD[band!].toLowerCase()}. Opens Health`}
             onPress={() => go(HEALTH_TAB)}
           />
-          <ScoreCard
-            tint="lavender"
-            icon={Moon}
+          <ScoreLine
             label="Sleep"
-            value={sleep === null ? MISSING : formatValue("int", sleep)}
-            unit={sleep === null ? undefined : "%"}
-            fill={sleep === null ? null : sleep / 100}
+            value={sleep}
+            unit="%"
+            word={hours}
+            color={c.tintInk.lavender}
             order={1}
-            spoken={sleep === null ? "Sleep, no score" : `Sleep ${formatValue("int", sleep)} percent`}
+            spoken={`${sleep === null ? "Sleep, no score" : `Sleep ${formatValue("int", sleep)} percent`}${hours ? `, ${spokenHm(asleepMin)} asleep` : ""}. Opens Sleep`}
             onPress={() => go(at(SLEEP_TAB))}
           />
-          <ScoreCard
-            tint="peach"
-            icon={Flame}
+          <ScoreLine
             label="Strain"
-            value={strain === null ? MISSING : formatValue("decimal1", strain)}
-            unit={strain !== null && dials.soFar ? "so far" : undefined}
-            fill={strain === null ? null : strain / 21}
+            value={strain}
+            word={strain === null ? null : dials.soFar ? "of 21 so far" : "of 21"}
+            color={c.tintInk.peach}
             order={2}
-            spoken={strain === null ? "Strain, no score" : `Strain ${formatValue("decimal1", strain)}${dials.soFar ? " so far" : ""}`}
+            spoken={strain === null ? "Strain, no score. Opens Activity" : `Strain ${formatValue("decimal1", strain)} of 21${dials.soFar ? " so far" : ""}. Opens Activity`}
             onPress={() => go(at(ACTIVITY_TAB))}
           />
         </View>
-        <BandTile height={colH} today={vm.isToday} onPress={() => go("/health/heart-rate")} />
       </View>
       {/* Why a score is missing, as the dials' reason line said it ("Waiting for last night's sleep to sync"). */}
       {dials.reason && (
@@ -275,148 +299,80 @@ export function CalmHero({ vm, at, go }: { vm: HomeVM } & Go) {
           {reasonCopy(dials.reason.reason, dials.reason.nightsLeft).long}
         </Txt>
       )}
-      <Pressable onPress={() => go("/trends")} accessibilityRole="link" hitSlop={8} style={({ pressed }) => ({ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 4, opacity: pressed ? 0.6 : 1 })}>
-        <Txt size={16} lineHeight={20} weight={600} style={{ color: c.teal }}>
-          See data
-        </Txt>
-        <ChevronRight size={18} color={c.teal} strokeWidth={2.25} />
-      </Pressable>
-    </View>
+      <View style={{ marginHorizontal: -16, marginBottom: -6 }}>
+        <RowRule inset={16} />
+        <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
+          <PillAction label="See data" accessibilityLabel="See data: every metric in Trends" onPress={() => go("/trends")} />
+        </View>
+      </View>
+    </CalmSurface>
   );
 }
 
 // ── Week cards: Sleep (the Sleep tab) and Recovery (the Health tab) ─────────
 
-/** The week of nights against the goal, as lollipops: the shown night in orange with the Moon. */
+/** The right-hand axis's width: its labels ("8h", "100") sit in it, Apple Health's way. */
+const AXIS_W = 30;
+
+/**
+ * The week of nights as Apple Health's sleep bars: a rounded bar per night (the night shown in indigo, the others its
+ * soft step, a night with no sleep a stub), a dashed line at the goal with its label on the right-hand axis, the
+ * weekday letters under the bars. It grows up from the floor once.
+ */
 function SleepWeek({ week, goalMin }: { week: { day: string; value: number | null }[]; goalMin: number }) {
   const c = useCalm();
-  const H = 140;
+  const dark = useTheme().scheme === "dark";
+  const H = 120;
+  const ink = c.tintInk.lavender;
+  const soft = mix(ink, c.card, dark ? 0.42 : 0.3);
   const max = Math.max(goalMin * 1.15, ...week.map((p) => p.value ?? 0));
-  const y = (min: number) => H - (min / max) * H;
+  const yOf = (min: number) => H - (min / max) * H;
+  const goalY = yOf(goalMin);
   return (
-    <View style={{ gap: 10 }}>
-      <View style={{ height: H + 12, marginTop: 6 }}>
-        {/* The goal: a dashed line with its label. */}
-        <View style={{ position: "absolute", left: 0, right: 0, top: y(goalMin) + 6, height: 0, borderTopWidth: 1.5, borderStyle: "dashed", borderColor: c.ink, opacity: 0.55 }} />
-        <View style={{ position: "absolute", left: 0, top: y(goalMin) - 7, height: 26, paddingHorizontal: 10, borderRadius: 8, backgroundColor: c.ink, justifyContent: "center" }}>
-          <Txt size={13} lineHeight={16} weight={600} style={{ color: c.card }}>{`Goal ${Math.round(goalMin / 60)}h`}</Txt>
+    <View style={{ gap: 6 }}>
+      <View style={{ height: H }}>
+        {/* The goal: a dashed line across the bars, its hours on the axis. */}
+        <View pointerEvents="none" style={{ position: "absolute", left: 0, right: AXIS_W, top: goalY - 1, height: 2 }}>
+          <Svg width="100%" height={2}>
+            <Line x1="0" y1="1" x2="100%" y2="1" stroke={mix(ink, c.card, 0.6)} strokeWidth={1.5} strokeDasharray={[4, 3]} strokeLinecap="round" />
+          </Svg>
         </View>
-        <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, top: 0, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", paddingLeft: 92 }}>
-          {week.map((p, i) => {
-            const last = i === week.length - 1;
-            const v = p.value ?? 0;
-            const top = p.value == null ? H : y(v);
-            return (
-              <View key={p.day} style={{ width: 28, height: H + 12, alignItems: "center" }}>
-                {p.value != null ? (
-                  <>
-                    <View style={{ position: "absolute", top: top + 6, bottom: 0, width: 2, backgroundColor: last ? c.orange : c.ink, opacity: last ? 1 : 0.85 }} />
-                    {last ? (
-                      <View style={{ position: "absolute", top: top - 8, width: 30, height: 30, borderRadius: 15, backgroundColor: c.orange, alignItems: "center", justifyContent: "center" }}>
-                        <Moon size={15} color="#ffffff" strokeWidth={2.25} />
-                      </View>
-                    ) : (
-                      <View style={{ position: "absolute", top: top, width: 12, height: 12, borderRadius: 6, backgroundColor: c.ink }} />
-                    )}
-                  </>
-                ) : (
-                  // A night with no sleep: a short stub in the lavender's edge, so it shows on the card's pastel.
-                  <View style={{ position: "absolute", bottom: 0, height: 24, width: 2, backgroundColor: c.tintEdge.lavender }} />
-                )}
-              </View>
-            );
-          })}
-        </View>
-      </View>
-      <View style={{ height: 1.5, backgroundColor: c.ink, opacity: 0.8 }} />
-      <View style={{ flexDirection: "row", justifyContent: "space-between", paddingLeft: 92 }}>
-        {week.map((p) => (
-          <View key={p.day} style={{ width: 28, alignItems: "center" }}>
-            <Txt size={12} lineHeight={16} style={{ color: c.sub }}>
-              {formatDay(p.day, { weekday: "short" }).slice(0, 2)}
-            </Txt>
+        <Txt size={11} lineHeight={14} weight={600} style={[font.numeric(600), { position: "absolute", right: 0, width: AXIS_W - 4, top: goalY - 7, color: ink, textAlign: "right" }]}>
+          {`${Math.round(goalMin / 60)}h`}
+        </Txt>
+        <Grow mode="rise" height={H} style={{ position: "absolute", left: 0, right: AXIS_W, top: 0 }}>
+          <View style={{ height: H, flexDirection: "row", alignItems: "flex-end" }}>
+            {week.map((p, i) => {
+              const last = i === week.length - 1;
+              const v = p.value;
+              return (
+                <View key={p.day} style={{ flex: 1, alignItems: "center" }}>
+                  <View style={{ width: 16, height: v == null || v <= 0 ? 3 : Math.max(16, H - yOf(v)), borderRadius: 8, backgroundColor: v == null || v <= 0 ? c.fill : last ? ink : soft }} />
+                </View>
+              );
+            })}
           </View>
+        </Grow>
+      </View>
+      <View style={{ flexDirection: "row", paddingRight: AXIS_W }}>
+        {week.map((p, i) => (
+          <Txt key={p.day} size={11} lineHeight={14} weight={600} align="center" style={{ flex: 1, color: i === week.length - 1 ? c.ink : c.sub }}>
+            {formatDay(p.day, { weekday: "narrow" })}
+          </Txt>
         ))}
       </View>
     </View>
   );
 }
 
-/** A small number with its caps label; with `onPress`, a button to that number's own history. */
-function MiniStat({ value, unit, label, color, onPress }: { value: string; unit?: string; label: string; color?: string; onPress?: () => void }) {
-  const body = (
-    <>
-      <Num value={value} unit={unit} size={24} color={color} />
-      <Caption>{label}</Caption>
-    </>
-  );
-  if (!onPress) return <View style={{ flex: 1, minWidth: 0 }}>{body}</View>;
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${label} ${value}${unit ? ` ${unit}` : ""}. Opens its history`} hitSlop={6} style={({ pressed }) => ({ flex: 1, minWidth: 0, opacity: pressed ? 0.6 : 1 })}>
-      {body}
-    </Pressable>
-  );
-}
-
-const statText = (s: KeyStat | undefined, fmt: "int" | "decimal1" = "int") => (s?.metric.value == null ? MISSING : formatValue(fmt, s.metric.value));
-
 /**
- * The last seven mornings' Recovery as labelled columns: each day's score on top of its column, in its band's colour
- * (mint ready, sand steady, rose low), the weekday under it, the shown day at full strength and the rest a little lighter.
- */
-function RecoveryWeek({ week, shown }: { week: { day: string; recovery: number | null }[]; shown: string }) {
-  const c = useCalm();
-  const H = 76;
-  return (
-    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}>
-      {week.map((p) => {
-        const v = p.recovery;
-        const band = v === null ? null : recoveryBand(v);
-        const ink = band === "green" ? c.tintInk.mint : band === "yellow" ? c.tintInk.sand : band === "red" ? c.tintInk.rose : c.faint;
-        const here = p.day === shown;
-        return (
-          <View key={p.day} style={{ width: 34, alignItems: "center", gap: 4 }}>
-            <Txt size={12} lineHeight={15} style={[font.numeric(700), { color: v === null ? c.faint : ink }]}>
-              {v === null ? MISSING : formatValue("int", v)}
-            </Txt>
-            <View style={{ height: H, justifyContent: "flex-end" }}>
-              <View style={{ width: 18, height: v === null ? 4 : Math.max(6, (v / 100) * H), borderRadius: 9, backgroundColor: v === null ? c.line : ink, opacity: here || v === null ? 1 : 0.55 }} />
-            </View>
-            <Txt size={12} lineHeight={16} weight={here ? 700 : 400} style={{ color: here ? c.ink : c.sub }}>
-              {formatDay(p.day, { weekday: "short" }).slice(0, 2)}
-            </Txt>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-/** "6 hours 11 minutes", for a screen reader. */
-const spokenHm = (min: number | null) => {
-  const t = hm(min);
-  return t ? `${Number(t.h)} hours ${Number(t.m)} minutes` : "no sleep recorded";
-};
-
-/** A card's caps heading over its headline number. */
-function CardHeading({ children }: { children: string }) {
-  const c = useCalm();
-  return (
-    <Txt size={11} lineHeight={14} weight={600} style={{ color: c.label, letterSpacing: 1.6 }}>
-      {children.toUpperCase()}
-    </Txt>
-  );
-}
-
-/**
- * The Sleep tab's week: the last seven nights' hours asleep (ending on the night shown) as lollipops against your sleep
- * need, the shown night in orange with the Moon, and that night's hours as the headline.
+ * The Sleep tab's week: the last seven nights' hours asleep (ending on the night shown) as rounded bars against your
+ * sleep need, and that night's hours as the headline. The card opens the nights' hours in the chart explorer.
  */
 export function SleepWeekCard({ day, goalMin }: { day: string; goalMin: number }) {
   const c = useCalm();
   const router = useRouter();
   const { today } = useApp();
-  // The card opens the nights' hours in the chart explorer, on this week.
   const openHours = () => router.push(chartHref({ metric: "hours", r: "w", d: day === today ? undefined : day }) as Href);
   const trend = useQuery((ctx) => getTrends("hours", ctx), [], "trends:hours");
   const pts = trend.data?.points.value ?? [];
@@ -425,28 +381,134 @@ export function SleepWeekCard({ day, goalMin }: { day: string; goalMin: number }
   const asleep = end >= 0 ? (pts[end].value ?? null) : null;
   const short = asleep !== null && asleep < goalMin - 30;
   const subtitle = asleep === null ? "No sleep recorded for this night" : short ? "Short of your sleep need" : "You met your sleep need";
+  const t = hm(asleep);
   return (
-    <CalmSurface tint="lavender" watermark={Moon} padding={20} gap={18} onPress={openHours} accessibilityLabel={`This week. This night: ${spokenHm(asleep)}. ${subtitle}. Opens your hours of sleep`}>
-      <View style={{ gap: 4 }}>
-        <CardHeading>This week</CardHeading>
-        <Duration min={asleep} size={30} color={c.tintInk.lavender} />
-        <Txt size={14} lineHeight={19} weight={short ? 600 : 400} style={{ color: short ? c.tintInk.rose : c.sub }}>
+    <HomeCard icon={Moon} iconTint="lavender" title="This week" onPress={openHours} accessibilityLabel={`This week. This night: ${spokenHm(asleep)}. ${subtitle}. Opens your hours of sleep`} gap={12}>
+      <View style={{ gap: 2 }}>
+        <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}>
+          {t ? (
+            <>
+              <Txt size={32} lineHeight={38} style={[font.numberAt(32), { color: c.ink }]}>
+                {String(t.h)}
+              </Txt>
+              <Txt size={16} lineHeight={20} weight={600} style={{ color: c.sub }}>
+                hr
+              </Txt>
+              <Txt size={32} lineHeight={38} style={[font.numberAt(32), { color: c.ink, marginLeft: 4 }]}>
+                {String(t.m)}
+              </Txt>
+              <Txt size={16} lineHeight={20} weight={600} style={{ color: c.sub }}>
+                min
+              </Txt>
+            </>
+          ) : (
+            <Txt size={32} lineHeight={38} style={[font.numberAt(32), { color: c.faint }]}>
+              {MISSING}
+            </Txt>
+          )}
+        </View>
+        <Txt size={15} lineHeight={20} weight={short ? 600 : 400} style={{ color: short ? c.tintInk.rose : c.sub }}>
           {subtitle}
         </Txt>
       </View>
-      {nights.length ? (
-        // Grows up from the floor once; the padding (taken back by the margin) keeps the raised Moon inside the clip.
-        <GrowIn style={{ paddingTop: 10, marginTop: -10 }}>
-          <SleepWeek week={nights} goalMin={goalMin} />
-        </GrowIn>
-      ) : <View style={{ height: 196, borderRadius: 14, backgroundColor: c.chip, opacity: 0.6 }} />}
-    </CalmSurface>
+      {nights.length ? <SleepWeek week={nights} goalMin={goalMin} /> : <View style={{ height: 140, borderRadius: 14, backgroundColor: c.fill }} />}
+    </HomeCard>
+  );
+}
+
+/** A small number with its caps label; with `onPress`, a button to that number's own history. */
+function MiniStat({ value, unit, label, color, onPress }: { value: string; unit?: string; label: string; color?: string; onPress?: () => void }) {
+  const c = useCalm();
+  const press = usePress(0.95);
+  const pressed = usePressStyle(press, { dim: 0.55 });
+  const body = (
+    <>
+      <View style={{ flexDirection: "row", alignItems: "baseline" }}>
+        <Txt size={22} lineHeight={26} style={[font.numberAt(22), { color: color ?? c.ink }]}>
+          {value}
+        </Txt>
+        {unit ? (
+          <Txt size={13} lineHeight={17} weight={600} style={{ color: c.sub, marginLeft: 3 }}>
+            {unit}
+          </Txt>
+        ) : null}
+      </View>
+      <Txt size={13} lineHeight={17} style={{ color: c.sub, marginTop: 1 }}>
+        {label}
+      </Txt>
+    </>
+  );
+  if (!onPress) return <View style={{ flex: 1, minWidth: 0 }}>{body}</View>;
+  return (
+    <PressableView onPress={onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut} accessibilityRole="button" accessibilityLabel={`${label} ${value}${unit ? ` ${unit}` : ""}. Opens its history`} hitSlop={6} style={[{ flex: 1, minWidth: 0 }, pressed]}>
+      {body}
+    </PressableView>
+  );
+}
+
+const statText = (s: KeyStat | undefined, fmt: "int" | "decimal1" = "int") => (s?.metric.value == null ? MISSING : formatValue(fmt, s.metric.value));
+
+/**
+ * The last seven mornings' Recovery as Apple Health bars: each day's score over its rounded bar in its band's colour
+ * (green ready, yellow steady, red low), the shown day solid and the rest their soft step, the weekday under it, and
+ * dashed grid lines at 33 and 66 with the axis on the right. Grows up from the floor once.
+ */
+function RecoveryWeek({ week, shown }: { week: { day: string; recovery: number | null }[]; shown: string }) {
+  const c = useCalm();
+  const dark = useTheme().scheme === "dark";
+  const H = 76;
+  const ink = (v: number | null) => {
+    if (v === null) return c.faint;
+    const band = recoveryBand(v);
+    return band === "green" ? c.tintInk.mint : band === "yellow" ? c.tintInk.sand : c.tintInk.rose;
+  };
+  return (
+    <View style={{ gap: 6 }}>
+      <View style={{ flexDirection: "row", paddingRight: AXIS_W }}>
+        {week.map((p) => (
+          <Txt key={p.day} size={12} lineHeight={15} align="center" style={[font.numeric(700), { flex: 1, color: p.recovery === null ? c.faint : ink(p.recovery) }]}>
+            {p.recovery === null ? MISSING : formatValue("int", p.recovery)}
+          </Txt>
+        ))}
+      </View>
+      <View style={{ height: H }}>
+        {[100, 66, 33].map((g) => (
+          <React.Fragment key={g}>
+            <View pointerEvents="none" style={{ position: "absolute", left: 0, right: AXIS_W, top: H - (g / 100) * H, height: StyleSheet.hairlineWidth, backgroundColor: c.line }} />
+            <Txt size={10} lineHeight={12} style={[font.numeric(500), { position: "absolute", right: 0, width: AXIS_W - 4, top: H - (g / 100) * H - 6, color: c.sub, textAlign: "right" }]}>
+              {String(g)}
+            </Txt>
+          </React.Fragment>
+        ))}
+        <Grow mode="rise" height={H} style={{ position: "absolute", left: 0, right: AXIS_W, top: 0 }}>
+          <View style={{ height: H, flexDirection: "row", alignItems: "flex-end" }}>
+            {week.map((p) => {
+              const v = p.recovery;
+              const here = p.day === shown;
+              const color = ink(v);
+              return (
+                <View key={p.day} style={{ flex: 1, alignItems: "center" }}>
+                  <View style={{ width: 16, height: v === null ? 3 : Math.max(16, (v / 100) * H), borderRadius: 8, backgroundColor: v === null ? c.fill : here ? color : mix(color, c.card, dark ? 0.45 : 0.34) }} />
+                </View>
+              );
+            })}
+          </View>
+        </Grow>
+      </View>
+      <View style={{ flexDirection: "row", paddingRight: AXIS_W }}>
+        {week.map((p) => (
+          <Txt key={p.day} size={11} lineHeight={14} weight={p.day === shown ? 700 : 600} align="center" style={{ flex: 1, color: p.day === shown ? c.ink : c.sub }}>
+            {formatDay(p.day, { weekday: "narrow" })}
+          </Txt>
+        ))}
+      </View>
+    </View>
   );
 }
 
 /**
  * The Health tab's Recovery: the score in its band's colour with what it means today and "Details ›" to Recovery, then
- * HRV, resting heart rate and breathing, then the last seven mornings as labelled columns.
+ * HRV, resting heart rate and breathing (each to its history), then the last seven mornings as bars.
  */
 export function RecoveryCard({ vm, at, go }: { vm: HomeVM } & Go) {
   const c = useCalm();
@@ -456,26 +518,29 @@ export function RecoveryCard({ vm, at, go }: { vm: HomeVM } & Go) {
   const subtitle = r.value === null ? reasonCopy(r.reason, r.nightsLeft).short : band === "green" ? "Ready to perform" : band === "yellow" ? "Take it steady today" : "Prioritise recovery today";
   const { hrv, rhr, resp } = vm.cardStats;
   return (
-    <CalmSurface tint="mint" watermark={HeartPulse} padding={20} gap={18}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-        <View accessible accessibilityLabel={`Recovery: ${r.value === null ? "no score" : `${formatValue("int", r.value)} percent`}. ${subtitle}`} style={{ flex: 1, minWidth: 0, gap: 4 }}>
-          <CardHeading>Recovery</CardHeading>
-          <Num value={r.value === null ? MISSING : formatValue("int", r.value)} unit={r.value === null ? undefined : "%"} size={30} color={band ? bandInk : c.faint} />
-          <Txt size={14} lineHeight={19} weight={band ? 600 : 400} style={{ color: band ? bandInk : c.sub }}>
-            {subtitle}
+    <HomeCard icon={HeartPulse} iconTint="mint" title="Recovery" right={<PillAction label="Details" accessibilityLabel="Recovery details" onPress={() => go(at("/recovery"))} />} gap={16}>
+      <View accessible accessibilityLabel={`Recovery: ${r.value === null ? "no score" : `${formatValue("int", r.value)} percent`}. ${subtitle}`} style={{ gap: 2 }}>
+        <View style={{ flexDirection: "row", alignItems: "baseline" }}>
+          <Txt size={34} lineHeight={40} style={[font.numberAt(34), { color: band ? bandInk : c.faint }]}>
+            {r.value === null ? MISSING : formatValue("int", r.value)}
           </Txt>
+          {r.value !== null && (
+            <Txt size={17} lineHeight={22} weight={700} style={{ color: bandInk, marginLeft: 1 }}>
+              %
+            </Txt>
+          )}
         </View>
-        <PillAction label="Details" accessibilityLabel="Recovery details" onPress={() => go(at("/recovery"))} />
+        <Txt size={15} lineHeight={20} weight={band ? 600 : 400} style={{ color: band ? bandInk : c.sub }}>
+          {subtitle}
+        </Txt>
       </View>
       <View style={{ flexDirection: "row", gap: 12 }}>
         {/* Each number opens its own history in the chart explorer. */}
-        <MiniStat value={statText(hrv)} unit="ms" label="HRV" color={c.tintInk.mint} onPress={() => go(chartHref({ metric: "hrv", r: "m" }))} />
-        <MiniStat value={statText(rhr)} unit="bpm" label="Resting HR" color={c.tintInk.mint} onPress={() => go(chartHref({ metric: "rhr", r: "m" }))} />
-        <MiniStat value={statText(resp, "decimal1")} unit="rpm" label="Breathing" color={c.tintInk.mint} onPress={() => go(chartHref({ metric: "resp", r: "m" }))} />
+        <MiniStat value={statText(hrv)} unit="ms" label="HRV" onPress={() => go(chartHref({ metric: "hrv", r: "m" }))} />
+        <MiniStat value={statText(rhr)} unit="bpm" label="Resting HR" onPress={() => go(chartHref({ metric: "rhr", r: "m" }))} />
+        <MiniStat value={statText(resp, "decimal1")} unit="rpm" label="Breathing" onPress={() => go(chartHref({ metric: "resp", r: "m" }))} />
       </View>
-      <GrowIn>
-        <RecoveryWeek week={vm.strainRecovery.slice(-7)} shown={vm.day} />
-      </GrowIn>
-    </CalmSurface>
+      <RecoveryWeek week={vm.strainRecovery.slice(-7)} shown={vm.day} />
+    </HomeCard>
   );
 }

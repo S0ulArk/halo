@@ -1,8 +1,9 @@
 // More › Behaviours `/more/behaviours` (U21), ported from the web's src/app/(app)/more/behaviours/{page,Behaviours,
-// loading}.tsx: show or hide each behaviour on the check-in sheet, reorder it inside its group, add your own. The list
-// updates in place; a failed write puts it back and says so.
+// loading}.tsx, as iOS Settings lists: each group an inset grouped list whose rows are the behaviour's icon square, its
+// name over how many days it was logged, Move up / Move down and iOS's switch that shows or hides it on the check-in;
+// your own behaviours end with the add field. The list updates in place; a failed write puts it back and says so.
 import * as React from "react";
-import { Pressable, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { ArrowDown, ArrowUp } from "lucide-react-native";
 import { moved } from "@/lib/utils";
 import { getBehaviours } from "@/queries/journal";
@@ -15,6 +16,7 @@ import { DetailScreen, LoadError } from "@/screens/detail/DetailScreen";
 import { useBack, useRefresh } from "@/screens/detail/nav";
 import { reorderBehaviours, setBehaviourHidden, type ActionResult } from "./actions";
 import { Group, Hairline, IconTile, Sentence, useCalm } from "../settings/calmKit";
+import { haptic } from "@/ui/motion/haptics";
 import { AddBehaviour, useActionCtx } from "./AddBehaviour";
 import { GROUP_TINT } from "./CheckInSheet";
 import { Switch, toast } from "./controls";
@@ -92,16 +94,16 @@ export function Behaviours({ vm }: { vm: BehavioursVM }) {
               <View style={{ paddingVertical: 4 }}>
                 {group.map((t, i) => (
                   <React.Fragment key={t.tag}>
-                    {i > 0 && <Hairline inset={16 + 36 + 12} />}
+                    {i > 0 && <Hairline inset={16 + 30 + 12} />}
                     {/* The tile, the arrows and the switch on the name and its count (21 + 2 + 18): a name that wraps
                         grows the row downward, and they stay on its first lines. */}
                     <View style={{ minHeight: 64, flexDirection: "row", alignItems: "flex-start", gap: 4, paddingLeft: 16, paddingRight: 16, paddingVertical: (64 - ROW_BAND) / 2 }}>
-                      <View style={{ opacity: t.hidden ? 0.45 : 1, marginRight: 8, marginTop: onBand(ROW_BAND, 36) }}>
-                        <IconTile icon={tagIcon(t.tag)} tint={GROUP_TINT[g.key]} size={36} />
+                      <View style={{ opacity: t.hidden ? 0.45 : 1, marginRight: 8, marginTop: onBand(ROW_BAND, 30) }}>
+                        <IconTile icon={tagIcon(t.tag)} tint={GROUP_TINT[g.key]} size={30} />
                       </View>
                       {/* The label toggles the switch, as the web's <Label htmlFor>. */}
                       <Pressable onPress={() => void toggle(t, t.hidden)} accessible={false} style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                        <Txt size={16} lineHeight={21} weight={600} style={{ color: t.hidden ? c.faint : c.ink }}>
+                        <Txt size={16} lineHeight={21} style={{ color: t.hidden ? c.faint : c.ink }}>
                           {t.label}
                         </Txt>
                         <Txt size={13} lineHeight={18} style={{ color: c.sub }}>
@@ -109,7 +111,7 @@ export function Behaviours({ vm }: { vm: BehavioursVM }) {
                             "Hidden"
                           ) : t.answers ? (
                             <>
-                              <Txt size={14} lineHeight={18} style={[font.numeric(700), { color: c.ink }]}>
+                              <Txt size={13} lineHeight={18} style={[font.numeric(700), { color: c.ink }]}>
                                 {String(t.answers)}
                               </Txt>
                               {` ${t.answers === 1 ? "day" : "days"} logged`}
@@ -147,21 +149,24 @@ export function Behaviours({ vm }: { vm: BehavioursVM }) {
   );
 }
 
-/** A round 40 px arrow button that moves a behaviour within its group; faint when it can't move further. */
+/** A 40 px blue arrow that moves a behaviour within its group (a selection tick); faint when it can't move further. */
 function MoveButton({ dir, label, disabled, onPress }: { dir: "up" | "down"; label: string; disabled: boolean; onPress: () => void }) {
   const c = useCalm();
   const Icon = dir === "up" ? ArrowUp : ArrowDown;
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => {
+        haptic.select();
+        onPress();
+      }}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled }}
       hitSlop={2}
-      style={({ pressed }) => ({ width: 40, height: 44, borderRadius: 20, alignItems: "center", justifyContent: "center", opacity: disabled ? 0.3 : 1, backgroundColor: pressed ? c.ground : "transparent" })}
+      style={({ pressed }) => ({ width: 40, height: 44, borderRadius: 20, alignItems: "center", justifyContent: "center", opacity: disabled ? 0.25 : pressed ? 0.45 : 1 })}
     >
-      <Icon size={20} color={c.teal} strokeWidth={2} />
+      <Icon size={20} color={c.teal} strokeWidth={2.2} />
     </Pressable>
   );
 }
@@ -184,15 +189,15 @@ function BehavioursSkeleton() {
           <View style={{ paddingVertical: 4 }}>
             {Array.from({ length: n }, (_, i) => (
               <React.Fragment key={i}>
-                {i > 0 && <Hairline inset={16 + 36 + 12} />}
+                {i > 0 && <Hairline inset={16 + 30 + 12} />}
                 <View style={{ minHeight: 64, flexDirection: "row", alignItems: "flex-start", gap: 12, paddingHorizontal: 16, paddingVertical: (64 - ROW_BAND) / 2 }}>
-                  <Skeleton radius={12} style={{ width: 36, height: 36, marginTop: onBand(ROW_BAND, 36) }} />
+                  <Skeleton radius={7} style={{ width: 30, height: 30, marginTop: onBand(ROW_BAND, 30) }} />
                   <View style={{ flex: 1, gap: 2 }}>
                     <SkeletonText size={16} lineHeight={21} width={112} />
                     <SkeletonText size={13} lineHeight={18} width={96} />
                   </View>
                   <View style={{ width: 80 }} />
-                  <Skeleton radius={16} style={{ height: 32, width: 52, marginTop: onBand(ROW_BAND, 32) }} />
+                  <Skeleton radius={16} style={{ height: 31, width: 51, marginTop: onBand(ROW_BAND, 31) }} />
                 </View>
               </React.Fragment>
             ))}
@@ -201,13 +206,13 @@ function BehavioursSkeleton() {
       ))}
       <Group title="Your behaviours">
         <SkeletonText role="body" width={176} />
-        <View style={{ marginTop: 16, gap: 8, borderTopWidth: 1, borderTopColor: c.line, paddingTop: 16 }}>
-          <Txt size={14} lineHeight={19} weight={600} style={{ color: c.ink, paddingHorizontal: 4 }}>
-            Add a behaviour
+        <View style={{ marginTop: 16, gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.line, paddingTop: 16 }}>
+          <Txt size={13} lineHeight={18} style={{ color: c.sub, paddingHorizontal: 4 }}>
+            ADD A BEHAVIOUR
           </Txt>
           <View style={{ flexDirection: "row", gap: 8 }}>
-            <Skeleton radius={16} style={{ height: 52, flex: 1 }} />
-            <Skeleton radius={26} style={{ height: 52, width: 76 }} />
+            <Skeleton radius={12} style={{ height: 48, flex: 1 }} />
+            <Skeleton radius={25} style={{ height: 50, width: 76 }} />
           </View>
         </View>
       </Group>
