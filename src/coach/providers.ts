@@ -18,6 +18,8 @@ export type Provider = {
   label: string;
   /** Pre-filled model id; the person may type another one their provider offers. */
   model: string;
+  /** Models to suggest when the chosen one is overloaded. */
+  alternatives?: string[];
   /** Where to get a key (shown with the key field). */
   keyUrl: string;
   create: (apiKey: string, model: string, fetch?: Fetch) => LanguageModel;
@@ -41,7 +43,10 @@ export const PROVIDERS: Provider[] = [
   {
     id: "google",
     label: "Google Gemini",
-    model: "gemini-3.8-flash",
+    // Not the newest Flash: on the free tier gemini-3.8-flash and 3.7-flash were often overloaded (503, or no answer
+    // within 40 s) in October 2026, while 3.6-flash answered in about 2 s.
+    model: "gemini-3.6-flash",
+    alternatives: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"],
     keyUrl: "https://aistudio.google.com/apikey",
     create: (apiKey, model, fetch) => createGoogleGenerativeAI({ apiKey, fetch })(model),
   },

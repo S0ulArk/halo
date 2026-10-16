@@ -61,7 +61,8 @@ export async function coachHistory(messages: UIMessage[], model: LanguageModel, 
         model,
         instructions: texts("summary_instructions"),
         prompt: `Earlier summary:\n${summary?.text ?? "None"}\nFirst user message:\n${first ? textOf(first).slice(0, 1500) : "None"}\nNewly archived turns:\n${transcript.slice(-30_000)}`,
-        maxOutputTokens: 600,
+        // Thinking models (Gemini 3.x, GPT-5.x) count their reasoning here too; 600 could leave no room for the summary.
+        maxOutputTokens: 2000,
         maxRetries: 0,
         abortSignal: t.signal,
       });

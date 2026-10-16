@@ -177,6 +177,9 @@ describe("key test", () => {
     const broken: Fetch = async () => {
       throw new TypeError("Network request failed");
     };
+    const busy = fakeFetch([{ status: 503, json: { error: { code: 503, message: "This model is currently experiencing high demand.", status: "UNAVAILABLE" } } }]);
+    const r4 = await testKey({ ...input, model: "gemini-3.8-flash" }, busy.fetch);
+    expect(r4.ok ? "" : r4.error).toMatch(/^Google Gemini accepted the key, but the model “gemini-3\.8-flash” is overloaded right now\. Try again in a minute, or set the model to “gemini-3\.6-flash”\./);
     const r3 = await testKey(input, broken);
     expect(r3.ok ? "" : r3.error).toMatch(/Couldn’t reach Google Gemini|didn’t get to Google Gemini/);
   });

@@ -30,8 +30,9 @@ function detail(e: unknown, apiKey: string): string {
  * Why the test request failed, in words that say what to fix, with the provider's own message after it, so a refused
  * key, a wrong model id, an empty account and a phone problem each read differently.
  */
-export function testFailure(e: unknown, label: string, model: string, apiKey: string, timedOut = false): string {
-  if (timedOut) return `${label} didn’t answer within 20 seconds. Check your connection and try again.`;
+export function testFailure(e: unknown, label: string, model: string, apiKey: string, timedOut = false, alternative: string | null = null): string {
+  const instead = alternative ? `, or set the model to “${alternative}”` : "";
+  if (timedOut) return `${label} didn’t answer within 20 seconds. Its model “${model}” may be overloaded: try again in a minute${instead}.`;
   const said = (head: string) => {
     const d = detail(e, apiKey);
     return d ? `${head} ${label} said: “${d}”` : head;
@@ -47,6 +48,9 @@ export function testFailure(e: unknown, label: string, model: string, apiKey: st
     // OpenAI's empty account is a 429 too; other 429s (Gemini's free tier among them) are limits that pass.
     if (status === 402 || /insufficient_quota/.test(body) || (status !== 429 && /credit|billing|balance|payment/.test(body)))
       return said(`Your ${label} account has no credit or quota for this model.`);
+    // Overloaded: the key got through (an unknown key is refused before this), the model is just busy.
+    if (status === 503 || status === 529 || /overloaded|high demand/.test(body))
+      return said(`${label} accepted the key, but the model “${model}” is overloaded right now. Try again in a minute${instead}.`);
     if (status === 429) return said(`${label} is limiting this key right now (too many requests or the free quota is used up). Wait a minute and try again.`);
     return said(`${label} refused the request (error ${status}).`);
   }
@@ -72,7 +76,9 @@ export async function testKey(input: ProviderInput, fetch?: Fetch, timeoutMs = 2
   } catch (e) {
     const status = APICallError.isInstance(e) ? ` ${e.statusCode ?? "no status"}` : "";
     console.warn(`[coach] key test failed for ${c.provider}: ${e instanceof Error ? e.name : "error"}${status}`);
-    return { ok: false, error: testFailure(e, providerOf(c.provider)?.label ?? "Your provider", c.model, c.apiKey, ctl.signal.aborted) };
+    const p = providerOf(c.provider);
+    const alternative = [p?.model, ...(p?.alternatives ?? [])].find((m) => m && m !== c.model) ?? null;
+    return { ok: false, error: testFailure(e, p?.label ?? "Your provider", c.model, c.apiKey, ctl.signal.aborted, alternative) };
   } finally {
     clearTimeout(timer);
   }
