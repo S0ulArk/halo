@@ -1,10 +1,9 @@
-// The tab bar, floated over the tab pages so it can blur them. Android's blur (expo-blur on the BlurView library)
-// draws a BlurTargetView's content, and the blurring view must sit outside that target, so the bar can't be drawn by
-// the tab navigator itself (it would be inside the target with the pages). Instead the navigator's `tabBar` is
-// TabBarBridge, which draws nothing and hands its props (state, navigation, descriptors) to FloatingTabBar, drawn
-// beside the target in the tabs layout.
+// The tab bar, floated over the tab pages so its Liquid Glass can refract them. Glass reads its backdrop from a
+// GlassTarget (src/ui/glass.tsx) and must sit outside that target, so the bar can't be drawn by the tab navigator
+// itself (it would be inside the target with the pages). Instead the navigator's `tabBar` is TabBarBridge, which
+// draws nothing and hands its props (state, navigation, descriptors) to FloatingTabBar, drawn as the target's overlay
+// in the tabs layout.
 import * as React from "react";
-import type { View } from "react-native";
 import { TabBar, type NavTabBarProps } from "./TabBar";
 
 type Listener = () => void;
@@ -44,9 +43,9 @@ function useBarProps(): NavTabBarProps | null {
   );
 }
 
-/** The bar itself, over the pages at the screen's foot, blurring what scrolls under it. */
-export function FloatingTabBar({ blurTarget, onAction, actionLabel }: { blurTarget: React.RefObject<View | null>; onAction?: () => void; actionLabel?: string }) {
+/** The bar itself, over the pages at the screen's foot. Render it as the pages' GlassTarget overlay, so its glass is live. */
+export function FloatingTabBar({ onAction, actionLabel }: { onAction?: () => void; actionLabel?: string }) {
   const props = useBarProps();
   if (!props) return null;
-  return <TabBar {...props} onAction={onAction} actionLabel={actionLabel} floating blurTarget={blurTarget} />;
+  return <TabBar {...props} onAction={onAction} actionLabel={actionLabel} floating />;
 }

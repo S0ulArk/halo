@@ -1,15 +1,14 @@
-// The tab roots: Today, Sleep, Activity and Health, the check-in between them. The journal and More are tab screens kept
-// off the bar (the journal opens from Today and the check-in; More from the avatar on every tab). The tab bar itself is
-// Pulse's navigation bar (src/ui), not the navigator's default: full width, floating over the screens' foot (frosted),
-// with the action as its fifth item. The action opens the coach once a provider key is saved
-// (the web shows the coach there to people with coach access), else the one check-in sheet, mounted here for every
-// screen (the web mounts it in the app layout).
+// The tab roots: Today, Sleep, Activity and Health. The journal and More are tab screens kept off the bar (the journal
+// opens from Today and the check-in; More from the avatar on every tab). The tab bar itself is Halo's (src/ui), not
+// the navigator's default: a floating Liquid Glass capsule of the four tabs and a round glass action button beside it,
+// both refracting the pages that scroll under them. The action opens the coach once a provider key is saved (the web
+// shows the coach there to people with coach access), else the one check-in sheet, mounted here for every screen (the
+// web mounts it in the app layout).
 import * as React from "react";
-import { View } from "react-native";
-import { BlurTargetView } from "expo-blur";
 import { Tabs, useRouter, type Href } from "expo-router";
 import { useHasCoachKey } from "@/coach/session";
 import { CheckInSheetHost, useCheckInAction } from "@/screens/journal/CheckInSheet";
+import { GlassTarget } from "@/ui/glass";
 import { FloatingTabBar, TabBarBridge } from "@/ui/components/TabBarHost";
 
 export default function TabsLayout() {
@@ -17,11 +16,10 @@ export default function TabsLayout() {
   const checkIn = useCheckInAction();
   const coach = useHasCoachKey();
   const action = coach ? { onAction: () => router.push("/coach" as Href), actionLabel: "Open Coach" } : checkIn;
-  // The pages are the blur's source; the bar floats beside them at the foot and frosts what scrolls under it.
-  const pages = React.useRef<View | null>(null);
   return (
     <>
-      <BlurTargetView ref={pages} style={{ flex: 1 }}>
+      {/* The pages are the glass's backdrop; the bar floats over them at the foot as the target's overlay. */}
+      <GlassTarget style={{ flex: 1 }} overlay={<FloatingTabBar {...action} />}>
         {/* freezeOnBlur: a tab out of view stops re-rendering on app-state ticks (the live heart rate, sync progress). */}
         <Tabs
           // A short cross-fade between tabs (native driver), so a switch reads as a move rather than a cut.
@@ -38,8 +36,7 @@ export default function TabsLayout() {
           <Tabs.Screen name="journal" options={{ title: "Journal", href: null }} />
           <Tabs.Screen name="more" options={{ title: "More", href: null }} />
         </Tabs>
-      </BlurTargetView>
-      <FloatingTabBar blurTarget={pages} {...action} />
+      </GlassTarget>
       <CheckInSheetHost />
     </>
   );

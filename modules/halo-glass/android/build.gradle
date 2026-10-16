@@ -1,0 +1,17 @@
+// Halo's Liquid Glass (src/main/java/app/halo/glass): HaloGlassTargetView records the content glass refracts,
+// HaloGlassView draws it through an AGSL lens. Framework APIs only (RenderNode, RenderEffect, RuntimeShader).
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'app.halo'
+version = '1.0.0'
+
+android {
+  namespace "app.halo.glass"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
