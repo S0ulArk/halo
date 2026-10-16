@@ -56,7 +56,6 @@ export function ActivityTab() {
 }
 
 function StrainView({ tab = false }: { tab?: boolean }) {
-  const { c } = useTheme();
   const calm = useCalm();
   const { timeZone } = useApp();
   const { d, today, switcher } = useDayNav();
@@ -64,13 +63,11 @@ function StrainView({ tab = false }: { tab?: boolean }) {
   const push = usePush();
   const tabClearance = useBottomClearance("tabs");
   const openChart = useOpenChart();
-  const open = (metric: string, r: ChartRange) => () => openChart({ metric, r, d: d === today ? undefined : d });
-  const expand = (metric: string, r: ChartRange) => <ExpandButton onPress={open(metric, r)} />;
+  const dParam = d === today ? undefined : d;
+  const open = React.useCallback((metric: string, r: ChartRange) => () => openChart({ metric, r, d: dParam }), [openChart, dParam]);
   const { refreshing, onRefresh, retry } = useRefresh();
   // Sections links can scroll to (`#zones` from the zone rows and Today's Zone min, `#goals` from Today's goals, …).
   const anchors = useAnchors();
-  const [ranges, setRanges] = React.useState<Record<"trend" | "calories" | "workouts", TrendRange>>({ trend: "m", calories: "w", workouts: "w" });
-  const rangeOf = (k: keyof typeof ranges) => ({ range: ranges[k], onRangeChange: (r: TrendRange) => setRanges((s) => ({ ...s, [k]: r })) });
   const q = useQuery((ctx) => getStrain(d, ctx), [d], `strain:${d}`);
   const dashboard = useDashboardKeys();
   const vm = q.data?.day === d ? q.data : undefined;
@@ -100,28 +97,8 @@ function StrainView({ tab = false }: { tab?: boolean }) {
 
   const s = vm.strain;
   const t = vm.target.value;
-  const trend = trendProps(vm.trend);
-  const calories = vm.calories.map((p) => ({ date: p.day, value: p.value, provisional: p.provisional, parts: p.parts }));
-  /** Bottom first: the day's base burn, then everyday movement, then workouts on top. */
-  const calorieParts: TrendSeries[] = [
-    { key: "resting", label: "Resting", color: c.energyResting },
-    { key: "everyday", label: "Everyday", color: c.energyActive },
-    { key: "workouts", label: "Workouts", color: c.chart4 },
-  ];
-  // The selected day's split, the last point of the calories series (strain.ts calorieSplit).
-  const dayCalories = vm.calories[vm.calories.length - 1];
-  const NOTES: Record<string, string> = {
-    resting: "Your body's base burn: heart, lungs, brain",
-    everyday: "Walking and moving outside workouts",
-    workouts: "Inside your recorded workouts",
-  };
-  const calorieLegend = calorieParts.map((p) => ({ key: p.key, label: p.label, color: p.color, note: NOTES[p.key] }));
   const link = { d, today, push, scrollTo: anchors.scrollTo };
-  const heart = (
-    <SectionShell variant="card" title="Heart rate" action={expand("strain", "day")}>
-      <IntradayHrChart data={hrSeries(vm.hr, vm.maxHr)} timeZone={timeZone} onPress={open("strain", "day")} />
-    </SectionShell>
-  );
+  const heart = <HeartCard vm={vm} timeZone={timeZone} open={open} />;
 
   return (
     <DetailScreen
@@ -183,37 +160,96 @@ function StrainView({ tab = false }: { tab?: boolean }) {
         // The Activity tab lists them in the activities card above (with Add activity and Live workout).
         !tab && <Workouts key="activities" vm={vm} timeZone={timeZone} onOpen={(id) => push(activityHref(id))} />,
         <Anchor key="trend" anchors={anchors} id="trend">
-          <SectionShell variant="card" title={ranges.trend === "w" ? "Weekly trends" : "Strain trend"} accent="strain" action={expand("strain", ranges.trend)}>
-            <TrendChart label="Strain" format="decimal1" colorBy="strain" today={today} onPress={(r) => open("strain", r)()} {...rangeOf("trend")} {...trend} />
-          </SectionShell>
+          <StrainTrendCard vm={vm} today={today} open={open} />
         </Anchor>,
         <Anchor key="calories" anchors={anchors} id="calories">
-          <SectionShell variant="card" title="Calories burned" accent="strain" info={CALORIES_INFO} action={expand("calories", ranges.calories)}>
-            <CalorieBreakdown total={dayCalories?.value ?? null} parts={dayCalories?.parts} series={calorieLegend} soFar={vm.soFar} />
-            <TrendChart
-              onPress={(r) => open("calories", r)()}
-              label="Calories burned"
-              unit="kcal"
-              format="grouped"
-              colorBy="single"
-              stack={calorieParts}
-              headline="day"
-              ranges={WEEK_MONTH}
-              today={today}
-              {...rangeOf("calories")}
-              data={{ value: calories, reason: null, provisional: false }}
-            />
-          </SectionShell>
+          <CaloriesCard vm={vm} today={today} open={open} />
         </Anchor>,
         <Anchor key="workouts" anchors={anchors} id="workouts">
-          <SectionShell variant="card" title="Workout duration" accent="strain" action={expand("workouts", ranges.workouts)}>
-            <TrendChart label="Workout duration" format="duration" colorBy="strain" ranges={WEEK_MONTH} today={today} onPress={(r) => open("workouts", r)()} {...rangeOf("workouts")} {...trendProps(vm.workouts)} />
-          </SectionShell>
+          <WorkoutTimeCard vm={vm} today={today} open={open} />
         </Anchor>,
       ]}
     />
   );
 }
+
+type Open = (metric: string, r: ChartRange) => () => void;
+
+/** The day's heart rate (a tap or the ↗ opens the explorer on Day Strain). Memoised: a page re-render skips it. */
+const HeartCard = React.memo(function HeartCard({ vm, timeZone, open }: { vm: StrainVM; timeZone: string; open: Open }) {
+  return (
+    <SectionShell variant="card" title="Heart rate" action={<ExpandButton onPress={open("strain", "day")} />}>
+      <IntradayHrChart data={hrSeries(vm.hr, vm.maxHr)} timeZone={timeZone} onPress={open("strain", "day")} />
+    </SectionShell>
+  );
+});
+
+/** Day Strain over the range the card shows (its own control): W retitles it "Weekly trends". */
+const StrainTrendCard = React.memo(function StrainTrendCard({ vm, today, open }: { vm: StrainVM; today: string; open: Open }) {
+  const [range, setRange] = React.useState<TrendRange>("m");
+  const trend = React.useMemo(() => trendProps(vm.trend), [vm.trend]);
+  return (
+    <SectionShell variant="card" title={range === "w" ? "Weekly trends" : "Strain trend"} accent="strain" action={<ExpandButton onPress={open("strain", range)} />}>
+      <TrendChart label="Strain" format="decimal1" colorBy="strain" today={today} onPress={(r) => open("strain", r)()} range={range} onRangeChange={setRange} {...trend} />
+    </SectionShell>
+  );
+});
+
+/** What each part of the day's burn is, under its name in the breakdown. */
+const CALORIE_NOTES: Record<string, string> = {
+  resting: "Your body's base burn: heart, lungs, brain",
+  everyday: "Walking and moving outside workouts",
+  workouts: "Inside your recorded workouts",
+};
+
+/** The day's calories split into resting, everyday and workouts, then the days as stacked bars (W or M). */
+const CaloriesCard = React.memo(function CaloriesCard({ vm, today, open }: { vm: StrainVM; today: string; open: Open }) {
+  const { c } = useTheme();
+  const [range, setRange] = React.useState<TrendRange>("w");
+  /** Bottom first: the day's base burn, then everyday movement, then workouts on top. */
+  const parts = React.useMemo<TrendSeries[]>(
+    () => [
+      { key: "resting", label: "Resting", color: c.energyResting },
+      { key: "everyday", label: "Everyday", color: c.energyActive },
+      { key: "workouts", label: "Workouts", color: c.chart4 },
+    ],
+    [c],
+  );
+  const calories = React.useMemo(() => vm.calories.map((p) => ({ date: p.day, value: p.value, provisional: p.provisional, parts: p.parts })), [vm.calories]);
+  // The selected day's split, the last point of the calories series (strain.ts calorieSplit).
+  const day = vm.calories[vm.calories.length - 1];
+  const legend = parts.map((p) => ({ key: p.key, label: p.label, color: p.color, note: CALORIE_NOTES[p.key] }));
+  return (
+    <SectionShell variant="card" title="Calories burned" accent="strain" info={CALORIES_INFO} action={<ExpandButton onPress={open("calories", range)} />}>
+      <CalorieBreakdown total={day?.value ?? null} parts={day?.parts} series={legend} soFar={vm.soFar} />
+      <TrendChart
+        onPress={(r) => open("calories", r)()}
+        label="Calories burned"
+        unit="kcal"
+        format="grouped"
+        colorBy="single"
+        stack={parts}
+        headline="day"
+        ranges={WEEK_MONTH}
+        today={today}
+        range={range}
+        onRangeChange={setRange}
+        data={{ value: calories, reason: null, provisional: false }}
+      />
+    </SectionShell>
+  );
+});
+
+/** Minutes of recorded workouts a day (W or M). */
+const WorkoutTimeCard = React.memo(function WorkoutTimeCard({ vm, today, open }: { vm: StrainVM; today: string; open: Open }) {
+  const [range, setRange] = React.useState<TrendRange>("w");
+  const trend = React.useMemo(() => trendProps(vm.workouts), [vm.workouts]);
+  return (
+    <SectionShell variant="card" title="Workout duration" accent="strain" action={<ExpandButton onPress={open("workouts", range)} />}>
+      <TrendChart label="Workout duration" format="duration" colorBy="strain" ranges={WEEK_MONTH} today={today} onPress={(r) => open("workouts", r)()} range={range} onRangeChange={setRange} {...trend} />
+    </SectionShell>
+  );
+});
 
 /**
  * "Strain Target 12.0 – 15.0": a range, so it is its own row rather than a stat (no comparison): the flame square, the

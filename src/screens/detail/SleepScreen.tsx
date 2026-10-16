@@ -61,6 +61,8 @@ function SleepView({ tab = false }: { tab?: boolean }) {
   const [mode, setMode] = React.useState<Mode>("d");
   const dayParam = d === today ? undefined : d;
   const open = React.useCallback((metric: string, r: ChartRange) => () => openChart({ metric, r, d: dayParam }), [openChart, dayParam]);
+  // The night's charts open the explorer on the night; one stable callback, so their memoised cards skip re-renders.
+  const expandNight = React.useMemo(() => open("hours", "day"), [open]);
   const q = useQuery((ctx) => getSleep(d, ctx), [d], `sleep:${d}`);
   const vm = q.data?.day === d ? q.data : undefined;
   useHashScroll(anchors, !!vm);
@@ -88,22 +90,22 @@ function SleepView({ tab = false }: { tab?: boolean }) {
   if (q.error && !vm) return <DetailScreen {...common} primary={<LoadError onRetry={retry} />} />;
   if (!vm) return <DetailScreen {...common} {...sleepSkeleton()} />;
   if (mode !== "d") return <DetailScreen {...common} {...nightsSlots({ vm, mode, day: d, today, open })} />;
-  return <DetailScreen {...common} {...nightSlots({ vm, day: d, today, timeZone, anchors, push, open })} />;
+  return <DetailScreen {...common} {...nightSlots({ vm, day: d, today, timeZone, anchors, push, open, expandNight })} />;
 }
 
 type Open = (metric: string, r: ChartRange) => () => void;
 
 /** D: the night, as DetailScreen's slots. */
-function nightSlots({ vm, day, today, timeZone, anchors, push, open }: { vm: SleepVM; day: string; today: string; timeZone: string; anchors: Anchors; push: (href: string) => void; open: Open }) {
+function nightSlots({ vm, day, today, timeZone, anchors, push, open, expandNight }: { vm: SleepVM; day: string; today: string; timeZone: string; anchors: Anchors; push: (href: string) => void; open: Open; expandNight: () => void }) {
   // Rows lead to their own section (`#need`, an Anchor below) or screen.
   const link = { d: day, today, push, scrollTo: anchors.scrollTo };
   return {
     hero: <TimeAsleep hours={vm.hours} stages={vm.stages} timeZone={timeZone} />,
-    summary: <StagesCards stages={vm.stages} timeZone={timeZone} onExpand={open("hours", "day")} />,
+    summary: <StagesCards stages={vm.stages} timeZone={timeZone} onExpand={expandNight} />,
     insight: vm.insight ? <InsightCard body={vm.insight} /> : null,
     primary: <Performance vm={vm} link={link} />,
     secondary: [
-      <NightHeart key="hr" hr={vm.nightHr} stages={vm.stages} timeZone={timeZone} onExpand={open("hours", "day")} />,
+      <NightHeart key="hr" hr={vm.nightHr} stages={vm.stages} timeZone={timeZone} onExpand={expandNight} />,
       // The week of nights against your need, then tonight's plan: the two things to act on, before the detail.
       <SleepWeekCard key="week" day={day} goalMin={vm.hoursVsNeed.value?.needMin ?? 480} />,
       <Anchor key="planner" anchors={anchors} id="planner">
@@ -123,9 +125,7 @@ function nightSlots({ vm, day, today, timeZone, anchors, push, open }: { vm: Sle
         <Restorative vm={vm} today={today} open={open} />
       </Anchor>,
       <Anchor key="efficiency" anchors={anchors} id="efficiency">
-        <RangedTrend title="Sleep efficiency" metric="efficiency" open={open}>
-          {(range, onRangeChange) => <TrendChart label="Sleep efficiency" unit="%" format="int" colorBy="sleep" direction="up" line today={today} range={range} onRangeChange={onRangeChange} onPress={(r) => open("efficiency", r)()} {...trendProps(vm.efficiencyTrend)} />}
-        </RangedTrend>
+        <Efficiency vm={vm} today={today} open={open} />
       </Anchor>,
       <ListGroup key="details" title="Details" inset={16}>
         {vm.details.map((k) => (
@@ -133,9 +133,7 @@ function nightSlots({ vm, day, today, timeZone, anchors, push, open }: { vm: Sle
         ))}
       </ListGroup>,
       <Anchor key="debt" anchors={anchors} id="debt">
-        <RangedTrend title="Sleep debt" metric="debt" initial="m" open={open}>
-          {(range, onRangeChange) => <TrendChart label="Sleep debt" unit="h" format="decimal1" colorBy="sleep" direction="down" today={today} range={range} onRangeChange={onRangeChange} onPress={(r) => open("debt", r)()} {...trendProps(vm.debtTrend)} />}
-        </RangedTrend>
+        <Debt vm={vm} today={today} open={open} />
       </Anchor>,
     ],
   };
@@ -188,44 +186,55 @@ function StatusWord({ status }: { status: "optimal" | "sufficient" | "poor" }) {
   );
 }
 
-/** A trend card that owns its range (W / M on the card's own control). */
-function RangedTrend({ title, metric, initial = "w", open, children }: { title: string; metric: string; initial?: TrendRange; open: Open; children: (range: TrendRange, onRangeChange: (r: TrendRange) => void) => React.ReactNode }) {
-  const [range, setRange] = React.useState<TrendRange>(initial);
+/** A sleep trend card's props: the night's model, today, the explorer, and (W, M, 6M) the page's range pinned. */
+type CardProps = { vm: SleepVM; today: string; open: Open; fixed?: TrendRange };
+
+/**
+ * Deep under REM, as WHOOP stacks them, the night's minutes of each: on the card's own W / M control, or the page's
+ * range pinned. Memoised with its range inside it: a range tap redraws this card alone.
+ */
+const Restorative = React.memo(function Restorative({ vm, today, open, fixed }: CardProps) {
+  const { c } = useTheme();
+  const [own, setOwn] = React.useState<TrendRange>("w");
+  const range = fixed ?? own;
+  const parts = React.useMemo<TrendSeries[]>(
+    () => [
+      { key: "rem", label: "REM", color: c.stageRem },
+      { key: "deep", label: "Deep", color: c.stageDeep },
+    ],
+    [c],
+  );
+  const data = React.useMemo(() => ({ value: vm.restorative.map((pt) => ({ date: pt.day, value: pt.value, parts: pt.parts })), reason: null, provisional: false }), [vm.restorative]);
   return (
-    <SectionShell variant="card" title={title} accent="sleep" action={<ExpandButton onPress={open(metric, range)} />}>
-      {children(range, setRange)}
+    <SectionShell variant="card" title="Restorative sleep" accent="sleep" action={<ExpandButton onPress={open("restorative", range)} />}>
+      <TrendChart onPress={(r) => open("restorative", r)()} label="Restorative sleep" format="duration" colorBy="single" stack={parts} headline="day" ranges={WEEK_MONTH} fixedRange={fixed} today={today} range={range} onRangeChange={setOwn} data={data} />
     </SectionShell>
   );
-}
+});
 
-/** Deep under REM, as WHOOP stacks them, the night's minutes of each. */
-function Restorative({ vm, today, open, fixed }: { vm: SleepVM; today: string; open: Open; fixed?: TrendRange }) {
-  const { c } = useTheme();
-  const parts: TrendSeries[] = [
-    { key: "rem", label: "REM", color: c.stageRem },
-    { key: "deep", label: "Deep", color: c.stageDeep },
-  ];
+/** Sleep efficiency night by night, a line, on its own W / M / 6M or the page's range. */
+const Efficiency = React.memo(function Efficiency({ vm, today, open, fixed }: CardProps) {
+  const [own, setOwn] = React.useState<TrendRange>("w");
+  const range = fixed ?? own;
+  const trend = React.useMemo(() => trendProps(vm.efficiencyTrend), [vm.efficiencyTrend]);
   return (
-    <RangedTrend title="Restorative sleep" metric="restorative" initial={fixed} open={open}>
-      {(range, onRangeChange) => (
-        <TrendChart
-          onPress={(r) => open("restorative", r)()}
-          label="Restorative sleep"
-          format="duration"
-          colorBy="single"
-          stack={parts}
-          headline="day"
-          ranges={WEEK_MONTH}
-          fixedRange={fixed}
-          today={today}
-          range={range}
-          onRangeChange={onRangeChange}
-          data={{ value: vm.restorative.map((pt) => ({ date: pt.day, value: pt.value, parts: pt.parts })), reason: null, provisional: false }}
-        />
-      )}
-    </RangedTrend>
+    <SectionShell variant="card" title="Sleep efficiency" accent="sleep" action={<ExpandButton onPress={open("efficiency", range)} />}>
+      <TrendChart label="Sleep efficiency" unit="%" format="int" colorBy="sleep" direction="up" line today={today} fixedRange={fixed} range={range} onRangeChange={setOwn} onPress={(r) => open("efficiency", r)()} {...trend} />
+    </SectionShell>
   );
-}
+});
+
+/** Sleep debt night by night, on its own W / M / 6M (the month first) or the page's range. */
+const Debt = React.memo(function Debt({ vm, today, open, fixed }: CardProps) {
+  const [own, setOwn] = React.useState<TrendRange>("m");
+  const range = fixed ?? own;
+  const trend = React.useMemo(() => trendProps(vm.debtTrend), [vm.debtTrend]);
+  return (
+    <SectionShell variant="card" title="Sleep debt" accent="sleep" action={<ExpandButton onPress={open("debt", range)} />}>
+      <TrendChart label="Sleep debt" unit="h" format="decimal1" colorBy="sleep" direction="down" today={today} fixedRange={fixed} range={range} onRangeChange={setOwn} onPress={(r) => open("debt", r)()} {...trend} />
+    </SectionShell>
+  );
+});
 
 /** A daily series from the chart explorer's query as a trend's points, ending on `day` (a year at most). */
 function seriesPoints(s: ChartSeriesVM, day: string): TrendPoint[] {
@@ -245,12 +254,8 @@ function nightsSlots({ vm, mode, day, today, open }: { vm: SleepVM; mode: Exclud
       <NightsTrend key="performance" metric="sleep" title="Sleep performance" unit="%" format="int" mode={mode} day={day} today={today} open={open} />,
       // Restorative sleep holds the last 30 nights: at six months it stays on the month.
       <Restorative key="restorative" vm={vm} today={today} open={open} fixed={mode === "w" ? "w" : "m"} />,
-      <SectionShell key="efficiency" variant="card" title="Sleep efficiency" accent="sleep" action={<ExpandButton onPress={open("efficiency", mode)} />}>
-        <TrendChart label="Sleep efficiency" unit="%" format="int" colorBy="sleep" direction="up" line today={today} fixedRange={mode} onPress={(r) => open("efficiency", r)()} {...trendProps(vm.efficiencyTrend)} />
-      </SectionShell>,
-      <SectionShell key="debt" variant="card" title="Sleep debt" accent="sleep" action={<ExpandButton onPress={open("debt", mode)} />}>
-        <TrendChart label="Sleep debt" unit="h" format="decimal1" colorBy="sleep" direction="down" today={today} fixedRange={mode} onPress={(r) => open("debt", r)()} {...trendProps(vm.debtTrend)} />
-      </SectionShell>,
+      <Efficiency key="efficiency" vm={vm} today={today} open={open} fixed={mode} />,
+      <Debt key="debt" vm={vm} today={today} open={open} fixed={mode} />,
     ],
   };
 }

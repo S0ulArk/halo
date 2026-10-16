@@ -14,9 +14,10 @@ import { reasonCopy } from "@/lib/reasons";
 import { alpha } from "@/lib/utils";
 import { getRecovery, type Contributor, type RecoveryVM } from "@/queries";
 import { useQuery } from "@/state/app";
-import { ContributorRow, DriverList, EmptyState, ReasonPlaceholder, SectionShell, TrendChart, Txt, useTheme, type TrendPoint, type TrendRange } from "@/ui";
+import { ContributorRow, DriverList, EmptyState, ReasonPlaceholder, SectionShell, TrendChart, Txt, useTheme, type TrendRange } from "@/ui";
 import { useCalm } from "@/ui/calm";
 import { ExpandButton } from "@/ui/components/ChartFrame";
+import { usePress, usePressStyle } from "@/ui/components/press";
 import { HaloRing } from "@/ui/components/Halo";
 import { MetricTags } from "@/ui/components/primitives";
 import { font, TABULAR } from "@/ui/fonts";
@@ -46,8 +47,6 @@ export default function RecoveryScreen() {
   const anchors = useAnchors();
   const openChart = useOpenChart();
   const push = usePush();
-  // The trend's range is the page's (the web keeps it in `?r=`): W retitles the card "Weekly trends".
-  const [range, setRange] = React.useState<TrendRange>("m");
   const q = useQuery((ctx) => getRecovery(d, ctx), [d], `recovery:${d}`);
   const vm = q.data?.day === d ? q.data : undefined;
 
@@ -56,7 +55,6 @@ export default function RecoveryScreen() {
   if (!vm) return <DetailScreen {...common} {...recoverySkeleton()} />;
 
   const r = vm.recovery;
-  const trend = trendProps(vm.trend);
   const dParam = d === today ? undefined : d;
   // Each contributor opens its own history: its chart, or the Sleep tab for the night behind it.
   const openContributor = (key: Contributor["key"]) => (key === "sleep" ? push(dayHref(SLEEP_TAB, d, today)) : openChart({ metric: CONTRIBUTOR_CHART[key], r: "m", d: dParam }));
@@ -69,14 +67,12 @@ export default function RecoveryScreen() {
           <WhatShapedIt vm={vm} nightsLeft={r.nightsLeft} onOpen={openContributor} />
         </Anchor>
       }
-      primary={<RecoveryWeek points={trend.data.value} day={d} onPress={() => openChart({ metric: "recovery", r: "w", d: dParam })} />}
+      primary={<RecoveryWeek points={vm.trend.points} day={d} onPress={() => openChart({ metric: "recovery", r: "w", d: dParam })} />}
       secondary={[
         <SectionShell key="effect" variant="card" title="Effect on Recovery" accent="recovery">
           <Effect vm={vm} />
         </SectionShell>,
-        <SectionShell key="trend" variant="card" title={range === "w" ? "Weekly trends" : "Recovery trend"} action={<ExpandButton onPress={() => openChart({ metric: "recovery", r: range, d: dParam })} />}>
-          <TrendChart label="Recovery" unit="%" format="int" colorBy="band" direction="up" today={today} range={range} onRangeChange={setRange} onPress={(rr) => openChart({ metric: "recovery", r: rr, d: dParam })} {...trend} />
-        </SectionShell>,
+        <RecoveryTrend key="trend" vm={vm} today={today} dParam={dParam} />,
         <Forecast key="forecast" vm={vm} />,
       ]}
     />
@@ -115,6 +111,18 @@ function WhatShapedIt({ vm, nightsLeft, onOpen }: { vm: RecoveryVM; nightsLeft?:
   );
 }
 
+/** Recovery over the range the card shows (its own control, so a change redraws this card alone): W retitles it "Weekly trends". */
+const RecoveryTrend = React.memo(function RecoveryTrend({ vm, today, dParam }: { vm: RecoveryVM; today: string; dParam: string | undefined }) {
+  const openChart = useOpenChart();
+  const [range, setRange] = React.useState<TrendRange>("m");
+  const trend = React.useMemo(() => trendProps(vm.trend), [vm.trend]);
+  return (
+    <SectionShell variant="card" title={range === "w" ? "Weekly trends" : "Recovery trend"} accent="recovery" action={<ExpandButton onPress={() => openChart({ metric: "recovery", r: range, d: dParam })} />}>
+      <TrendChart label="Recovery" unit="%" format="int" colorBy="band" direction="up" today={today} range={range} onRangeChange={setRange} onPress={(rr) => openChart({ metric: "recovery", r: rr, d: dParam })} {...trend} />
+    </SectionShell>
+  );
+});
+
 /** How many points each signal moved the score, as a diverging chart. */
 function Effect({ vm }: { vm: RecoveryVM }) {
   const m = vm.drivers;
@@ -136,11 +144,13 @@ const GRID = [0, 33, 67, 100] as const;
  * full), dashed rules at 0, 33, 67 and 100 with the axis on the right, the week's average a dashed line with its pill,
  * the weekday letters under the bars. The bars grow up from the floor once, staggered, on the UI thread (a scale).
  */
-function RecoveryWeek({ points, day, onPress }: { points: TrendPoint[] | null; day: string; onPress: () => void }) {
+function RecoveryWeek({ points, day, onPress }: { points: RecoveryVM["trend"]["points"]; day: string; onPress: () => void }) {
   const { c } = useTheme();
   const calm = useCalm();
+  const press = usePress();
+  const pressed = usePressStyle(press, { dim: 0.88 });
   const [width, setWidth] = React.useState(0);
-  const week = (points ?? []).filter((p) => p.date <= day).slice(-7);
+  const week = points.filter((p) => p.day <= day).slice(-7).map((p) => ({ date: p.day, value: p.value }));
   const values = week.flatMap((p) => (p.value === null ? [] : [p.value]));
   const avg = values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
   const green = values.filter((v) => recoveryBand(v) === "green").length;
@@ -151,7 +161,7 @@ function RecoveryWeek({ points, day, onPress }: { points: TrendPoint[] | null; d
     .map((p) => `${formatDay(p.date, { weekday: "long" })} ${p.value === null ? "no score" : `${Math.round(p.value)} percent`}`)
     .join(", ")}.`;
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${summary} Opens the chart`}>
+    <PressableView onPress={onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut} accessibilityRole="button" accessibilityLabel={`${summary} Opens the chart`} style={pressed}>
       <View style={{ borderRadius: 20, backgroundColor: calm.card, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12, gap: 14 }}>
         <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", justifyContent: "space-between", columnGap: 12, rowGap: 2 }}>
           <Txt size={17} lineHeight={22} weight={600} style={{ color: calm.ink }}>
@@ -201,9 +211,11 @@ function RecoveryWeek({ points, day, onPress }: { points: TrendPoint[] | null; d
           )}
         </View>
       </View>
-    </Pressable>
+    </PressableView>
   );
 }
+
+const PressableView = Animated.createAnimatedComponent(Pressable);
 
 /** One day's bar: a whole capsule from the floor to its score, growing up from the floor once (scaleY on the UI thread). */
 function WeekBar({ index, left, top, color, opacity }: { index: number; left: number; top: number; color: string; opacity: number }) {

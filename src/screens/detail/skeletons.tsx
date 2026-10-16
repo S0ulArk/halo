@@ -135,6 +135,7 @@ export function sleepSkeleton(): Slots {
   return {
     hero: <TimeAsleepSkeleton />,
     summary: <StagesCardsSkeleton />,
+    insight: <InsightCard.Skeleton />,
     primary: (
       <ListGroup title="Sleep performance" inset={16}>
         {PERFORMANCE_ROWS.map((l) => (

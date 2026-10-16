@@ -139,9 +139,10 @@ function StageTime({ minutes, size = 22 }: { minutes: number; size?: number }) {
 
 /**
  * The night's stages: the chart in one card (a tap opens the explorer on the night), and the night's total in each
- * stage in a second, four across under their coloured dots with each stage's share of the night.
+ * stage in a second, four across under their coloured dots with each stage's share of the night. Memoised: a page
+ * re-render (a refresh) skips it.
  */
-export function StagesCards({ stages, timeZone, onExpand }: { stages: SleepVM["stages"]; timeZone: string; onExpand: () => void }) {
+export const StagesCards = React.memo(function StagesCards({ stages, timeZone, onExpand }: { stages: SleepVM["stages"]; timeZone: string; onExpand: () => void }) {
   const c = useCalm();
   const color = useStageColor();
   const card = { borderRadius: 20, backgroundColor: c.card } as const;
@@ -193,7 +194,7 @@ export function StagesCards({ stages, timeZone, onExpand }: { stages: SleepVM["s
       </View>
     </View>
   );
-}
+});
 
 /** The stages chart's loading shape. */
 export function StagesCardsSkeleton() {
@@ -232,9 +233,10 @@ function StageTrack({ pct, typical, fill, index }: { pct: number; typical: [numb
 
 /**
  * The overnight heart rate (a tap opens the explorer), then the stages as a selection list: each stage's time and
- * share against its typical range, and the checked one lighting its stretches on the heart-rate line above.
+ * share against its typical range, and the checked one lighting its stretches on the heart-rate line above. The
+ * choice is this card's own state, so a tap redraws the chart and the list alone.
  */
-export function NightHeart({ hr, stages, timeZone, onExpand }: { hr: SleepVM["nightHr"]; stages: SleepVM["stages"]; timeZone: string; onExpand: () => void }) {
+export const NightHeart = React.memo(function NightHeart({ hr, stages, timeZone, onExpand }: { hr: SleepVM["nightHr"]; stages: SleepVM["stages"]; timeZone: string; onExpand: () => void }) {
   const c = useCalm();
   const color = useStageColor();
   const [selected, setSelected] = React.useState<Stage>("awake");
@@ -248,7 +250,16 @@ export function NightHeart({ hr, stages, timeZone, onExpand }: { hr: SleepVM["ni
         <SleepHrChart data={hr} highlight={highlight} highlightLabel={highlight ? ROW_LABEL[selected] : undefined} highlightColor={highlight ? color(selected) : undefined} timeZone={timeZone} onPress={onExpand} />
       </SectionShell>
       {night && (
-        <ListGroup title={`Stages · ${hmm(Math.max(1, night.wake - night.bed) / 60_000)} in bed`} inset={16 + 12 + 12} footer="Choose a stage to light its stretches on the heart rate above. The band behind each bar is the typical range.">
+        <ListGroup
+          title="Stages"
+          right={
+            <Txt size={13} lineHeight={18} style={[TABULAR, { color: c.sub }]}>
+              {`Duration ${hmm(Math.max(1, night.wake - night.bed) / 60_000)}`}
+            </Txt>
+          }
+          inset={16 + 12 + 12}
+          footer="Choose a stage to light its stretches on the heart rate above. The band behind each bar is the typical range."
+        >
           {rows.map((r, i) => {
             const status = against(r.pct, r.typical);
             return (
@@ -282,4 +293,4 @@ export function NightHeart({ hr, stages, timeZone, onExpand }: { hr: SleepVM["ni
       )}
     </View>
   );
-}
+});

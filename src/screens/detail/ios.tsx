@@ -67,16 +67,17 @@ export function GlassSegmented<V extends string>({ value, onChange, items, acces
   const onLayout = React.useCallback((e: LayoutChangeEvent) => setWidth(Math.round(e.nativeEvent.layout.width * 100) / 100), []);
   return (
     <View accessibilityRole="tablist" accessibilityLabel={accessibilityLabel} onLayout={onLayout} style={[{ height: SEG_H, borderRadius: SEG_H / 2 }, style]}>
-      <LiquidGlass pointerEvents="none" style={StyleSheet.absoluteFill} cornerRadius={SEG_H / 2} shadow={dark ? "0 4px 16px rgba(0,0,0,0.4)" : "0 4px 16px rgba(0,0,0,0.06)"} />
+      {/* The track: a grey glass capsule (the system fill's tone), so the white thumb reads clearly on it. */}
+      <LiquidGlass pointerEvents="none" style={StyleSheet.absoluteFill} cornerRadius={SEG_H / 2} tint={dark ? c.chip : "#e5e5ea"} frost={0.92} shadow={dark ? "0 4px 16px rgba(0,0,0,0.4)" : "0 4px 14px rgba(0,0,0,0.05)"} />
       {slotW > 0 && (
         <Animated.View pointerEvents="none" style={[{ position: "absolute", left: SEG_PAD, top: SEG_PAD, width: slotW, height: SEG_H - SEG_PAD * 2 }, thumb]}>
           <LiquidGlass
             backdrop={false}
             style={StyleSheet.absoluteFill}
             cornerRadius={(SEG_H - SEG_PAD * 2) / 2}
-            tint="#ffffff"
-            frost={dark ? 0.18 : 0.96}
-            shadow={dark ? "0 2px 8px rgba(0,0,0,0.45)" : "0 2px 8px rgba(0,0,0,0.12)"}
+            tint={dark ? c.thumb : "#ffffff"}
+            frost={dark ? 0.9 : 0.98}
+            shadow={dark ? "0 2px 8px rgba(0,0,0,0.45)" : "0 3px 8px rgba(0,0,0,0.12)"}
           />
         </Animated.View>
       )}
