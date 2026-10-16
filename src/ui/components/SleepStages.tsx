@@ -1,3 +1,7 @@
+// "Last night's sleep" in the Apple Health manner: TIME ASLEEP over the hours and minutes (numbers large, units small),
+// the overnight heart rate, then the stages as a breakdown (each stage's share on a plain capsule track against its
+// typical range, the chosen stage lighting its stretches on the heart-rate line in its own colour) or as Apple's
+// stages chart with the night's totals under it.
 import * as React from "react";
 import { Pressable, View } from "react-native";
 import { DATA_COLORS, deltaTone, GOOD_DIRECTION } from "@/lib/bands";
@@ -9,7 +13,6 @@ import { font } from "@/ui/fonts";
 import { useTheme } from "@/ui/ThemeProvider";
 import { Caption } from "./calmKit";
 import { EmptyState } from "./EmptyState";
-import { Hatch } from "./Hatch";
 import { HypnogramChart } from "./Hypnogram";
 import { MetricState } from "./MetricState";
 import { DeltaMark } from "./primitives";
@@ -44,24 +47,46 @@ export type SleepStagesProps = {
 const ORDER: Stage[] = ["awake", "light", "deep", "rem"];
 const EMPTY = "No stage data for this night. Fitbit only stages sleeps longer than about 3 hours.";
 
-/** "Hours of sleep": time asleep, the arrow against the prior 30 nights and their mean under it. */
+/** "7 hr 12 min" the Apple Health way: the numbers in the headline face, the units small and grey beside them. */
+function HoursMinutes({ minutes, size, color }: { minutes: number; size: number; color: string }) {
+  const c = useCalm();
+  const m = Math.max(0, Math.round(minutes));
+  const h = Math.floor(m / 60);
+  const unit = (u: string) => (
+    <Txt size={Math.round(size * 0.5)} lineHeight={Math.round(size * 1.12)} weight={600} color={c.sub}>
+      {u}
+    </Txt>
+  );
+  return (
+    <Txt size={size} lineHeight={Math.round(size * 1.12)} style={[font.numberAt(size), { color }]}>
+      {h > 0 && (
+        <>
+          {String(h)}
+          {unit(" hr ")}
+        </>
+      )}
+      {String(m % 60)}
+      {unit(" min")}
+    </Txt>
+  );
+}
+
+/** "Time asleep": the caption over the hours and minutes, the arrow against the prior 30 nights and their mean under it. */
 function HoursHero({ h }: { h: SleepHours }) {
   const t = h.average === null ? undefined : deltaTone(GOOD_DIRECTION.hours, h.asleepMin, h.average, h.sd);
   const sentence = statSentence({ label: "Hours of sleep", valueText: durationWords(h.asleepMin), averageText: h.average === null ? undefined : durationWords(h.average), dir: t?.dir, tone: t?.tone });
   const c = useCalm();
-  // The number first in the sleep ink, the caps caption under it, then the 30 nights' mean it is set against.
+  // The caps caption first, then the time in the ink with its arrow, then the 30 nights' mean it is set against.
   return (
     <View accessibilityLabel={sentence}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <Txt size={34} lineHeight={38} style={[font.numberAt(34), { color: c.tintInk.lavender }]}>
-          {hmm(h.asleepMin)}
-        </Txt>
+      <Caption>Time asleep</Caption>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 }}>
+        <HoursMinutes minutes={h.asleepMin} size={34} color={c.ink} />
         <View style={{ width: 8, alignSelf: "flex-start", marginTop: 10 }}>{t && <DeltaMark dir={t.dir} tone={t.tone} />}</View>
       </View>
-      <Caption style={{ marginTop: 2 }}>Hours of sleep</Caption>
       {h.average !== null && (
-        <Txt size={12} lineHeight={16} style={[font.numeric(500), { color: c.faint, marginTop: 4 }]}>
-          {`30-night avg ${hmm(h.average)}`}
+        <Txt size={13} lineHeight={18} style={[font.numeric(500), { color: c.sub, marginTop: 2 }]}>
+          {`30-night average ${hmm(h.average)}`}
         </Txt>
       )}
     </View>
@@ -101,17 +126,17 @@ function RangeMark({ width, height }: { width: number; height: number }) {
   );
 }
 
-/** A stage's share of the night on a capsule track, its typical range a soft band with crisp ends over it. */
+/** A stage's share of the night on a plain capsule track, its typical range a soft band with crisp ends over it. */
 function StageTrack({ pct, typical, fill }: { pct: number; typical: [number, number]; fill: string }) {
   const c = useCalm();
   const [lo, hi] = typical;
   return (
     <View style={{ height: BAND_H, justifyContent: "center" }}>
       <View style={{ position: "absolute", top: 0, bottom: 0, left: `${lo}%`, width: `${hi - lo}%`, borderRadius: 4, backgroundColor: alpha(c.ink, 0.07) }} />
-      <Hatch height={TRACK_H}>
-        <View style={{ position: "absolute", top: 0, bottom: 0, left: `${lo}%`, width: `${hi - lo}%`, backgroundColor: alpha(c.ink, 0.1) }} />
+      <View style={{ height: TRACK_H, borderRadius: TRACK_H / 2, overflow: "hidden", backgroundColor: alpha(c.ink, 0.08) }}>
+        <View style={{ position: "absolute", top: 0, bottom: 0, left: `${lo}%`, width: `${hi - lo}%`, backgroundColor: alpha(c.ink, 0.08) }} />
         <View style={{ position: "absolute", top: 0, bottom: 0, left: 0, borderRadius: TRACK_H / 2, width: `${Math.min(100, Math.max(0, pct))}%`, backgroundColor: fill }} />
-      </Hatch>
+      </View>
       {/* The range's two ends over everything, so they read even where the share's fill runs through them. */}
       {[lo, hi].map((v) => (
         <View key={v} style={{ position: "absolute", top: 0, bottom: 0, left: `${v}%`, width: 1.5, marginLeft: -0.75, borderRadius: 0.75, backgroundColor: alpha(c.ink, 0.45) }} />
@@ -174,10 +199,10 @@ function Rows({ night, selected, onSelect, timeZone, onExpand }: { night: SleepS
                 accessibilityLabel={`${ROW_LABEL[r.stage]}, ${hmm(r.minutes)}, ${Math.round(r.pct)} percent of the night. Typical ${r.typical[0]} to ${r.typical[1]} percent, ${status}`}
                 style={{ flexDirection: "row", gap: 12 }}
               >
-                {/* The radio: a grey ring, filled teal (the active colour) with a white centre when chosen. */}
+                {/* The radio in the stage's colour (the chart's and the heart-rate line's): a ring, filled with a card-coloured centre when chosen. */}
                 <View style={{ width: RADIO, height: 24, alignItems: "center", justifyContent: "center" }}>
-                  <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: on ? calm.teal : calm.faint, backgroundColor: on ? calm.teal : "transparent", alignItems: "center", justifyContent: "center" }}>
-                    {on && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: calm.card }} />}
+                  <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: on ? c[color.fill] : alpha(c[color.fill], 0.55), backgroundColor: on ? c[color.fill] : "transparent", alignItems: "center", justifyContent: "center" }}>
+                    {on && <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: calm.card }} />}
                   </View>
                 </View>
                 <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
@@ -213,6 +238,7 @@ function Rows({ night, selected, onSelect, timeZone, onExpand }: { night: SleepS
  */
 export function SleepStages({ hours, hr, data, timeZone, onExpand }: SleepStagesProps) {
   const c = useCalm();
+  const { c: tokens } = useTheme();
   const [selected, setSelected] = React.useState<Stage>("awake");
   const segments = data?.value?.segments;
   const highlight = React.useMemo(() => (segments?.length ? segments.filter((g) => g.stage === selected) : undefined), [segments, selected]);
@@ -221,7 +247,7 @@ export function SleepStages({ hours, hr, data, timeZone, onExpand }: SleepStages
       {(h) => (
         <View style={{ gap: 16 }}>
           <HoursHero h={h} />
-          <SleepHrChart data={hr} highlight={highlight} highlightLabel={highlight ? ROW_LABEL[selected] : undefined} timeZone={timeZone} onPress={onExpand} />
+          <SleepHrChart data={hr} highlight={highlight} highlightLabel={highlight ? ROW_LABEL[selected] : undefined} highlightColor={highlight ? tokens[DATA_COLORS[`stage-${selected}`].fill] : undefined} timeZone={timeZone} onPress={onExpand} />
           <View style={{ borderTopWidth: 1, borderTopColor: c.line, paddingTop: 16 }}>
             <MetricState metric={data} skeleton={<StageRowsSkeleton />} empty={<EmptyState body={EMPTY} />} renderReason={(r) => <ReasonPlaceholder reason={r} size="md" />}>
               {(night) => (night.segments.length ? <Rows night={night} selected={selected} onSelect={setSelected} timeZone={timeZone} onExpand={onExpand} /> : <EmptyState body={EMPTY} />)}
@@ -273,9 +299,9 @@ export function SleepStagesSkeleton() {
   return (
     <View style={{ gap: 16 }}>
       <View>
-        <SkeletonText role="valueHero" size={34} lineHeight={38} chars={4} />
-        <Caption style={{ marginTop: 2 }}>Hours of sleep</Caption>
-        <SkeletonText role="numericCaption" size={12} lineHeight={16} chars={10} style={{ marginTop: 4 }} />
+        <Caption>Time asleep</Caption>
+        <SkeletonText role="valueHero" size={34} lineHeight={38} chars={6} style={{ marginTop: 2 }} />
+        <SkeletonText role="numericCaption" size={13} lineHeight={18} chars={14} style={{ marginTop: 2 }} />
       </View>
       <SleepHrChartSkeleton />
       <View style={{ borderTopWidth: 1, borderTopColor: c.line, paddingTop: 16 }}>

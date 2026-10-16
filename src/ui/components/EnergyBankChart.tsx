@@ -1,3 +1,6 @@
+// The day's Energy Bank in the Apple Health chart language: a smooth teal line over a fading fill from wake to now (or
+// to sleep), the latest reading ringed in its band's colour (green, yellow or red, as Recovery bands), the biggest
+// drains marked on the curve with their amounts, naps as soft spans, the 0-100 axis on the right.
 import * as React from "react";
 import { Group, Path } from "@shopify/react-native-skia";
 import { useSharedValue } from "react-native-reanimated";
@@ -8,7 +11,7 @@ import { clock, formatValue } from "@/lib/format";
 import type { Metric } from "@/lib/reasons";
 import { useCalm } from "@/ui/calm";
 import { useTheme } from "@/ui/ThemeProvider";
-import { AXIS, BandShader, bandPaint, ChartFigure, clockLabels, FadeShader, Grid, LINE, measure, numbersSig, Pill, PointMark, ScrubCursor, ScrubLabel, sp, SText, textWidth, useChartFonts, useChartInk, useStableBy, type Scrub } from "./ChartFrame";
+import { AXIS, ChartFigure, clockLabels, FadeShader, Grid, hourText, LINE, measure, numbersSig, Pill, PointMark, RightAxis, ScrubCursor, ScrubLabel, sp, SText, textWidth, useChartFonts, useChartInk, useStableBy, type Scrub } from "./ChartFrame";
 import { EmptyState } from "./EmptyState";
 import { spanAreas } from "./IntradayHrChart";
 import { MetricState } from "./MetricState";
@@ -26,12 +29,13 @@ export type EnergySeries = {
 export type EnergyBankChartProps = { data: Metric<EnergySeries> | null | undefined; timeZone?: string; onPress?: () => void };
 
 const H = 180;
-const X0 = 32;
-const RIGHT = 8;
+const X0 = 4;
 const PLOT_TOP = 22;
-const Y_TICKS = [33, 67, 100];
-/** Hour labels keep this far apart (a clock time is about 30 px at 12 px). */
-const TICK_MIN = 46;
+const Y_TICKS = [0, 33, 67, 100];
+/** The axis on the right: room for "100" and the gap to the plot. */
+const RIGHT = 28;
+/** Hour labels keep this far apart. */
+const TICK_MIN = 34;
 const PILL_H = 18;
 
 function Chart({ e: given, tz, onPress }: { e: EnergySeries; tz?: string; onPress?: () => void }) {
@@ -49,8 +53,10 @@ function Chart({ e: given, tz, onPress }: { e: EnergySeries; tz?: string; onPres
   const calm = useCalm();
   const k = useChartInk();
   const fonts = useChartFonts();
-  // Energy bands like Recovery: red ≤ 33, yellow 34-66, green ≥ 67.
+  // Energy bands like Recovery: red ≤ 33, yellow 34-66, green ≥ 67 (the latest reading and the scrubbed dot take them).
   const BANDS: Band[] = React.useMemo(() => [0, 34, 67].map((from) => ({ from, color: c[DATA_COLORS[recoveryColor(from)].fill] })), [c]);
+  // The curve in Energy's teal.
+  const ink = c.body;
   const m = React.useMemo(() => {
     const vals = e.points.flatMap((p) => (p.value === null ? [] : [p.value]));
     const first = e.points[0]?.t ?? 0;
@@ -65,7 +71,6 @@ function Chart({ e: given, tz, onPress }: { e: EnergySeries; tz?: string; onPres
     const ts = e.points.map((p) => p.t);
     return {
       top: Math.max(...vals),
-      bottom: Math.min(...vals),
       first,
       last,
       latest,
@@ -75,7 +80,7 @@ function Chart({ e: given, tz, onPress }: { e: EnergySeries; tz?: string; onPres
       summary: `Energy from ${clock(first, tz)}: started at ${formatValue("int", startV)} percent, now ${formatValue("int", latest?.value)} percent.`,
     };
   }, [e, tz]);
-  const { top, bottom, first, last, latest, drains, ts, times, summary } = m;
+  const { top, first, last, latest, drains, ts, times, summary } = m;
   const valueAt = (t: number) => e.points[nearestIndex(ts, t)]?.value ?? null;
 
   // The scrub readout per point ("64%", "14:05"), measured once.
@@ -119,7 +124,7 @@ function Chart({ e: given, tz, onPress }: { e: EnergySeries; tz?: string; onPres
       height={H}
       summary={summary}
       scrub={scrub}
-      deps={[m, e, tz, c, k]}
+      deps={[m, e, tz, c, k, ink]}
       drawIn={first}
       onPress={onPress}
       overlay={({ width }) => {
@@ -137,19 +142,19 @@ function Chart({ e: given, tz, onPress }: { e: EnergySeries; tz?: string; onPres
       {({ width, fonts: f }) => {
         const { x1, plotBottom, x, y } = frame(width);
         const pts: (XY | null)[] = e.points.map((p) => (p.value === null ? null : { x: x(p.t), y: y(p.value) }));
-        const axis = f.num(500, 12);
+        const axis = f.num(500, AXIS.fontSize);
         // Whole hours, as many as fit (every hour of a short morning, every few of a long day), clear of each other.
         // Only labels that sit whole on the canvas: one centred near either end would run off it.
         const hours = hourTicks(first, last, hourStepFor(last - first, x1 - X0, TICK_MIN), tz).filter((t) => {
-          const w = measure(axis, clock(t, tz));
-          return x(t) - w / 2 >= 0 && x(t) + w / 2 <= width;
+          const w = measure(axis, hourText(t, tz));
+          return x(t) - w / 2 >= 0 && x(t) + w / 2 <= x1;
         });
-        const hourText = hours.map((t) => clock(t, tz));
+        const hourLabels = hours.map((t) => hourText(t, tz));
         const keep = spacedLabels(
           hours.map((t) => x(t)),
-          hourText.map((t) => measure(axis, t)),
+          hourLabels.map((t) => measure(axis, t)),
           [],
-          10,
+          8,
         );
         // The drains' pills over their points, left to right; one that would touch the last is left out, and none runs
         // past the plot's ends.
@@ -178,21 +183,17 @@ function Chart({ e: given, tz, onPress }: { e: EnergySeries; tz?: string; onPres
               plotBottom,
               calm,
             )}
-            {hours.map((t, i) => (keep[i] ? <SText key={t} x={x(t)} y={plotBottom + AXIS.tickMargin + 12} text={hourText[i]} font={axis} color={k.axis} anchor="middle" /> : null))}
-            {Y_TICKS.map((v) => (
-              <SText key={v} x={X0 - AXIS.tickMargin} y={y(v) + 12 * 0.32} text={String(v)} font={axis} color={k.axis} anchor="end" />
-            ))}
+            {hours.map((t, i) => (keep[i] ? <SText key={t} x={x(t)} y={plotBottom + AXIS.tickMargin + AXIS.fontSize} text={hourLabels[i]} font={axis} color={k.axis} anchor="middle" /> : null))}
+            <RightAxis x={x1} ys={Y_TICKS.map(y)} texts={Y_TICKS.map(String)} font={axis} />
             <Group>
               {runs(pts).map((run, j) => {
                 const d = monotonePath(run);
                 return (
                   <Group key={j}>
                     <Path path={sp(areaPath(d, run[0], run[run.length - 1], plotBottom))}>
-                      <FadeShader color={bandColor(latest?.value ?? top, BANDS)} from={0.18} y1={y(top)} y2={plotBottom} />
+                      <FadeShader color={ink} from={0.28} y1={y(top)} y2={plotBottom} />
                     </Path>
-                    <Path path={sp(d)} style="stroke" strokeWidth={LINE.width + 0.5} strokeJoin="round" strokeCap="round" color={bandPaint(top, bottom, BANDS)}>
-                      <BandShader yTop={y(top)} yBottom={y(bottom)} top={top} bottom={bottom} bands={BANDS} />
-                    </Path>
+                    <Path path={sp(d)} style="stroke" strokeWidth={LINE.width} strokeJoin="round" strokeCap="round" color={ink} />
                   </Group>
                 );
               })}
@@ -214,7 +215,7 @@ function Chart({ e: given, tz, onPress }: { e: EnergySeries; tz?: string; onPres
   );
 }
 
-/** The Energy Bank curve in the reference app's language (spec §5.9). A drag reads it minute by minute; a tap opens the explorer on the day's energy. */
+/** The Energy Bank curve (spec §5.9). A drag reads it minute by minute; a tap opens the explorer on the day's energy. */
 export function EnergyBankChart({ data, timeZone, onPress }: EnergyBankChartProps) {
   const empty = <EmptyState body="Energy Bank starts once you wake up." />;
   return (

@@ -1,16 +1,18 @@
+// Time in heart-rate zones and stacked breakdowns as Apple Fitness shows them: one row per zone with its range, share
+// and time over a plain capsule track filled in the zone's colour (your typical share a thin tick across it), or one
+// capsule split into coloured parts with a legend of counts.
 import * as React from "react";
 import { StyleSheet, View } from "react-native";
 import { DATA_COLORS, type DataColor } from "@/lib/bands";
 import { durationWords, hmm, NBSP } from "@/lib/format";
 import type { Metric } from "@/lib/reasons";
-import { alpha, mix } from "@/lib/utils";
+import { alpha } from "@/lib/utils";
 import { GrowIn } from "@/ui/motion/Rise";
-import { useCalm, type CalmPalette } from "@/ui/calm";
+import { useCalm } from "@/ui/calm";
 import { font } from "@/ui/fonts";
 import { useTheme } from "@/ui/ThemeProvider";
 import { Caption, useSoftFill } from "./calmKit";
 import { EmptyState } from "./EmptyState";
-import { Hatch } from "./Hatch";
 import { MetricState } from "./MetricState";
 import { Skeleton, SkeletonText } from "./Skeleton";
 import { Txt } from "./Text";
@@ -47,8 +49,14 @@ export type ZoneBarsProps =
 /** Each zone's fill, cool to hot: violet, blue, green, orange (the strain hue), rose. */
 export const ZONE_COLOR: Record<number, DataColor> = { 1: "sleep", 2: "chart-5", 3: "optimal", 4: "strain", 5: "recovery-red" };
 
-/** A zone's or level's fill: its meaning colour made a soft pastel (mixed toward the card), never a saturated block. */
-const softOf = (color: string, c: CalmPalette, dark: boolean, p = 0.6) => mix(color, c.card, dark ? Math.min(1, p + 0.12) : p);
+/** A zone row's capsule track: 10 px, its own colour filling the zone's share over a faint track. */
+const TRACK_H = 10;
+
+/** The plain capsule track a zone's share fills. */
+function Track({ children }: { children?: React.ReactNode }) {
+  const c = useCalm();
+  return <View style={{ height: TRACK_H, borderRadius: TRACK_H / 2, backgroundColor: alpha(c.ink, 0.08) }}>{children}</View>;
+}
 
 function share(part: number, total: number) {
   if (!total || !part) return "0%";
@@ -71,7 +79,7 @@ function Clock({ seconds, size }: { seconds: number; size: "lg" | "md" }) {
 }
 
 function Rows({ zones, note }: { zones: ZoneRow[]; note?: string }) {
-  const { c, scheme } = useTheme();
+  const { c } = useTheme();
   const calm = useCalm();
   const soft = useSoftFill();
   const total = zones.reduce((a, z) => a + z.seconds, 0);
@@ -152,11 +160,11 @@ function Rows({ zones, note }: { zones: ZoneRow[]; note?: string }) {
                 </View>
                 <Clock seconds={z.seconds} size="lg" />
               </View>
-              <Hatch height={10}>
-                <View style={{ position: "absolute", top: 0, bottom: 0, left: 0, borderRadius: 5, backgroundColor: color ? softOf(c[color.fill], calm, scheme === "dark") : alpha(calm.ink, 0.22), width: total ? `${(z.seconds / total) * 100}%` : 0 }} />
+              <Track>
+                <View style={{ position: "absolute", top: 0, bottom: 0, left: 0, borderRadius: TRACK_H / 2, backgroundColor: color ? c[color.fill] : alpha(calm.ink, 0.3), width: total ? `${(z.seconds / total) * 100}%` : 0 }} />
                 {/* Your typical share for this kind of activity: a thin tick across the capsule. */}
-                {z.typical && <View style={{ position: "absolute", top: -2, bottom: -2, width: 2, marginLeft: -1, borderRadius: 1, backgroundColor: calm.ink, left: `${Math.min(100, z.typical.share * 100)}%` }} />}
-              </Hatch>
+                {z.typical && <View style={{ position: "absolute", top: -3, bottom: -3, width: 2, marginLeft: -1, borderRadius: 1, backgroundColor: calm.ink, left: `${Math.min(100, z.typical.share * 100)}%` }} />}
+              </Track>
             </View>
           );
         })}
@@ -171,15 +179,15 @@ function Rows({ zones, note }: { zones: ZoneRow[]; note?: string }) {
 }
 
 function Stacked({ segments, unit }: { segments: StackedSegment[]; unit: "days" | "minutes" }) {
-  const { c, scheme } = useTheme();
+  const { c } = useTheme();
   const calm = useCalm();
   const shown = segments.filter((s) => s.count > 0);
   const count = (n: number) => (unit === "days" ? `${n}x` : hmm(n));
-  // Each part a soft capsule of its meaning colour, the legend's dot in the same tone.
-  const soft = (s: StackedSegment) => softOf(c[DATA_COLORS[s.color].fill], calm, scheme === "dark", 0.72);
+  // Each part a capsule in its meaning colour, a hairline of air between them, the legend's dot in the same colour.
+  const soft = (s: StackedSegment) => c[DATA_COLORS[s.color].fill];
   return (
     <View>
-      <View style={{ height: 12, flexDirection: "row", gap: 3 }}>
+      <View style={{ height: 12, flexDirection: "row", gap: 2 }}>
         {shown.map((s) => (
           <View key={s.key} style={{ height: "100%", flexGrow: s.count, flexBasis: 0, minWidth: 6, borderRadius: 6, backgroundColor: soft(s) }} />
         ))}
@@ -236,7 +244,7 @@ export function ZoneBarsSkeleton({ variant }: { variant: "rows" | "stacked" }) {
               <SkeletonText role="label" width={80} />
               <SkeletonText role="valueMd" chars={7} style={{ marginLeft: "auto" }} />
             </View>
-            <Hatch height={10} />
+            <Track />
           </View>
         ))}
       </View>

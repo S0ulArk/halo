@@ -1,3 +1,7 @@
+// One metric over a week, a month, six months or a year, in the Apple Health chart language: capsule-topped bars with
+// the latest at full colour and the rest at 35 %, or a smooth monotone line over a fading fill with its latest point
+// ringed; dashed hairline rows, the value axis on the right, the days or months under the plot; the normal range or
+// the Strain Target a soft band; the average or a reference a dashed guide with a small pill on the right.
 import * as React from "react";
 import { View } from "react-native";
 import Animated, { useAnimatedStyle, useDerivedValue, useSharedValue, type SharedValue } from "react-native-reanimated";
@@ -7,12 +11,11 @@ import { areaPath, monotonePath, niceTicks, runs, scaleLinear, type Band, type X
 import { DAY, dayLabel, formatDay, formatValue, isSymbolUnit, NBSP, spoken, type FormatKey } from "@/lib/format";
 import type { Metric } from "@/lib/reasons";
 import { alpha } from "@/lib/utils";
-import { accentFamily } from "@/ui/accents";
+import { accentColor, accentFamily } from "@/ui/accents";
 import { useCalm } from "@/ui/calm";
 import { font } from "@/ui/fonts";
 import { useTheme } from "@/ui/ThemeProvider";
 import { useAfterTransition } from "./AfterTransition";
-import { FAMILY_TINT } from "./calmKit";
 import {
   AXIS,
   BandShader,
@@ -21,14 +24,16 @@ import {
   barRadius,
   baselineIn,
   ChartFigure,
+  DashLine,
   FadeShader,
   Grid,
+  GRID,
   GuideLine,
-  labelGutter,
   LINE,
   measure,
   Pill,
   PointMark,
+  RightAxis,
   ScrubBand,
   ScrubBars,
   ScrubCursor,
@@ -112,6 +117,11 @@ const RANGE_WORD: Record<TrendRange, string> = { w: "week", m: "month", "6m": "6
 const RANGE_LABEL: Record<TrendRange, string> = { w: "W", m: "M", "6m": "6M", "1y": "1Y" };
 const DEFAULT_RANGES: readonly TrendRange[] = ["w", "m", "6m"];
 const H = 200;
+/** The shaded ranges' strength: the normal range and the Strain Target, soft bands of the series' colour. */
+const BASELINE_A = 0.12;
+const TARGET_A = 0.15;
+/** HRV is drawn in blue, as Apple Health draws it (its family, heart, is pink). */
+const HRV_LABEL = /^(hrv|heart rate variability)\b/i;
 /** The header's label line (the Calm caption: 11/15 caps, 1.1 tracking) and value line (28/32), and the stack legend's row under them. */
 const LABEL_LINE = 15;
 /** The caption's tracking, px: the RN label and the Skia readout share it. */
@@ -143,12 +153,12 @@ function frameOf(m: Layout, width: number) {
 type BarShape = { parts: { d: string; color: string }[]; outline: string | null; outlineColor: string; unsplit: string | null; lit: boolean };
 
 /**
- * The Calm bars at a width: rounded tops (full capsules while thin), each part in its series' ink. Built once per data
- * and width, for the canvas and for the scrubbed bar's full-ink layer.
+ * The bars at a width: Apple Health's fully rounded tops (whole capsules while thin), each part in its series' colour,
+ * a generous gap between days. Built once per data and width, for the canvas and for the scrubbed bar's full-ink layer.
  */
 function barsOf(m: Layout, width: number, stack?: readonly TrendSeries[]): BarShape[] {
   const { bandW, y, cxOf } = frameOf(m, width);
-  const barW = Math.min(24, bandW * 0.6);
+  const barW = Math.min(22, bandW * 0.56);
   const top = barRadius(barW);
   const foot = barW <= 12 ? top : 0;
   return m.rows.map((r, i) => {
@@ -207,15 +217,16 @@ function Trend({ points, p }: { points: TrendPoint[]; p: TrendChartProps }) {
   const k = useChartInk();
   const fonts = useChartFonts();
   const opened = useAfterTransition();
-  // The Calm series ink: bands and stress levels keep their meaning colours; a single-hue metric takes its family's
-  // ink (Strain peach, Sleep lavender, HRV rose, Steps sky, Weight sand…).
+  // The series colour from the theme's data tokens: bands and stress levels keep their meaning colours; Strain is
+  // orange, Sleep indigo; a single-hue metric takes its family's colour (heart pink, activity blue, body teal…), and
+  // HRV is blue, as Apple Health draws it.
   const family = p.colorBy === "single" ? accentFamily(p.label) : null;
-  const singleInk = calm.tintInk[family ? FAMILY_TINT[family] : "sky"];
+  const singleInk = HRV_LABEL.test(p.label) ? c.chart5 : family ? accentColor(c, family) : c.chart5;
   const colorFor = (v: number) => {
     if (p.colorBy === "band") return c[DATA_COLORS[recoveryColor(v)].fill];
     if (p.colorBy === "stress") return c[DATA_COLORS[STRESS_COLOR[stressLevel(v)]].fill];
-    if (p.colorBy === "strain") return calm.tintInk.peach;
-    if (p.colorBy === "sleep") return calm.tintInk.lavender;
+    if (p.colorBy === "strain") return c.strain;
+    if (p.colorBy === "sleep") return c.sleep;
     return singleInk;
   };
   const bands: Band[] | null =
@@ -254,14 +265,10 @@ function Trend({ points, p }: { points: TrendPoint[]; p: TrendChartProps }) {
     const line = !!props.line || range === "6m" || range === "1y";
     const byDay = props.headline === "day";
 
-    // --- Layout (the web's margins and axis widths) ---
-    const widest = formatValue(props.format, Math.max(0, ...rows.map((r) => r.value ?? 0))).length;
-    const axisWidth = widest <= 3 ? 32 : 15 + 7 * widest;
+    // --- Layout: a little air on the left, the value axis (and any guide's pill) on the right ---
     const showAvg = !line && range !== "w" && avg !== null;
-    const gutter = labelGutter([props.reference?.label, showAvg && "Avg"]);
     // Room over the plot for the values drawn over bars and points (the week's, the latest).
     const marginTop = range === "w" || !line ? 18 : 14;
-    const marginRight = props.line && range === "w" ? Math.max(gutter, 14) : gutter;
     const plotTop = marginTop;
     const plotBottom = H - AXIS.xAxisHeight;
     // Y domain: band metrics are fixed; a single-hue line fits its data; bars always start at zero.
@@ -287,6 +294,15 @@ function Trend({ points, p }: { points: TrendPoint[]; p: TrendChartProps }) {
       yTicks = t;
     }
     const fmtTick = props.format === "duration" ? (v: number) => formatValue(props.format, v) : wholeTick((v) => formatValue(props.format, v));
+    const tickText = yTicks.map(fmtTick);
+    // The right gutter holds the widest tick label, or a guide's pill ("Avg", "Your age") when that is wider.
+    const axisFont = fonts?.num(500, AXIS.fontSize);
+    const pillFont = fonts?.num(700, 11);
+    const axisW = axisFont ? Math.ceil(Math.max(0, ...tickText.map((t) => measure(axisFont, t)))) : Math.max(...tickText.map((t) => t.length)) * 6.5;
+    const pillW = (t: string | false | undefined) => (!t ? 0 : (pillFont ? measure(pillFont, t) : t.length * 6.6) + 10);
+    const marginRight = AXIS.gap + Math.max(axisW, pillW(props.reference?.label), pillW(showAvg && "Avg")) + 2;
+    // The plot starts a few px in from the card's content edge (no axis on the left).
+    const leftPad = 4;
 
     const ticks =
       range === "w" ? rows.map((r) => r.date) : range === "m" ? rows.filter((_, i) => (rows.length - 1 - i) % 7 === 0).map((r) => r.date) : rows.filter((r, i) => i > 0 && r.date.slice(0, 7) !== rows[i - 1].date.slice(0, 7)).map((r) => r.date);
@@ -301,11 +317,11 @@ function Trend({ points, p }: { points: TrendPoint[]; p: TrendChartProps }) {
           props.stack ? ` Average split: ${props.stack!.map((s) => `${s.label} ${formatValue(props.format, partAvg(s.key))}`).join(", ")}.` : ""
         }`
       : `No ${props.label} data in the last ${RANGE_WORD[range]}.`;
-    return { n, rows, values, avg, delta, tone, line, byDay, axisWidth, showAvg, marginRight, plotTop, plotBottom, lo, hi, domain, yTicks, fmtTick, ticks, tickFormat, partAvg, summary };
+    return { n, rows, values, avg, delta, tone, line, byDay, leftPad, showAvg, marginRight, plotTop, plotBottom, lo, hi, domain, yTicks, tickText, ticks, tickFormat, partAvg, summary };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stable, range, props, c]);
-  const { rows, avg, delta, tone, line, byDay, axisWidth, showAvg, marginRight, plotTop, plotBottom, lo, hi, domain, yTicks, fmtTick, ticks, tickFormat, partAvg, summary, values } = model;
-  const x0 = 4 + axisWidth;
+  }, [stable, range, props, c, fonts]);
+  const { rows, avg, delta, tone, line, byDay, leftPad, showAvg, marginRight, plotTop, plotBottom, lo, hi, domain, yTicks, tickText, ticks, tickFormat, partAvg, summary, values } = model;
+  const x0 = leftPad;
   const layout = React.useMemo<Layout>(() => ({ rows, x0, marginRight, domain, plotTop, plotBottom }), [rows, x0, marginRight, domain, plotTop, plotBottom]);
   const scrub = useBandScrub(x0, marginRight, rows.length);
   const changeRange = (v: TrendRange) => {
@@ -390,7 +406,7 @@ function Trend({ points, p }: { points: TrendPoint[]; p: TrendChartProps }) {
               <>
                 {!line && <TrendScrubBars active={scrub.active} layout={layout} width={width} stack={props.stack} />}
                 {range === "w" && (
-                  <WeekTicks active={scrub.active} fallback={boldDefault} xs={xs} texts={rows.map((r) => tickFormat(r.date))} y={plotBottom + AXIS.tickMargin + 12 * 0.71 + 12 * 0.35 - 4} fonts={f} />
+                  <WeekTicks active={scrub.active} fallback={boldDefault} xs={xs} texts={rows.map((r) => tickFormat(r.date))} y={plotBottom + AXIS.tickMargin + AXIS.fontSize} fonts={f} />
                 )}
                 {line && <ScrubCursor active={scrub.active} xs={xs} ys={rows.map((r) => (r.value === null ? NaN : y(r.value)))} colors={rows.map((r) => r.fill ?? k.ink)} top={plotTop} bottom={plotBottom} />}
               </>
@@ -405,7 +421,10 @@ function Trend({ points, p }: { points: TrendPoint[]; p: TrendChartProps }) {
             // The series' own ink (a band metric's at its average), for the soft fill and the shaded ranges.
             const ink = colorFor(avg ?? 0);
             const smoothPts: XY[] = rows.flatMap((r, i) => (r.smooth === null ? [] : [{ x: cxOf(i), y: y(r.smooth) }]));
-            const axis = f.num(500, 12);
+            const axis = f.num(500, AXIS.fontSize);
+            const dateFont = f.sans(500, AXIS.fontSize);
+            // The guides' pills sit in the right gutter on their lines; a tick label under one gives way.
+            const pillYs = [p.reference ? y(p.reference.y) : null, showAvg && avg !== null ? y(avg) : null].filter((v): v is number => v !== null);
             const last = rows.length - 1;
             const bars = line ? [] : barsOf(layout, width, p.stack);
             // The latest day with a value, labelled with it (the week's bars and dots label every day already).
@@ -418,36 +437,45 @@ function Trend({ points, p }: { points: TrendPoint[]; p: TrendChartProps }) {
             const weekFits = range === "w" && !line && Math.max(0, ...rows.map((r) => (r.value === null ? 0 : measure(valueFont, r.text)))) + 4 <= frame(width).bandW;
             return (
               <Group>
-                <Grid ys={yTicks.map(y)} x1={x0} x2={x1} />
-                {/* Shaded ranges: soft pastel bands of the series' ink, and the guides */}
+                <Grid ys={yTicks.filter((v) => line || v !== domain[0]).map(y)} x1={x0} x2={x1} />
+                {/* Bars stand on a solid hairline. */}
+                {!line && <DashLine x1={x0} x2={x1} y1={plotBottom} y2={plotBottom} color={k.grid} width={GRID.width} />}
+                {/* Shaded ranges: soft bands of the series' colour */}
                 {p.baseline && (
-                  <RoundedRect x={x0} y={y(p.baseline.mean + p.baseline.sd)} width={x1 - x0} height={Math.max(0, y(p.baseline.mean - p.baseline.sd) - y(p.baseline.mean + p.baseline.sd))} r={6} color={alpha(ink, 0.09)} />
+                  <RoundedRect x={x0} y={y(p.baseline.mean + p.baseline.sd)} width={x1 - x0} height={Math.max(0, y(p.baseline.mean - p.baseline.sd) - y(p.baseline.mean + p.baseline.sd))} r={4} color={alpha(ink, BASELINE_A)} />
                 )}
-                {p.target && <RoundedRect x={x0} y={y(p.target[1])} width={x1 - x0} height={Math.max(0, y(p.target[0]) - y(p.target[1]))} r={6} color={alpha(ink, 0.12)} />}
-                {p.reference && (
-                  <Group>
-                    <GuideLine x1={x0} x2={x1} y1={y(p.reference.y)} y2={y(p.reference.y)} />
-                    <Pill x={x1 + 4} y={y(p.reference.y)} text={p.reference.label} />
-                  </Group>
-                )}
-                {showAvg && avg !== null && (
-                  <Group>
-                    <GuideLine x1={x0} x2={x1} y1={y(avg)} y2={y(avg)} />
-                    <Pill x={x1 + 4} y={y(avg)} text="Avg" />
-                  </Group>
-                )}
+                {p.target && <RoundedRect x={x0} y={y(p.target[1])} width={x1 - x0} height={Math.max(0, y(p.target[0]) - y(p.target[1]))} r={4} color={alpha(ink, TARGET_A)} />}
                 {/* Axes (the week's day ticks are in the overlay: they bold the scrubbed day) */}
                 {range !== "w" &&
                   ticks.map((d) => {
                     const i = rows.findIndex((r) => r.date === d);
                     if (i < 0) return null;
-                    return <SText key={d} x={cxOf(i)} y={plotBottom + AXIS.tickMargin + 12 * 0.71 + 12 * 0.35 - 4} text={tickFormat(d)} font={axis} color={k.axis} anchor="middle" />;
+                    const text = tickFormat(d);
+                    // A label never runs past the plot's left edge or into the value axis.
+                    const w = measure(dateFont, text);
+                    const cx = Math.min(x1 - w / 2, Math.max(w / 2, cxOf(i)));
+                    return <SText key={d} x={cx} y={plotBottom + AXIS.tickMargin + AXIS.fontSize} text={text} font={dateFont} color={k.axis} anchor="middle" />;
                   })}
-                {yTicks.map((v) => {
-                  if (!line && v === 0) return null;
-                  const bandTick = p.colorBy === "band" && !line;
-                  return <SText key={v} x={x0 - AXIS.tickMargin} y={y(v) + 12 * 0.32} text={fmtTick(v)} font={f.num(bandTick ? 600 : 500, 12)} color={bandTick ? BAND_TICK[recoveryBand(v)] : k.axis} anchor="end" />;
-                })}
+                <RightAxis
+                  x={x1}
+                  ys={yTicks.map(y)}
+                  texts={tickText}
+                  font={p.colorBy === "band" && !line ? f.num(600, AXIS.fontSize) : axis}
+                  color={p.colorBy === "band" && !line ? yTicks.map((v) => BAND_TICK[recoveryBand(v)]) : undefined}
+                  skip={(ty) => pillYs.some((py) => Math.abs(py - ty) < 13)}
+                />
+                {p.reference && (
+                  <Group>
+                    <GuideLine x1={x0} x2={x1} y1={y(p.reference.y)} y2={y(p.reference.y)} />
+                    <Pill x={x1 + AXIS.gap - 4} y={y(p.reference.y)} text={p.reference.label} />
+                  </Group>
+                )}
+                {showAvg && avg !== null && (
+                  <Group>
+                    <GuideLine x1={x0} x2={x1} y1={y(avg)} y2={y(avg)} />
+                    <Pill x={x1 + AXIS.gap - 4} y={y(avg)} text="Avg" />
+                  </Group>
+                )}
                 {/* Series */}
                 {line ? (
                   <Group>
@@ -457,7 +485,7 @@ function Trend({ points, p }: { points: TrendPoint[]; p: TrendChartProps }) {
                       return (
                         <Group key={j}>
                           <Path path={sp(areaPath(d, run[0], run[run.length - 1], plotBottom))}>
-                            <FadeShader color={ink} from={bands ? 0.12 : 0.18} y1={yTop} y2={plotBottom} />
+                            <FadeShader color={ink} from={bands ? 0.16 : 0.26} y1={yTop} y2={plotBottom} />
                           </Path>
                           <Path path={sp(d)} style="stroke" strokeWidth={LINE.width} strokeJoin="round" strokeCap="round" color={bands ? bandPaint(hi, lo, bands) : ink}>
                             {bands && <BandShader yTop={yTop} yBottom={yBottom} top={hi} bottom={lo} bands={bands} />}
@@ -555,8 +583,8 @@ function Trend({ points, p }: { points: TrendPoint[]; p: TrendChartProps }) {
       {(p.baseline || p.target || p.smooth) && values.length > 0 && (
         <Keys
           items={[
-            ...(p.target ? [{ mark: "band" as const, color: colorFor(avg ?? 0), opacity: 0.12, label: "Your Strain Target" }] : []),
-            ...(p.baseline ? [{ mark: "band" as const, color: colorFor(avg ?? 0), opacity: 0.09, label: "Your normal range" }] : []),
+            ...(p.target ? [{ mark: "band" as const, color: colorFor(avg ?? 0), opacity: TARGET_A, label: "Your Strain Target" }] : []),
+            ...(p.baseline ? [{ mark: "band" as const, color: colorFor(avg ?? 0), opacity: BASELINE_A, label: "Your normal range" }] : []),
             ...(p.smooth ? [{ mark: "line" as const, color: k.orange, opacity: 1, label: `${p.smooth}-day average` }] : []),
           ]}
         />
@@ -592,7 +620,7 @@ function Keys({ items }: { items: { mark: "band" | "line"; color: string; opacit
  */
 function WeekTicks({ active, fallback, xs, texts, y, fonts }: { active: SharedValue<number>; fallback: number; xs: number[]; texts: string[]; y: number; fonts: ChartFonts }) {
   // The RN line box (16 px, no font padding) placed so its baseline sits where Skia's would.
-  const top = y - baselineIn(fonts.num(500, 12), 0, 16);
+  const top = y - baselineIn(fonts.sans(500, AXIS.fontSize), 0, 16);
   return (
     <>
       {xs.map((x, i) => (
@@ -602,7 +630,7 @@ function WeekTicks({ active, fallback, xs, texts, y, fonts }: { active: SharedVa
   );
 }
 
-const TICK_TEXT = { position: "absolute", width: 40, fontSize: 12, lineHeight: 16, textAlign: "center", includeFontPadding: false } as const;
+const TICK_TEXT = { position: "absolute", width: 40, fontSize: AXIS.fontSize, lineHeight: 16, textAlign: "center", includeFontPadding: false } as const;
 
 function WeekTick({ i, active, fallback, x, top, text }: { i: number; active: SharedValue<number>; fallback: number; x: number; top: number; text: string }) {
   const k = useChartInk();
@@ -611,10 +639,10 @@ function WeekTick({ i, active, fallback, x, top, text }: { i: number; active: Sh
   const at = { left: x - 20, top };
   return (
     <>
-      <Animated.Text allowFontScaling={false} pointerEvents="none" style={[TICK_TEXT, at, { fontFamily: font.numericFamily(500), color: k.axis }, off]}>
+      <Animated.Text allowFontScaling={false} pointerEvents="none" style={[TICK_TEXT, at, { fontFamily: font.sansFamily(500), color: k.axis }, off]}>
         {text}
       </Animated.Text>
-      <Animated.Text allowFontScaling={false} pointerEvents="none" style={[TICK_TEXT, at, { fontFamily: font.numericFamily(700), color: k.axisStrong }, on]}>
+      <Animated.Text allowFontScaling={false} pointerEvents="none" style={[TICK_TEXT, at, { fontFamily: font.sansFamily(700), color: k.axisStrong }, on]}>
         {text}
       </Animated.Text>
     </>

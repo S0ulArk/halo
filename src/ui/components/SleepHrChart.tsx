@@ -1,3 +1,6 @@
+// Heart rate across the main sleep, in the Apple Health chart language: a smooth heart-pink line over a fading fill,
+// the chosen stage's stretches lit (in that stage's colour when given) and the rest of the night dimmed, soft guides at
+// bed and wake, the night's low marked with a pill, the bpm axis on the right over dashed hairline rows.
 import * as React from "react";
 import { View } from "react-native";
 import { Group, Path } from "@shopify/react-native-skia";
@@ -8,7 +11,7 @@ import type { Metric } from "@/lib/reasons";
 import { alpha } from "@/lib/utils";
 import { useCalm } from "@/ui/calm";
 import { useTheme } from "@/ui/ThemeProvider";
-import { AXIS, ChartFigure, FadeShader, Grid, GuideLine, LINE, measure, Pill, PointMark, sp, SText, textWidth, useChartInk } from "./ChartFrame";
+import { AXIS, ChartFigure, FadeShader, Grid, GuideLine, hourText, LINE, measure, Pill, PointMark, RightAxis, rightAxisWidth, sp, SText, textWidth, useChartInk } from "./ChartFrame";
 import { EmptyState } from "./EmptyState";
 import { MetricState } from "./MetricState";
 import { ReasonPlaceholder } from "./ReasonPlaceholder";
@@ -29,6 +32,8 @@ export type SleepHrChartProps = {
   highlight?: { start: number; end: number }[];
   /** The chosen stage's name, for the legend under the chart ("REM" bright, "Rest of the night" dim). */
   highlightLabel?: string;
+  /** The chosen stage's colour: its stretches are lit in it (default the heart pink). */
+  highlightColor?: string;
   timeZone?: string;
   /** A tap opens the explorer on the night. */
   onPress?: () => void;
@@ -36,11 +41,11 @@ export type SleepHrChartProps = {
 
 const H = 180;
 const MIN = 60_000;
-/** Hour labels keep this far apart (a clock time is about 30 px at 12 px). */
-const TICK_MIN = 46;
+/** Hour labels keep this far apart. */
+const TICK_MIN = 34;
 
-/** The legend under the chart while a stage is lit: its line bright, the rest of the night dim. */
-function Legend({ label, ink }: { label: string; ink: string }) {
+/** The legend under the chart while a stage is lit: its stretches in their colour, the rest of the night dim. */
+function Legend({ label, lit, ink }: { label: string; lit: string; ink: string }) {
   const c = useCalm();
   const key = (color: string, text: string) => (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -52,18 +57,18 @@ function Legend({ label, ink }: { label: string; ink: string }) {
   );
   return (
     <View importantForAccessibility="no-hide-descendants" style={{ marginTop: 8, flexDirection: "row", flexWrap: "wrap", columnGap: 16, rowGap: 4 }}>
-      {key(ink, label)}
+      {key(lit, label)}
       {key(alpha(ink, 0.35), "Rest of the night")}
     </View>
   );
 }
 
-function Chart({ hr, highlight, highlightLabel, tz, onPress }: { hr: SleepHr; highlight?: { start: number; end: number }[]; highlightLabel?: string; tz?: string; onPress?: () => void }) {
+function Chart({ hr, highlight, highlightLabel, highlightColor, tz, onPress }: { hr: SleepHr; highlight?: { start: number; end: number }[]; highlightLabel?: string; highlightColor?: string; tz?: string; onPress?: () => void }) {
   const { c } = useTheme();
-  const calm = useCalm();
   const k = useChartInk();
-  // The night in Sleep's lavender ink: the chosen stage bright with a soft fill, the rest of the night dimmer.
-  const ink = calm.tintInk.lavender;
+  // Heart rate in the heart pink: the chosen stage lit (in its own colour when given) with a soft fill, the rest dimmer.
+  const ink = c.heart;
+  const lit = highlightColor ?? ink;
   const { bed, wake, points } = hr;
   // Three series on one axis: outside the sleep (faint), the night (dim), the chosen stage (bright, filled).
   const rows = React.useMemo(
@@ -87,32 +92,33 @@ function Chart({ hr, highlight, highlightLabel, tz, onPress }: { hr: SleepHr; hi
   return (
     // Choosing a stage relights the night without drawing it in again: the draw-in follows the night, not the highlight.
     <View>
-      <ChartFigure height={H} summary={summary} deps={[rows, tz, c, k]} drawIn={`${bed}|${wake}`} onPress={onPress}>
+      <ChartFigure height={H} summary={summary} deps={[rows, tz, c, k, lit]} drawIn={`${bed}|${wake}`} onPress={onPress}>
         {({ width, fonts }) => {
-          const x0 = 32;
-          const x1 = width - 8;
-          const plotTop = 8;
+          const axis = fonts.num(500, AXIS.fontSize);
+          const edge = fonts.num(600, AXIS.fontSize);
+          const tickText = yTicks.map(String);
+          const x0 = 4;
+          const x1 = width - rightAxisWidth(axis, tickText);
+          const plotTop = 10;
           const plotBottom = H - AXIS.xAxisHeight;
           const x = scaleLinear([t0, t1], [x0, x1]);
           const y = scaleLinear([yTicks[0], yTicks[yTicks.length - 1]], [plotBottom, plotTop]);
           const pts = (key: "out" | "night" | "lit") => rows.map((r): XY | null => (r[key] == null ? null : { x: x(r.t), y: y(r[key]!) }));
-          const axis = fonts.num(500, 12);
-          const edge = fonts.num(600, 12);
-          const timeY = plotBottom + AXIS.tickMargin + 12;
+          const timeY = plotBottom + AXIS.tickMargin + AXIS.fontSize;
           // Bed and wake in bold at their guides (kept on the canvas), the whole hours between them where they fit.
           const ends = [bed, wake].map((t) => {
             const text = clock(t, tz);
             const w = measure(edge, text);
-            const cx = Math.min(width - w / 2, Math.max(w / 2, x(t)));
+            const cx = Math.min(x1 - w / 2, Math.max(w / 2, x(t)));
             return { t, text, cx, from: cx - w / 2, to: cx + w / 2 };
           });
           const hours = hourTicks(bed, wake, hourStepFor(wake - bed, x1 - x0, TICK_MIN), tz);
-          const hourText = hours.map((t) => clock(t, tz));
+          const hourLabels = hours.map((t) => hourText(t, tz));
           const keep = spacedLabels(
             hours.map((t) => x(t)),
-            hourText.map((t) => measure(axis, t)),
+            hourLabels.map((t) => measure(axis, t)),
             ends.map((e) => [e.from, e.to] as const),
-            10,
+            8,
           );
           // The low's pill under its point (over it when the plot's floor is too close), kept inside the plot.
           const lowText = low ? `Low ${low.v}` : "";
@@ -124,10 +130,8 @@ function Chart({ hr, highlight, highlightLabel, tz, onPress }: { hr: SleepHr; hi
               {ends.map((e) => (
                 <SText key={e.t} x={e.cx} y={timeY} text={e.text} font={edge} color={k.axisStrong} anchor="middle" />
               ))}
-              {hours.map((t, i) => (keep[i] ? <SText key={t} x={x(t)} y={timeY} text={hourText[i]} font={axis} color={k.axis} anchor="middle" /> : null))}
-              {yTicks.map((v) => (
-                <SText key={v} x={x0 - AXIS.tickMargin} y={y(v) + 12 * 0.32} text={String(v)} font={axis} color={k.axis} anchor="end" />
-              ))}
+              {hours.map((t, i) => (keep[i] ? <SText key={t} x={x(t)} y={timeY} text={hourLabels[i]} font={axis} color={k.axis} anchor="middle" /> : null))}
+              <RightAxis x={x1} ys={yTicks.map(y)} texts={tickText} font={axis} />
               {/* The reference app's bed and wake markers, as soft guides. */}
               {[bed, wake].map((t) => (
                 <GuideLine key={t} x1={x(t)} x2={x(t)} y1={plotTop} y2={plotBottom} />
@@ -137,16 +141,16 @@ function Chart({ hr, highlight, highlightLabel, tz, onPress }: { hr: SleepHr; hi
                   <Path key={`o${j}`} path={sp(monotonePath(run))} style="stroke" strokeWidth={1.5} strokeJoin="round" strokeCap="round" color={alpha(k.faint, 0.5)} />
                 ))}
                 {runs(pts("night")).map((run, j) => (
-                  <Path key={`n${j}`} path={sp(monotonePath(run))} style="stroke" strokeWidth={LINE.thin} strokeJoin="round" strokeCap="round" color={alpha(ink, 0.35)} />
+                  <Path key={`n${j}`} path={sp(monotonePath(run))} style="stroke" strokeWidth={LINE.thin} strokeJoin="round" strokeCap="round" color={alpha(ink, highlight ? 0.35 : 1)} />
                 ))}
                 {runs(pts("lit")).map((run, j) => {
                   const d = monotonePath(run);
                   return (
                     <Group key={`l${j}`}>
                       <Path path={sp(areaPath(d, run[0], run[run.length - 1], plotBottom))}>
-                        <FadeShader color={ink} from={0.18} y1={plotTop} y2={plotBottom} />
+                        <FadeShader color={lit} from={0.26} y1={plotTop} y2={plotBottom} />
                       </Path>
-                      <Path path={sp(d)} style="stroke" strokeWidth={LINE.width} strokeJoin="round" strokeCap="round" color={ink} />
+                      <Path path={sp(d)} style="stroke" strokeWidth={LINE.width} strokeJoin="round" strokeCap="round" color={lit} />
                     </Group>
                   );
                 })}
@@ -162,17 +166,17 @@ function Chart({ hr, highlight, highlightLabel, tz, onPress }: { hr: SleepHr; hi
           );
         }}
       </ChartFigure>
-      {highlight && highlightLabel ? <Legend label={highlightLabel} ink={ink} /> : null}
+      {highlight && highlightLabel ? <Legend label={highlightLabel} lit={lit} ink={ink} /> : null}
     </View>
   );
 }
 
 /** Heart rate across the main sleep with its bed and wake markers; the chosen stage lit (spec §7.5, §11 R9). */
-export function SleepHrChart({ data, highlight, highlightLabel, timeZone, onPress }: SleepHrChartProps) {
+export function SleepHrChart({ data, highlight, highlightLabel, highlightColor, timeZone, onPress }: SleepHrChartProps) {
   const empty = <EmptyState body="No heart-rate data for this night." />;
   return (
     <MetricState metric={data} skeleton={<SleepHrChartSkeleton />} empty={empty} renderReason={(r) => <ReasonPlaceholder reason={r} size="md" />}>
-      {(hr) => (hr.points.some((p) => p.v !== null) ? <Chart hr={hr} highlight={highlight} highlightLabel={highlightLabel} tz={timeZone} onPress={onPress} /> : empty)}
+      {(hr) => (hr.points.some((p) => p.v !== null) ? <Chart hr={hr} highlight={highlight} highlightLabel={highlightLabel} highlightColor={highlightColor} tz={timeZone} onPress={onPress} /> : empty)}
     </MetricState>
   );
 }
