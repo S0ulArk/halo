@@ -125,6 +125,7 @@ export async function setUpConnector(token: string, ctx: QueryCtx, onStep?: (s: 
   onStep?.("send");
   // A new workers.dev address can take a little while to answer; the first send waits for it.
   const sent = await sendSnapshot(ctx, { force: true, retries: 6 });
+  if (!sent.ok) console.warn(`[connector] first send failed: ${sent.error}`);
   if (!sent.ok) await patchState({ lastError: `Set up, but the first send didn’t go through yet (${sent.error}). Halo sends again after the next sync, or tap Send now.` });
   return (await connectorLink())!;
 }

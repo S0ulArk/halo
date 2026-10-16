@@ -69,7 +69,12 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 function SetUp() {
   const ctx = useQueryCtx();
   const [token, setToken] = React.useState("");
-  const [step, setStep] = React.useState<SetupStep | null>(null);
+  const [step, setStepState] = React.useState<SetupStep | null>(null);
+  const stepRef = React.useRef<SetupStep | null>(null);
+  const setStep = React.useCallback((s: SetupStep | null) => {
+    stepRef.current = s;
+    setStepState(s);
+  }, []);
   const [error, setError] = React.useState<string | null>(null);
   const busy = step !== null;
   const run = async () => {
@@ -82,7 +87,10 @@ function SetUp() {
       setToken("");
       toast("Connector ready");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      // For diagnosis over adb: the step and Cloudflare's words, never the token.
+      console.warn(`[connector] setup failed at ${stepRef.current ?? "?"}: ${message}`);
+      setError(message);
     } finally {
       setStep(null);
     }
