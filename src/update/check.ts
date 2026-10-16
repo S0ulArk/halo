@@ -14,11 +14,6 @@ import { compareVersions, plainNotes } from "./version";
 export const REPO = "S0ulArk/halo";
 const LATEST_API = `https://api.github.com/repos/${REPO}/releases/latest`;
 const STATE_KEY = "pulse.update";
-/**
- * An automatic check this soon after the last one uses that answer: GitHub allows 60 unauthenticated requests an hour
- * per internet address, and switching apps back and forth should not use them up.
- */
-const MIN_GAP_MS = 2 * 60 * 1000;
 
 export const INSTALLED_VERSION: string = app.expo.version;
 
@@ -114,20 +109,19 @@ export async function updateStatus(): Promise<UpdateStatus> {
 let inflight: Promise<UpdateStatus> | null = null;
 
 /**
- * Asks GitHub: always when `force` (About's button); otherwise when the setting is on and the last check is over 2
- * minutes old, else returns what that check found. `force` throws when GitHub can't be reached; the automatic check
- * never throws. Calls made while one is under way share it.
+ * Asks GitHub every time: About's button (`force`), and every open while the setting is on. GitHub allows 60
+ * unauthenticated requests an hour per internet address; when it refuses (or can't be reached) the automatic check
+ * keeps the last answer and never throws, while `force` throws. Calls made while one is under way share it.
  */
 export function checkForUpdate({ force = false } = {}): Promise<UpdateStatus> {
   if (inflight && !force) return inflight;
   const run = (async () => {
     const s = await readState();
-    if (!force) {
-      if (Date.now() - s.checkedAt < MIN_GAP_MS) return statusOf(s);
-      if (!(await readSettings()).updates) return statusOf(s);
-    }
+    if (!force && !(await readSettings()).updates) return statusOf(s);
     try {
-      return statusOf(await writeState({ checkedAt: Date.now(), latest: await fetchLatest() }));
+      const latest = await fetchLatest();
+      console.log(`[update] checked: latest ${latest.version}, installed ${INSTALLED_VERSION}${force ? " (manual)" : ""}`);
+      return statusOf(await writeState({ checkedAt: Date.now(), latest }));
     } catch (e) {
       if (force) throw e;
       console.warn("[update]", e instanceof Error ? e.message : String(e));

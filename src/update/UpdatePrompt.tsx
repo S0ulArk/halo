@@ -34,6 +34,7 @@ export function UpdatePrompt() {
     let live = true;
     const run = () =>
       void checkAndNotify().then((s) => {
+        console.log(`[update] on open: ${s.available ? `offering ${s.available.version}` : "up to date"}`);
         if (live && s.available) setOffer(s.available);
       });
     void askOnce().then(run);
