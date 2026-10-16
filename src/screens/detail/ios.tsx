@@ -121,7 +121,8 @@ export const ICON_INSET = 16 + ROW_ICON + 12;
 export function ListGroup({ title, right, footer, inset = ICON_INSET, style, children }: { title?: string; right?: React.ReactNode; footer?: React.ReactNode; inset?: number; style?: StyleProp<ViewStyle>; children: React.ReactNode }) {
   const c = useCalm();
   return (
-    <View style={[{ gap: 7, minWidth: 0 }, style]}>
+    // A titled list keeps a little more air above its header, as iOS spaces grouped sections.
+    <View style={[{ gap: 7, minWidth: 0, paddingTop: title ? 6 : 0 }, style]}>
       {title ? <SectionLabel right={right}>{title}</SectionLabel> : null}
       <View style={{ borderRadius: 16, backgroundColor: c.card, overflow: "hidden" }}>
         <Rows inset={inset}>{children}</Rows>
@@ -226,9 +227,10 @@ export function ListRow({ icon: Icon, iconColor, lead, label, detail, detailColo
   );
   const box: ViewStyle = { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 12, paddingLeft: 16, paddingRight: 14, paddingVertical: 10 };
   const spoken = accessibilityLabel ?? [label, value !== undefined ? `${value}${unit ? ` ${unit}` : ""}` : null, typeof detail === "string" ? detail : null].filter(Boolean).join(", ");
+  // A row with its own control on the right (a switch, an info button) leaves it reachable: it is not one element.
   if (!onPress)
     return (
-      <View accessible accessibilityLabel={spoken} style={box}>
+      <View accessible={!right} accessibilityLabel={right ? undefined : spoken} style={box}>
         {body}
       </View>
     );

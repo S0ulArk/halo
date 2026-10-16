@@ -103,7 +103,7 @@ function StrainView({ tab = false }: { tab?: boolean }) {
   return (
     <DetailScreen
       {...common}
-      hero={<ScoreHero variant="strain" value={s.value} reason={s.reason} target={t ? [t.low, t.high] : null} extraTags={vm.soFar && s.value !== null ? ["so_far"] : undefined} />}
+      hero={<ScoreHero variant="strain" value={s.value} reason={s.reason} target={t ? [t.low, t.high] : null} extraTags={vm.soFar && s.value !== null ? ["so_far"] : undefined} sentence={targetLine(s.value, t)} />}
       summary={
         <ListGroup footer="Each part against your prior 30 days: green better, orange worse.">
           <TargetRow vm={vm} />
@@ -174,6 +174,13 @@ function StrainView({ tab = false }: { tab?: boolean }) {
 }
 
 type Open = (metric: string, r: ChartRange) => () => void;
+
+/** The day against its Strain Target, in a line: below it (by how much), inside it, or past it; nothing without both. */
+function targetLine(strain: number | null, t: { low: number; high: number } | null): string | null {
+  if (strain === null || !t) return null;
+  if (strain < t.low) return `${formatValue("decimal1", t.low - strain)} below today’s Strain Target of ${formatValue("decimal1", t.low)} – ${formatValue("decimal1", t.high)}.`;
+  return strain > t.high ? "Past today’s Strain Target: prioritise sleep tonight." : "Inside today’s Strain Target.";
+}
 
 /** The day's heart rate (a tap or the ↗ opens the explorer on Day Strain). Memoised: a page re-render skips it. */
 const HeartCard = React.memo(function HeartCard({ vm, timeZone, open }: { vm: StrainVM; timeZone: string; open: Open }) {

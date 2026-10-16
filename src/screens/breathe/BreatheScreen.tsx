@@ -12,7 +12,7 @@
 // long session; the timers and the Bluetooth link pause with it and the session picks up on return.
 import * as React from "react";
 import { View } from "react-native";
-import { Check, HeartPulse, Play, RotateCcw, Square, TriangleAlert, Wind } from "lucide-react-native";
+import { HeartPulse, Play, RotateCcw, SlidersHorizontal, Square, TriangleAlert, Wind } from "lucide-react-native";
 import { DURATIONS, phaseAt, planSession, protocolById, PROTOCOLS, scheduleCues, secondsLeft, stageLabel, type BreathMinutes, type BreathProtocol, type BreathProtocolId } from "@/live/breath";
 import { breathCue, sessionDone } from "@/live/haptics";
 import { haptic } from "@/ui/motion/haptics";
@@ -209,7 +209,7 @@ export default function BreatheScreen() {
     controls = (
       <>
         <GlassRound icon={RotateCcw} label="Go again" color={c.system.teal} onPress={start} />
-        <GlassRound icon={Check} label="Change pace" color={c.teal} onPress={() => setResult(null)} />
+        <GlassRound icon={SlidersHorizontal} label="Change pace" color={c.teal} onPress={() => setResult(null)} />
       </>
     );
   } else {
