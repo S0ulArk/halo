@@ -8,6 +8,7 @@
 //  - fat: 30 % of the calories (inside the 20-35 % the dietary guidelines give);
 //  - carbs: the calories left after protein and fat.
 // Pure TypeScript, so the tests run in node.
+import { heightText, KG_PER_LB, kgToLb, METRIC, roundTo, type Units } from "@/lib/units";
 
 export const TARGET_KEYS = ["kcal", "protein", "carbs", "fat"] as const;
 export type TargetKey = (typeof TARGET_KEYS)[number];
@@ -40,16 +41,25 @@ export type Targets = Record<TargetKey, Target>;
 const group = (v: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(v);
 const kg1 = (v: number) => (Math.round(v * 10) / 10).toFixed(1);
 
-/** The protein suggestion: 1.6 g per kg of the latest weight, else of a healthy weight for the height, else 100 g. */
-export function proteinTarget(weightKg: number | null, heightCm: number | null): Target {
+/** "1.6 g per kg", or in pounds "0.73 g per lb" (the same rate). */
+const perWeight = (units: Units) => (units.weight === "lb" ? `${roundTo(PROTEIN_G_PER_KG * KG_PER_LB, 2)} g per lb` : `${PROTEIN_G_PER_KG} g per kg`);
+
+/**
+ * The protein suggestion: 1.6 g per kg of the latest weight, else of a healthy weight for the height, else 100 g. The
+ * basis is worded in `units` (the rate, the weight and the height); the grams are the same either way.
+ */
+export function proteinTarget(weightKg: number | null, heightCm: number | null, units: Units = METRIC): Target {
+  const lb = units.weight === "lb";
   if (weightKg !== null && Number.isFinite(weightKg) && weightKg >= 20 && weightKg <= 300) {
-    return { value: Math.round(weightKg * PROTEIN_G_PER_KG), custom: false, basis: `${PROTEIN_G_PER_KG} g per kg at ${kg1(weightKg)} kg` };
+    return { value: Math.round(weightKg * PROTEIN_G_PER_KG), custom: false, basis: `${perWeight(units)} at ${lb ? `${kg1(kgToLb(weightKg))} lb` : `${kg1(weightKg)} kg`}` };
   }
   if (heightCm !== null && Number.isFinite(heightCm) && heightCm >= 100 && heightCm <= 250) {
     const kg = REFERENCE_BMI * (heightCm / 100) ** 2;
-    return { value: Math.round(kg * PROTEIN_G_PER_KG), custom: false, basis: `${PROTEIN_G_PER_KG} g per kg of a healthy weight for ${Math.round(heightCm)} cm (${Math.round(kg)} kg). Log your weight to use yours.` };
+    const height = units.height === "cm" ? `${Math.round(heightCm)} cm` : heightText(heightCm, units);
+    const healthy = lb ? `${Math.round(kgToLb(kg))} lb` : `${Math.round(kg)} kg`;
+    return { value: Math.round(kg * PROTEIN_G_PER_KG), custom: false, basis: `${perWeight(units)} of a healthy weight for ${height} (${healthy}). Log your weight to use yours.` };
   }
-  return { value: DEFAULT_PROTEIN_G, custom: false, basis: `A typical adult target. Log your weight for yours: ${PROTEIN_G_PER_KG} g per kg.` };
+  return { value: DEFAULT_PROTEIN_G, custom: false, basis: `A typical adult target. Log your weight for yours: ${perWeight(units)}.` };
 }
 
 /** Plausible days of total calories burned (a day the band was barely worn reads far lower). */
@@ -66,11 +76,14 @@ export function calorieTarget(burned: (number | null | undefined)[]): Target {
   return { value: DEFAULT_KCAL, custom: false, basis: "The usual food-label reference, until Halo has a few days of your calories burned" };
 }
 
-/** Every target: the person's own where set, else the suggestions (fat and carbs follow the calories and protein). */
-export function resolveTargets(custom: CustomTargets, input: { weightKg: number | null; heightCm: number | null; burned: (number | null | undefined)[] }): Targets {
+/**
+ * Every target: the person's own where set, else the suggestions (fat and carbs follow the calories and protein).
+ * `units` words the protein basis (metric when absent).
+ */
+export function resolveTargets(custom: CustomTargets, input: { weightKg: number | null; heightCm: number | null; burned: (number | null | undefined)[]; units?: Units }): Targets {
   const own = (k: TargetKey): Target | null => (custom[k] !== null ? { value: custom[k], custom: true, basis: "Your target" } : null);
   const kcal = own("kcal") ?? calorieTarget(input.burned);
-  const protein = own("protein") ?? proteinTarget(input.weightKg, input.heightCm);
+  const protein = own("protein") ?? proteinTarget(input.weightKg, input.heightCm, input.units);
   const fat = own("fat") ?? { value: Math.round((kcal.value * FAT_SHARE) / 9), custom: false, basis: `${Math.round(FAT_SHARE * 100)}% of your ${group(kcal.value)} kcal` };
   const left = kcal.value - protein.value * 4 - fat.value * 9;
   const carbs = own("carbs") ?? { value: Math.max(0, Math.round(left / 4)), custom: false, basis: "The calories left after protein and fat" };

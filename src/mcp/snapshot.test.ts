@@ -3,6 +3,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { MemoryStore } from "@/data/memory";
 import { DEMO_PROFILE, seedDemo } from "@/data/seed";
+import { IMPERIAL } from "@/lib/units";
 import { runPipeline } from "@/pipeline";
 import type { QueryCtx } from "@/queries/ctx";
 import { buildSnapshot, type Snapshot } from "./snapshot";
@@ -13,13 +14,14 @@ const TODAY = "2026-10-02";
 const NOW = Date.parse("2026-10-02T14:00:00+05:30") / 1000;
 
 let snap: Snapshot;
+let ctx: QueryCtx;
 
 beforeAll(async () => {
   const store = new MemoryStore();
   await seedDemo(store, { today: TODAY, timeZone: TZ, now: NOW });
   const profile = { ...DEMO_PROFILE, timeZone: TZ };
   await runPipeline(store, profile, { today: TODAY });
-  const ctx: QueryCtx = { store, profile, timeZone: TZ, today: TODAY, now: NOW, sync: await store.getSyncState() };
+  ctx = { store, profile, timeZone: TZ, today: TODAY, now: NOW, sync: await store.getSyncState() };
   snap = await buildSnapshot(ctx);
 }, 120_000);
 
@@ -36,6 +38,14 @@ describe("buildSnapshot", () => {
     expect((snap.activities as { workouts: unknown[] }).workouts.length).toBeGreaterThan(10);
     expect(snap.health).not.toBeNull();
     expect(snap.reports.week).not.toBeNull();
+  });
+
+  it("stays metric when the screens show imperial, and says what the person prefers", async () => {
+    const imperial = await buildSnapshot({ ...ctx, units: IMPERIAL });
+    expect(imperial.preferredUnits).toEqual(IMPERIAL);
+    expect(snap.preferredUnits).toBeNull();
+    expect(imperial.days).toEqual(snap.days);
+    expect(imperial.activities).toEqual(snap.activities);
   });
 
   it("stays well under the Worker's size limit", () => {

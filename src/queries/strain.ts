@@ -29,6 +29,7 @@ import {
   trendPoints,
 } from "./common";
 import type { HrChart, KeyStat, Metric, SplitPoint, StrainVM, ZoneRow } from "./types";
+import { localizeStat, unitsOf } from "./units";
 
 /** The activity roll-ups the Strain summary shows after Steps (spec §11 EX1). */
 export const STRAIN_EXTRAS = ["distance", "floors", "active_minutes", "azm", "active_calories"] as const satisfies readonly ExtraKey[];
@@ -95,7 +96,8 @@ export async function getStrain(day: string, ctx: QueryCtx): Promise<StrainVM> {
     strain,
     soFar: isToday,
     target,
-    summary,
+    // Distance in km or miles (Settings › Units).
+    summary: summary.map((s) => localizeStat(s, unitsOf(ctx))),
     coach: coach(strain, target.value, row),
     hr: hrChartOf(ctx, row, day, isToday, hrSeries, exs.filter((e) => e.day === day)),
     zones: zoneRows(row),

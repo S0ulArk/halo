@@ -25,7 +25,7 @@ const INSTRUCTIONS = [
   "Halo is a personal health app that reads a Fitbit through Android Health Connect and scores Recovery (0-100%), Strain (0-21), Sleep Performance (0-100%), Halo Age and more, in the style of WHOOP and Garmin.",
   "These tools read the person's own Halo data, as of the moment Halo last sent it (each answer has dataAsOf).",
   "Start with get_profile to learn the date range and which daily metrics exist, then use get_day, get_sleep, get_daily_metrics and the others.",
-  "Values are metric unless a field says otherwise (kg, km, degrees Celsius, minutes). A null value comes with a reason such as no_data or calibrating: say so rather than guess.",
+  "Values are metric unless a field says otherwise (kg, km, degrees Celsius, minutes); get_profile's preferredUnits says which units the person uses in Halo, so answer in those. A null value comes with a reason such as no_data or calibrating: say so rather than guess.",
   "This is personal insight, not medical advice.",
 ].join(" ");
 
@@ -36,7 +36,7 @@ const TOOLS = [
   {
     name: "get_profile",
     title: "Profile and data range",
-    description: "The person's age, sex, max heart rate and time zone; the first and last day with data; when Halo last sent data; the units in use; and the list of daily metric columns get_daily_metrics can return.",
+    description: "The person's age, sex, max heart rate and time zone; the first and last day with data; when Halo last sent data; the units the data uses and the units the person prefers; and the list of daily metric columns get_daily_metrics can return.",
     inputSchema: { type: "object", properties: {} },
   },
   {
@@ -149,6 +149,7 @@ function runTool(name, args, snap) {
         lastDay: snap.days?.at(-1)?.day ?? null,
         today: snap.today,
         units: snap.units ?? "metric",
+        preferredUnits: snap.preferredUnits ?? null,
         detailDays: Object.keys(snap.dayDetail ?? {}).sort(),
         metrics: snap.metrics ?? [],
       };

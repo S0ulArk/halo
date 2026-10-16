@@ -36,7 +36,7 @@ const SHOW: Record<string, { format: FormatKey; unit?: string; scale?: number }>
   steps: { format: "grouped" },
   vo2max: { format: "decimal1", unit: "ml/kg/min" },
   restingHr: { format: "int", unit: "bpm" },
-  // Lean mass % (100 − body fat %); the caption carries lean and fat mass in kg and per m².
+  // Lean mass % (100 − body fat %); the caption carries lean and fat mass in kg or lb (Settings › Units) and per m².
   leanMass: { format: "decimal1", unit: "%" },
 };
 

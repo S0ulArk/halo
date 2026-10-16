@@ -10,6 +10,8 @@ import { addDays, localDay, localMidnight } from "@/lib/time";
 import { FORMATS, LOG_TYPES, type LoggedEntry, type LogType } from "./_lib";
 import { type QueryCtx, todayOf } from "./common";
 import { type FoodData, nutritionOn } from "./food";
+import { fluidText, METRIC, type Units, weightText } from "@/lib/units";
+import { unitsOf } from "./units";
 
 export { LOG_TYPES, type LoggedEntry, type LogType } from "./_lib";
 
@@ -49,6 +51,8 @@ export const KIND_LABEL: Record<LogKind, string> = {
 export const isCycleKind = (k: LogKind) => k === "period" || k === "ovulation";
 
 export const WATER_STEPS = [250, 500] as const;
+/** The quick-add amounts in US fluid ounces (a cup and a pint), for Settings › Units › Water in fl oz; stored as whole ml. */
+export const WATER_STEPS_FL_OZ = [8, 16] as const;
 
 export const MEALS = [
   ["BREAKFAST", "Breakfast"],
@@ -148,13 +152,13 @@ export type LogData = {
   "ovulation-test": { result: OvulationResult };
 };
 
-/** One line for the recent-log list. */
-export function describeEntry(type: LogType, data: unknown): { title: string; detail: string } {
+/** One line for the recent-log list; water and weight in `units` (stored in ml and kg). */
+export function describeEntry(type: LogType, data: unknown, units: Units = METRIC): { title: string; detail: string } {
   // The web's toLocaleString("en-US"): grouped whole numbers.
   const n = (v: number) => FORMATS.grouped(v);
   switch (type) {
     case "hydration-log":
-      return { title: "Water", detail: `${n((data as LogData[typeof type]).ml)} ml` };
+      return { title: "Water", detail: units.fluid === "ml" ? `${n((data as LogData[typeof type]).ml)} ml` : fluidText((data as LogData[typeof type]).ml, units) };
     case "nutrition-log": {
       const f = data as LogData[typeof type];
       const macros = [f.protein != null && `${f.protein} g protein`, f.carbs != null && `${f.carbs} g carbs`, f.fat != null && `${f.fat} g fat`];
@@ -163,7 +167,7 @@ export function describeEntry(type: LogType, data: unknown): { title: string; de
       return { title: f.name ?? meal, detail: f.portion ? `${f.portion} · ${detail}` : detail };
     }
     case "weight":
-      return { title: "Weight", detail: `${(data as LogData[typeof type]).kg} kg` };
+      return { title: "Weight", detail: units.weight === "kg" ? `${(data as LogData[typeof type]).kg} kg` : weightText((data as LogData[typeof type]).kg, units) };
     case "body-fat":
       return { title: "Body fat", detail: `${(data as LogData[typeof type]).pct}%` };
     case "oxygen-saturation":
@@ -217,14 +221,14 @@ export async function deleteEntry(store: Store, id: string): Promise<{ ok: true;
 }
 
 /** Entries logged at or after `fromTs`, newest first: Pulse's own and those read from Health Connect (logged in Fitbit). */
-export async function recentEntries(store: Store, fromTs: number, limit = 50): Promise<LoggedEntry[]> {
+export async function recentEntries(store: Store, fromTs: number, limit = 50, units: Units = METRIC): Promise<LoggedEntry[]> {
   const rows = await store.loggedEntries(fromTs, limit);
   return rows.map((r) => ({
     id: r.id,
     type: r.type as LogType,
     ts: r.ts,
     day: r.day,
-    ...describeEntry(r.type as LogType, r.data),
+    ...describeEntry(r.type as LogType, r.data, units),
     atGoogle: false,
     source: r.source,
   }));
@@ -255,7 +259,7 @@ export type LogVM = {
   kinds: LogKind[];
   /** Per sheet: the worst access of the types it writes (weight needs weight and body fat). */
   access: Record<LogKind, LogAccess>;
-  /** Today's water, synced roll-up plus what Pulse logged since that sync. */
+  /** Today's water in ml, synced roll-up plus what Pulse logged since that sync (the Log converts it for display). */
   waterToday: number;
   /** Today's calories and protein eaten, counted as the nutrition metrics count them (food.ts); null when none logged. */
   foodToday: { kcal: number | null; protein: number | null };
@@ -275,7 +279,7 @@ export async function getLog(ctx: QueryCtx, opts: { demo?: boolean } = {}): Prom
   const [waterToday, food, recent] = await Promise.all([
     waterOn(ctx.store, today, ctx.timeZone),
     nutritionOn(ctx.store, today, ctx.timeZone),
-    recentEntries(ctx.store, localMidnight(addDays(today, -13), ctx.timeZone)),
+    recentEntries(ctx.store, localMidnight(addDays(today, -13), ctx.timeZone), 50, unitsOf(ctx)),
   ]);
   const byType = logAccess();
   const kinds = LOG_KINDS.filter((k) => ctx.profile.sex === "female" || !isCycleKind(k));

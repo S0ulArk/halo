@@ -6,20 +6,31 @@ import { View } from "react-native";
 import { Pencil } from "lucide-react-native";
 import type { Profile, Sex } from "@/data/types";
 import { wholeYears } from "@/lib/time";
+import { amount, cmToIn, conversionFor, heightDraftOf, heightFromDraft, heightText, IMPERIAL, inputText, inToCm, lengthFromInput, METRIC, type HeightDraft, type Units } from "@/lib/units";
 import { deviceTimeZone, useApp } from "@/state/app";
+import { useUnits } from "@/state/units";
 import { BottomSheet, Txt } from "@/ui";
 import { BirthDatePicker } from "./BirthDatePicker";
 import { CalmButton, CalmField, CalmInput, useCalm } from "./calmKit";
 import { Segmented } from "./parts";
 import { toast } from "./toast";
+import { HeightInput, useHeightDraft } from "./units";
 import { describeZone } from "./zone";
 
 type Errors = Partial<Record<"birthDate" | "sex" | "maxHr" | "heightCm" | "waistCm", string>>;
 
-/** The web's ProfileInput rules: ages 13 to 100, max HR 100-240 (whole), height 100-250 cm; (mobile) waist 40-200 cm. */
+/** The height limits in feet and inches, rounded inward so each is itself allowed: 3 ft 4 in to 8 ft 2 in. */
+const FTIN_RANGE = `Between ${heightText(inToCm(Math.ceil(cmToIn(100))), IMPERIAL)} and ${heightText(inToCm(Math.floor(cmToIn(250))), IMPERIAL)}`;
+
+/**
+ * The web's ProfileInput rules: ages 13 to 100, max HR 100-240 (whole), height 100-250 cm; (mobile) waist 40-200 cm.
+ * Height and waist are typed in `units` (feet and inches, a waist in inches) and come back in cm, to 0.1; the messages
+ * give the limits in the unit typed.
+ */
 export function validateProfile(
-  f: { birthDate: string; sex: Sex | null; maxHr: string; heightCm: string; waistCm?: string },
+  f: { birthDate: string; sex: Sex | null; maxHr: string; height: HeightDraft; waist?: string },
   today: string,
+  units: Units = METRIC,
 ): { errors: Errors; maxHr: number | null; heightCm: number | null; waistCm: number | null } {
   const errors: Errors = {};
   if (!/^\d{4}-\d{2}-\d{2}$/.test(f.birthDate)) errors.birthDate = "Enter your birth date";
@@ -31,10 +42,12 @@ export function validateProfile(
   const num = (s: string) => (s.trim() === "" ? null : Number(s.trim().replace(",", ".")));
   const maxHr = num(f.maxHr);
   if (maxHr !== null && !(Number.isInteger(maxHr) && maxHr >= 100 && maxHr <= 240)) errors.maxHr = "Between 100 and 240";
-  const heightCm = num(f.heightCm);
-  if (heightCm !== null && !(Number.isFinite(heightCm) && heightCm >= 100 && heightCm <= 250)) errors.heightCm = "Between 100 and 250 cm";
-  const waistCm = num(f.waistCm ?? "");
-  if (waistCm !== null && !(Number.isFinite(waistCm) && waistCm >= 40 && waistCm <= 200)) errors.waistCm = "Between 40 and 200 cm";
+  const ftin = units.height === "ftin";
+  const heightCm = heightFromDraft(f.height, units);
+  if (heightCm !== null && !(Number.isFinite(heightCm) && heightCm >= 100 && heightCm <= 250)) errors.heightCm = ftin ? FTIN_RANGE : "Between 100 and 250 cm";
+  const waistCm = lengthFromInput(f.waist ?? "", units);
+  if (waistCm !== null && !(Number.isFinite(waistCm) && waistCm >= 40 && waistCm <= 200))
+    errors.waistCm = ftin ? `Between ${amount(Math.ceil(cmToIn(40) * 10) / 10)} and ${amount(Math.floor(cmToIn(200) * 10) / 10)} in` : "Between 40 and 200 cm";
   return { errors, maxHr, heightCm, waistCm };
 }
 
@@ -47,20 +60,24 @@ function Field({ label, hint, error, optional, children }: { label: string; hint
   );
 }
 
-function NumberField({ value, onChange, placeholder, invalid, label }: { value: string; onChange: (v: string) => void; placeholder: string; invalid: boolean; label: string }) {
-  return <CalmInput value={value} onChangeText={onChange} placeholder={placeholder} keyboardType="number-pad" accessibilityLabel={label} invalid={invalid} on="card" numeric />;
+function NumberField({ value, onChange, placeholder, invalid, label, decimal = false }: { value: string; onChange: (v: string) => void; placeholder: string; invalid: boolean; label: string; decimal?: boolean }) {
+  return <CalmInput value={value} onChangeText={onChange} placeholder={placeholder} keyboardType={decimal ? "decimal-pad" : "number-pad"} accessibilityLabel={label} invalid={invalid} on="card" numeric />;
 }
 
 /** The teal "✎ Edit" link beside the Profile header, and its sheet. */
 export function EditProfileButton({ profile }: { profile: Profile }) {
   const c = useCalm();
   const app = useApp();
+  // Height and waist are typed in Settings › Units' height unit (cm, or feet and inches with the waist in inches).
+  const { units } = useUnits();
+  const ftin = units.height === "ftin";
+  const waistOf = (cm: number | null | undefined) => (cm ? inputText(cm, conversionFor("cm", units), 1) : "");
   const [open, setOpen] = React.useState(false);
   const [birthDate, setBirthDate] = React.useState(profile.birthDate);
   const [sex, setSex] = React.useState<Sex | null>(profile.sex);
   const [maxHr, setMaxHr] = React.useState(profile.maxHr ? String(profile.maxHr) : "");
-  const [heightCm, setHeightCm] = React.useState(profile.heightCm ? String(profile.heightCm) : "");
-  const [waistCm, setWaistCm] = React.useState(profile.waistCm ? String(profile.waistCm) : "");
+  const [height, setHeight] = useHeightDraft(profile.heightCm, units);
+  const [waist, setWaist] = React.useState(() => waistOf(profile.waistCm));
   const [errors, setErrors] = React.useState<Errors>({});
   const [pending, setPending] = React.useState(false);
   const zone = deviceTimeZone();
@@ -69,18 +86,22 @@ export function EditProfileButton({ profile }: { profile: Profile }) {
     setBirthDate(profile.birthDate);
     setSex(profile.sex);
     setMaxHr(profile.maxHr ? String(profile.maxHr) : "");
-    setHeightCm(profile.heightCm ? String(profile.heightCm) : "");
-    setWaistCm(profile.waistCm ? String(profile.waistCm) : "");
+    setHeight(heightDraftOf(profile.heightCm, units));
+    setWaist(waistOf(profile.waistCm));
     setErrors({});
     setOpen(true);
   };
   const save = async () => {
-    const v = validateProfile({ birthDate, sex, maxHr, heightCm, waistCm }, app.today);
+    const v = validateProfile({ birthDate, sex, maxHr, height, waist }, app.today, units);
     setErrors(v.errors);
     if (Object.keys(v.errors).length || !sex) return;
+    // A height or waist left as it was shown keeps its stored cm, so feet and inches never round it on a save.
+    const shownHeight = heightDraftOf(profile.heightCm, units);
+    const heightCm = height.cm === shownHeight.cm && height.ft === shownHeight.ft && height.in === shownHeight.in ? (profile.heightCm ?? null) : v.heightCm;
+    const waistCm = waist === waistOf(profile.waistCm) ? (profile.waistCm ?? null) : v.waistCm;
     setPending(true);
     try {
-      await app.saveProfile({ birthDate, sex, maxHr: v.maxHr, heightCm: v.heightCm, waistCm: v.waistCm, timeZone: zone });
+      await app.saveProfile({ birthDate, sex, maxHr: v.maxHr, heightCm, waistCm, timeZone: zone });
       setOpen(false);
       toast("Profile saved. Scores are being recomputed.");
     } catch {
@@ -129,11 +150,11 @@ export function EditProfileButton({ profile }: { profile: Profile }) {
               </Txt>
             </View>
           </Field>
-          <Field label="Height" hint="In cm. Lean body mass for your height, and body fat from weight when no scale reports it." error={errors.heightCm} optional>
-            <NumberField label="Height in centimetres" value={heightCm} onChange={setHeightCm} placeholder="cm" invalid={!!errors.heightCm} />
+          <Field label="Height" hint={`${ftin ? "In feet and inches" : "In cm"}. Lean body mass for your height, and body fat from weight when no scale reports it.`} error={errors.heightCm} optional>
+            <HeightInput value={height} onChange={setHeight} units={units} invalid={!!errors.heightCm} placeholder="cm" />
           </Field>
-          <Field label="Waist" hint="In cm, at the navel. Sharpens the VO2 max Halo estimates from resting heart rate and activity." error={errors.waistCm} optional>
-            <NumberField label="Waist in centimetres" value={waistCm} onChange={setWaistCm} placeholder="cm" invalid={!!errors.waistCm} />
+          <Field label="Waist" hint={`${ftin ? "In inches" : "In cm"}, at the navel. Sharpens the VO2 max Halo estimates from resting heart rate and activity.`} error={errors.waistCm} optional>
+            <NumberField label={ftin ? "Waist in inches" : "Waist in centimetres"} value={waist} onChange={setWaist} placeholder={ftin ? "in" : "cm"} invalid={!!errors.waistCm} decimal={ftin} />
           </Field>
           <Field label="Max heart rate" hint="Leave blank to estimate it from your age." error={errors.maxHr} optional>
             <NumberField label="Max heart rate in beats per minute" value={maxHr} onChange={setMaxHr} placeholder="bpm" invalid={!!errors.maxHr} />

@@ -1,6 +1,7 @@
 // The nutrition targets: protein at 1.6 g per kg of the latest weight (a healthy weight for the height, else 100 g,
 // without one), calories at the average burn (2,000 without it), fat and carbs from those, and the person's own numbers.
 import { describe, expect, it } from "vitest";
+import { IMPERIAL, METRIC } from "@/lib/units";
 import { calorieTarget, DEFAULT_KCAL, DEFAULT_PROTEIN_G, NO_CUSTOM, parseCustomTargets, parseTarget, progressOf, proteinTarget, resolveTargets, validateTarget } from "./targets";
 
 describe("protein target", () => {
@@ -16,6 +17,17 @@ describe("protein target", () => {
     expect(proteinTarget(null, null)).toMatchObject({ value: DEFAULT_PROTEIN_G, custom: false });
     // An implausible reading is no weight.
     expect(proteinTarget(4, null).value).toBe(DEFAULT_PROTEIN_G);
+  });
+
+  it("words its basis in the person's units; the grams stay the same", () => {
+    expect(proteinTarget(72.4, 178, IMPERIAL)).toEqual({ value: 116, custom: false, basis: "0.73 g per lb at 159.6 lb" });
+    const h = proteinTarget(null, 165, IMPERIAL);
+    expect(h.value).toBe(proteinTarget(null, 165).value);
+    expect(h.basis).toBe("0.73 g per lb of a healthy weight for 5 ft 5 in (132 lb). Log your weight to use yours.");
+    expect(proteinTarget(null, null, IMPERIAL).basis).toBe("A typical adult target. Log your weight for yours: 0.73 g per lb.");
+    // Each choice on its own: kilograms with feet and inches.
+    expect(proteinTarget(null, 165, { ...METRIC, height: "ftin" }).basis).toContain("for 5 ft 5 in (60 kg)");
+    expect(resolveTargets(NO_CUSTOM, { weightKg: 72.4, heightCm: null, burned: [], units: IMPERIAL }).protein.basis).toBe("0.73 g per lb at 159.6 lb");
   });
 });
 

@@ -13,6 +13,7 @@ import type { Profile } from "@/data/types";
 import { localDay } from "@/lib/time";
 import type { QueryCtx } from "@/queries/ctx";
 import { cloudflareProblem, enableWorkersDev, ensureNamespace, ensureSubdomain, listAccounts, removeWorker, uploadWorker, workerUrl } from "./cloudflare";
+import { readUnits } from "@/state/units";
 import { buildSnapshot } from "./snapshot";
 import { WORKER_VERSION } from "./workerSource";
 
@@ -154,7 +155,7 @@ export async function sendSnapshot(ctx: QueryCtx, opts: { force?: boolean; retri
   if (!ingestKey) return { ok: false, error: "the upload key is missing on this phone; set the connector up again" };
   try {
     if (s.workerVersion !== WORKER_VERSION) await updateWorker(s, ingestKey);
-    const text = JSON.stringify(await buildSnapshot(ctx));
+    const text = JSON.stringify(await buildSnapshot(ctx, ctx.units ?? (await readUnits().catch(() => null))));
     const hash = hashOf(text);
     if (!opts.force && hash === s.lastHash && s.lastSentAt && Date.now() - s.lastSentAt < REFRESH_MS) return { ok: true, sent: false };
     let lastError = "";

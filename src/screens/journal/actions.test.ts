@@ -6,6 +6,7 @@ import type { Store } from "@/data/store";
 import type { Profile } from "@/data/types";
 import { DEFAULT_JOURNAL_TAGS, ensureDefaultTags, getBehaviours, MAX_TAGS } from "@/queries/journal";
 import type { QueryCtx } from "@/queries/ctx";
+import { IMPERIAL } from "@/lib/units";
 import { addCustomTag, deleteLogEntry, loadCheckIn, logEntry, logFoods, reorderBehaviours, saveJournalEntry, setBehaviourHidden, setFoodSeparate, updateFoodEntry, type ActionCtx } from "./actions";
 
 const TZ = "Asia/Kolkata";
@@ -192,6 +193,17 @@ describe("logEntry", () => {
       ["weight", { kg: 72.4 }, Date.parse("2026-10-02T02:30:00Z") / 1000],
       ["body-fat", { pct: 18.3 }, Date.parse("2026-10-02T02:30:00Z") / 1000],
     ]);
+  });
+
+  it("gives its limits in the units typed, and keeps a weight typed in pounds to 0.01 kg", async () => {
+    const us = (): ActionCtx => ({ ...c(), units: IMPERIAL });
+    expect(await logEntry(us(), { kind: "water", ml: 5 })).toEqual({ ok: false, error: "At least 0.4 fl oz" });
+    expect(await logEntry(us(), { kind: "water", ml: 6000 })).toEqual({ ok: false, error: "At most 169 fl oz" });
+    expect(await logEntry(us(), { kind: "weight", kg: 10, fatPct: null })).toEqual({ ok: false, error: "Between 44.1 and 661.3 lb" });
+    expect(await logEntry(c(), { kind: "weight", kg: 10, fatPct: null })).toEqual({ ok: false, error: "Between 20 and 300 kg" });
+    // 170.5 lb is 77.3375 kg: stored as 77.34, it reads back as 170.5 lb (77.3 would read 170.4).
+    expect(await logEntry(us(), { kind: "weight", kg: 77.3375, fatPct: null, at: "2026-10-02T08:00" })).toMatchObject({ ok: true });
+    expect((await rows()).map((r) => r.data)).toEqual([{ kg: 77.34 }]);
   });
 
   it("refuses cycle logging and cycle symptoms on a male profile, allows them on a female one", async () => {

@@ -1,9 +1,12 @@
 // Daily goals (Fitbit-style, a phone-only addition): how far `day` has come toward each target the person set, with a
 // week of history for the rings and streaks, and Active Zone Minutes against the weekly target. Pulse's own screens
-// never set goals; they are kept on the phone (src/state/goals.ts) and come in as `goals`. Pure over the Store.
+// never set goals; they are kept on the phone (src/state/goals.ts) and come in as `goals`. Pure over the Store. Targets
+// are kept metric (km, ml); the rows come out in the person's units.
 import { addDays } from "@/lib/time";
+import { conversionFor, mapFinite, shown, type Units } from "@/lib/units";
 import { type FormatKey, metricHref, weekOf } from "./_lib";
 import { type DayRow, finite, loadDays, nightNeedMin, type QueryCtx, todayOf } from "./common";
+import { unitsOf } from "./units";
 
 export type GoalKey = "steps" | "distance" | "floors" | "azm" | "active_minutes" | "active_calories" | "water" | "sleep";
 export const GOAL_KEYS: readonly GoalKey[] = ["steps", "distance", "floors", "azm", "active_minutes", "active_calories", "water", "sleep"];
@@ -173,5 +176,23 @@ export async function getGoalsDay(day: string, ctx: QueryCtx, goals: Goals): Pro
     week = { from: monday, to: day, total, target, progress: target > 0 ? clamp01(total / target) : 0, done: target > 0 && total >= target, days };
   }
 
-  return { day, today, isToday, goals: out, done: out.filter((g) => g.done).length, week };
+  const units = unitsOf(ctx);
+  return { day, today, isToday, goals: out.map((g) => localizeGoal(g, units)), done: out.filter((g) => g.done).length, week };
+}
+
+/**
+ * A goal row in `units`: distance in km or miles, water in ml or US fl oz, its value, target and week alike. Progress
+ * and "done" were worked out in metric and are ratios, so they stay.
+ */
+export function localizeGoal(g: GoalRow, units: Units): GoalRow {
+  const conv = conversionFor(g.unit, units);
+  if (!conv) return g;
+  const to = (v: number) => shown(v, conv);
+  return {
+    ...g,
+    unit: conv.unit,
+    value: mapFinite(g.value, to),
+    target: to(g.target),
+    history: g.history.map((h) => ({ ...h, value: mapFinite(h.value, to), target: to(h.target) })),
+  };
 }

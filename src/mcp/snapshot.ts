@@ -9,6 +9,7 @@ import { getActivities } from "@/queries/activities";
 import { todayOf, type QueryCtx } from "@/queries/common";
 import { dailyTable, journalBehaviours, journalTable, toObjects } from "@/queries/settings";
 import { TREND_METRICS } from "@/queries/trends";
+import type { Units } from "@/lib/units";
 import app from "../../app.json";
 
 export const SNAPSHOT_SCHEMA = 1;
@@ -24,6 +25,8 @@ export type Snapshot = {
   timeZone: string;
   today: string;
   units: "metric";
+  /** What the person reads in Halo (Settings › Units), so Claude can answer in the same units. */
+  preferredUnits: Units | null;
   profile: unknown;
   metrics: { column: string; label: string; unit: string | null; group: string }[];
   days: Record<string, string | number | null>[];
@@ -49,7 +52,9 @@ async function part<T>(label: string, fn: () => Promise<T>): Promise<T | null> {
   }
 }
 
-export async function buildSnapshot(ctx: QueryCtx): Promise<Snapshot> {
+export async function buildSnapshot(withUnits: QueryCtx, preferredUnits: Units | null = withUnits.units ?? null): Promise<Snapshot> {
+  // Always metric, whatever the screens show: the field names say kg and km, and Claude converts for the person.
+  const ctx: QueryCtx = { ...withUnits, units: undefined };
   const today = todayOf(ctx);
   const tools = coachTools(ctx);
   // The coach's tools, called directly: the results only pass through to the Worker, so their exact types don't matter.
@@ -113,6 +118,7 @@ export async function buildSnapshot(ctx: QueryCtx): Promise<Snapshot> {
     timeZone: ctx.timeZone,
     today,
     units: "metric",
+    preferredUnits,
     profile,
     metrics: TREND_METRICS.map((m) => ({ column: m.column, label: m.label, unit: m.unit ?? (m.format === "duration" ? "min" : null), group: m.group })),
     days,

@@ -10,7 +10,9 @@ import { Pressable, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { CalendarHeart, Droplet, FlaskConical, HeartPulse, Scale, Smile, Thermometer, Trash2, Utensils, type LucideIcon } from "lucide-react-native";
 import { FORMATS } from "@/lib/format";
-import { CYCLE_SYMPTOMS, FLOWS, KIND_LABEL, LOG_KINDS, MOODS, OVULATION_RESULTS, SYMPTOMS, VALENCES, WATER_STEPS, type LogKind, type LoggedEntry, type LogType, type LogVM } from "@/queries/log";
+import { flOzToMl, mlToFlOz } from "@/lib/units";
+import { CYCLE_SYMPTOMS, FLOWS, KIND_LABEL, LOG_KINDS, MOODS, OVULATION_RESULTS, SYMPTOMS, VALENCES, WATER_STEPS, WATER_STEPS_FL_OZ, type LogKind, type LoggedEntry, type LogType, type LogVM } from "@/queries/log";
+import { useUnits } from "@/state/units";
 import { BottomSheet, Skeleton, Txt } from "@/ui";
 import { CalmButton, Hairline, IconTile, Num, SectionLabel, Sentence, useCalm, type CalmTint } from "../settings/calmKit";
 import { deleteLogEntry, logEntry, type LogInput } from "./actions";
@@ -82,17 +84,18 @@ const TILE_HEIGHT = 104;
 /** A logged entry's band: its title (21) and when (2 + 18). */
 const ENTRY_BAND = 41;
 
-/** Water's and food's running totals on their tiles: the amount today, in the numeric face. */
+/** Water's and food's running totals on their tiles: the amount today, in the numeric face (water in ml or fl oz). */
 const TOTAL: Partial<Record<LogKind, { unit: string; tint: CalmTint }>> = { water: { unit: "ml", tint: "sky" }, food: { unit: "kcal", tint: "sand" } };
 
 /**
  * One log tile, half the row: a white 24 px card with the kind's tinted icon tile and its full label under it (water's
  * and food's running totals beside the icon, in the numeric face). The label sits right under the icon row, so the two
- * labels of a row start on one line even if one wraps.
+ * labels of a row start on one line even if one wraps. `unit` overrides the total's (water in fl oz).
  */
-function Tile({ kind, today, onPress }: { kind: LogKind; today: number | null; onPress: () => void }) {
+function Tile({ kind, today, unit, onPress }: { kind: LogKind; today: number | null; unit?: string; onPress: () => void }) {
   const c = useCalm();
-  const total = TOTAL[kind];
+  const base = TOTAL[kind];
+  const total = base && { ...base, unit: unit ?? base.unit };
   return (
     <Pressable
       onPress={onPress}
@@ -129,6 +132,12 @@ export function Log({ vm }: LogProps) {
   const { demo } = vm;
   const actx = useActionCtx();
   const app = useApp();
+  // Water and weight are typed and shown in the person's units (Settings › Units) and stored in ml and kg.
+  const { units } = useUnits();
+  const oz = units.fluid === "floz";
+  const waterUnit = oz ? "fl oz" : "ml";
+  const waterToday = oz ? mlToFlOz(vm.waterToday) : vm.waterToday;
+  const steps = oz ? WATER_STEPS_FL_OZ.map((n) => ({ ml: Math.round(flOzToMl(n)), label: n })) : WATER_STEPS.map((n) => ({ ml: n, label: n }));
   // Weight, body fat and blood oxygen feed their metrics, Pulse Age and Health Monitor, so they rescore. Water and food
   // feed the water goal and the nutrition numbers, which the screens add up as they read: those screens just read again
   // (no sync or scoring run; the food sheet does the same on save). Other entries are list-only.
@@ -198,7 +207,7 @@ export function Log({ vm }: LogProps) {
   };
 
   const save = () => {
-    const input = toInput(shown, form, at);
+    const input = toInput(shown, form, at, units);
     if (typeof input === "string") return setError(input);
     void send(input);
   };
@@ -244,7 +253,7 @@ export function Log({ vm }: LogProps) {
         {pairs(vm.kinds).map((row) => (
           <View key={row.join("-")} style={{ flexDirection: "row", gap: TILE_GAP }}>
             {row.map((k) => (
-              <Tile key={k} kind={k} today={k === "water" ? vm.waterToday : k === "food" ? vm.foodToday.kcal : null} onPress={() => open(k)} />
+              <Tile key={k} kind={k} today={k === "water" ? waterToday : k === "food" ? vm.foodToday.kcal : null} unit={k === "water" ? waterUnit : undefined} onPress={() => open(k)} />
             ))}
             {row.length === 1 && <View style={{ flex: 1 }} />}
           </View>
@@ -334,22 +343,22 @@ export function Log({ vm }: LogProps) {
           <>
             <Section title="Add" first>
               <View style={{ flexDirection: "row", gap: 8 }}>
-                {WATER_STEPS.map((ml) => (
-                  <CalmButton key={ml} variant="secondary" on="card" grow disabled={saving} style={{ minHeight: 56, borderRadius: 28 }} onPress={() => void send({ kind: "water", ml, at: at.trim().replace(/\s+/, "T") }, false)} accessibilityLabel={`+${ml} ml`}>
+                {steps.map(({ ml, label }) => (
+                  <CalmButton key={ml} variant="secondary" on="card" grow disabled={saving} style={{ minHeight: 56, borderRadius: 28 }} onPress={() => void send({ kind: "water", ml, at: at.trim().replace(/\s+/, "T") }, false)} accessibilityLabel={`+${label} ${waterUnit}`}>
                     <Droplet size={20} color={c.tintInk.sky} strokeWidth={1.75} />
-                    <Num value={`+${ml}`} unit="ml" size={18} />
+                    <Num value={`+${label}`} unit={waterUnit} size={18} />
                   </CalmButton>
                 ))}
               </View>
-              <View accessible accessibilityLabel={`Today: ${grouped(vm.waterToday)} ml`} accessibilityLiveRegion="polite" style={{ flexDirection: "row", alignItems: "baseline", gap: 8, paddingHorizontal: 4 }}>
+              <View accessible accessibilityLabel={`Today: ${grouped(waterToday)} ${waterUnit}`} accessibilityLiveRegion="polite" style={{ flexDirection: "row", alignItems: "baseline", gap: 8, paddingHorizontal: 4 }}>
                 <Txt size={11} lineHeight={15} weight={600} style={{ color: c.faint, letterSpacing: 1.4 }}>
                   TODAY
                 </Txt>
-                <Num value={grouped(vm.waterToday)} unit="ml" size={18} color={c.tintInk.sky} />
+                <Num value={grouped(waterToday)} unit={waterUnit} size={18} color={c.tintInk.sky} />
               </View>
             </Section>
             <Section title="Other amount">
-              {numeric("ml", "Amount", "(ml)", { placeholder: "e.g. 330" })}
+              {oz ? numeric("ml", "Amount", "(fl oz)", { decimal: true, placeholder: "e.g. 12" }) : numeric("ml", "Amount", "(ml)", { placeholder: "e.g. 330" })}
               {timeField}
             </Section>
           </>
@@ -358,7 +367,7 @@ export function Log({ vm }: LogProps) {
         {shown === "weight" && (
           <Section title="Measurement" first>
             <View style={{ flexDirection: "row", gap: 8 }}>
-              {numeric("kg", "Weight", "(kg)", { decimal: true })}
+              {numeric("kg", "Weight", units.weight === "lb" ? "(lb)" : "(kg)", { decimal: true })}
               {numeric("fat", "Body fat", "(%)", { decimal: true, placeholder: "Optional" })}
             </View>
             {timeField}

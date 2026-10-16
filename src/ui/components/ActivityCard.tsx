@@ -3,6 +3,8 @@ import { Pressable, View } from "react-native";
 import { Bike, Dumbbell, Footprints, PersonStanding, Timer, type LucideIcon } from "lucide-react-native";
 import { clock, formatValue, spoken } from "@/lib/format";
 import type { Metric } from "@/lib/reasons";
+import { conversionFor, METRIC, shown, type Units } from "@/lib/units";
+import { useUnits } from "@/state/units";
 import { useCalm, type CalmTint } from "@/ui/calm";
 import { font } from "@/ui/fonts";
 import { Caption, useSoftFill } from "./calmKit";
@@ -30,10 +32,23 @@ export type ActivityCardProps = {
   paceS?: number | null;
 };
 
-/** "5.21 km at 5:32 /km", "18.40 km", or null with no distance. */
-export function distanceText(km: number | null | undefined, paceS?: number | null) {
+/** The distance and pace as shown in `units`: 5.21 km at 5:32 a km, or 3.24 miles at 8:54 a mile. */
+function distanceParts(km: number, paceS: number | null | undefined, units: Units) {
+  const d = conversionFor("km", units);
+  const p = conversionFor("/km", units);
+  return {
+    distance: formatValue("decimal2", shown(km, d)),
+    distanceUnit: d?.unit ?? "km",
+    pace: paceS == null ? null : formatValue("pace", shown(paceS, p)),
+    paceUnit: p?.unit ?? "/km",
+  };
+}
+
+/** "5.21 km at 5:32 /km", "18.40 km" (in miles "3.24 mi at 8:54 /mi"), or null with no distance. */
+export function distanceText(km: number | null | undefined, paceS?: number | null, units: Units = METRIC) {
   if (km == null) return null;
-  return paceS == null ? `${formatValue("decimal2", km)} km` : `${formatValue("decimal2", km)} km at ${formatValue("pace", paceS)} /km`;
+  const x = distanceParts(km, paceS, units);
+  return x.pace === null ? `${x.distance} ${x.distanceUnit}` : `${x.distance} ${x.distanceUnit} at ${x.pace} ${x.paceUnit}`;
 }
 
 /** The timeline row's icon tile; the name over its times (40 px) and the number over its label (43 px) sit on it. */
@@ -122,11 +137,14 @@ export function ActivityCard({ name, kind, strain, start, end, onPress, timeZone
   const s = clock(start, timeZone);
   const e = clock(end, timeZone);
   const value = formatValue("decimal1", strain.value);
-  const distance = distanceText(distanceKm, paceS);
+  // Distance and pace in km or miles (Settings › Units); the workout keeps them in km.
+  const { units } = useUnits();
+  const distance = distanceText(distanceKm, paceS, units);
   const noStrain = strain.value === null;
   // The full reason when it is the only caption; beside a distance, the short form keeps the row on one line.
   const caption = distance ? (noStrain ? `${distance} · No strain` : distance) : noStrain ? "No strain: not enough heart-rate data" : undefined;
-  const spokenDistance = distanceKm == null ? "" : `, ${spoken(formatValue("decimal2", distanceKm), "km")}${paceS == null ? "" : ` at ${spoken(formatValue("pace", paceS), "/km")}`}`;
+  const x = distanceKm == null ? null : distanceParts(distanceKm, paceS, units);
+  const spokenDistance = x === null ? "" : `, ${spoken(x.distance, x.distanceUnit)}${x.pace === null ? "" : ` at ${spoken(x.pace, x.paceUnit)}`}`;
   return (
     <TimelineRow
       onPress={onPress}

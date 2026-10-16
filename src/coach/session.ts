@@ -3,6 +3,7 @@
 // tools.ts and validate.ts carry the logic and are tested on their own.
 import * as React from "react";
 import type { QueryCtx } from "@/queries/ctx";
+import { readUnits } from "@/state/units";
 import { deviceFetch } from "./net";
 import { modelFor } from "./providers";
 import { apiKey, chatCount, coachSetup, loadChat, saveChat, subscribe, type CoachSetup } from "./storage";
@@ -34,6 +35,8 @@ export function deviceTransport(): CoachTransport {
     load: loadChat,
     save: saveChat,
     onSaveError: (e) => console.warn(`[coach] saving the chat failed: ${e instanceof Error ? e.name : "error"}`),
+    // Settings › Units as stored when the turn starts: the instructions tell the model which units to answer in.
+    units: readUnits,
   });
 }
 

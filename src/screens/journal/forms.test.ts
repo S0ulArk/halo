@@ -1,5 +1,6 @@
 // Ported from Pulse's src/app/(app)/journal/CheckIn.test.tsx (changedEntries) plus the Log sheet's form parsing.
 import { describe, expect, it } from "vitest";
+import { METRIC } from "@/lib/units";
 import { changedEntries, EMPTY, EMPTY_FOOD, foodFormOf, foodItemOf, mealAt, toInput, wallNow, when } from "./forms";
 
 const TZ = "Asia/Kolkata";
@@ -25,6 +26,20 @@ describe("toInput", () => {
     expect(toInput("water", { ml: "33.5" }, "2026-10-02 08:00")).toBe("Enter the amount in millilitres.");
     expect(toInput("weight", { kg: "72,4", fat: "" }, "2026-10-02 08:00")).toEqual({ kind: "weight", kg: 72.4, fatPct: null, at: "2026-10-02T08:00" });
     expect(toInput("weight", { kg: "72", fat: "lots" }, "2026-10-02 08:00")).toBe("Body fat is a percentage, as a number.");
+  });
+
+  it("reads water in fluid ounces and weight in pounds when those are chosen, and hands over ml and kg", () => {
+    const us = { ...METRIC, weight: "lb", fluid: "floz" } as const;
+    expect(toInput("water", { ml: "12" }, "2026-10-02 08:00", us)).toEqual({ kind: "water", ml: 355, at: "2026-10-02T08:00" });
+    // A decimal is fine in fluid ounces; the ml stored are whole.
+    expect(toInput("water", { ml: "8,5" }, "", us)).toMatchObject({ ml: 251 });
+    expect(toInput("water", { ml: "a glass" }, "", us)).toBe("Enter the amount in fluid ounces.");
+    const w = toInput("weight", { kg: "170.5", fat: "" }, "2026-10-02 08:00", us);
+    if (typeof w === "string" || w.kind !== "weight") throw new Error(String(w));
+    expect(w.kg).toBeCloseTo(77.3375, 4);
+    expect(toInput("weight", { kg: "", fat: "" }, "", us)).toBe("Enter your weight in pounds.");
+    // Metric stays as it was.
+    expect(toInput("weight", { kg: "", fat: "" }, "")).toBe("Enter your weight in kilograms.");
   });
 
   it("asks for the meal, whole calories and numeric macros", () => {

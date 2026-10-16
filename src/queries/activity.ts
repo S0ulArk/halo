@@ -24,6 +24,7 @@ import { getActivityCost } from "./activityCost";
 import { hrChartOf, zoneNote, zoneRows } from "./strain";
 import { trainingEffectVM } from "./training";
 import type { ActivityCostVM, ActivityKind, ActivityVM, KeyStat, ZoneRow } from "./types";
+import { localizeStat, unitsOf } from "./units";
 
 /** Activity `/activity/[id]` (spec §7.4); null for an unknown id. */
 export async function getActivity(id: string, ctx: QueryCtx): Promise<ActivityVM | null> {
@@ -83,7 +84,8 @@ export async function getActivity(id: string, ctx: QueryCtx): Promise<ActivityVM
     loadSplit: a?.effort != null ? loadSplit(a.cardioTrimp ?? null, a.muscularTrimp ?? 0) : null,
     trainingEffect: trainingEffectVM(row?.training, id),
     dayStrain: row?.s1?.effort != null ? toStrain(row.s1.effort) : null,
-    stats,
+    // Distance and pace in km or miles (Settings › Units).
+    stats: stats.map((s) => localizeStat(s, unitsOf(ctx))),
     insight: a && a.hrCount > 0 ? zoneInsight(a.zoneSeconds) : null,
     hr: hrChartOf(ctx, row, e.day, e.day === todayOf(ctx), series, recent.filter((y) => y.id === id), e.startTs - 600, e.endTs + 600),
     zones: a

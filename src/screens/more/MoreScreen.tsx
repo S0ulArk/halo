@@ -5,12 +5,38 @@
 import * as React from "react";
 import { useRouter, type Href } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
-import { Archive, Bell, Bluetooth, BookOpen, BotMessageSquare, Cable, CalendarDays, CalendarRange, ChartLine, ClipboardCheck, Database, HeartPulse, History, ListChecks, Palette, Plug, RefreshCw, Sparkles, SwatchBook, Target, Trash2, UserRound } from "lucide-react-native";
+import {
+  Archive,
+  Bell,
+  Bluetooth,
+  BookOpen,
+  BotMessageSquare,
+  Cable,
+  CalendarDays,
+  CalendarRange,
+  ChartLine,
+  Database,
+  HeartPulse,
+  ListChecks,
+  Palette,
+  Plug,
+  RefreshCw,
+  Ruler,
+  Sparkles,
+  SwatchBook,
+  Target,
+  Trash2,
+  UserRound,
+  History,
+  ClipboardCheck,
+} from "lucide-react-native";
 import { describeHealthConnect } from "@/health/sync";
 import { localDay } from "@/lib/time";
 import { ago, formatDay, rangeLabel } from "@/lib/format";
+import { presetOf } from "@/lib/units";
 import { APP_VERSION, getMore, SCORING_VERSION } from "@/queries/settings";
 import { useApp, useQuery, useSyncProgress } from "@/state/app";
+import { useUnits } from "@/state/units";
 import { useCalm } from "../settings/calmKit";
 import { TabShell, useNow } from "../health/shells";
 import { progressLabel } from "../home/status";
@@ -33,6 +59,10 @@ export default function MoreScreen() {
   const vm = q.data;
   const [confirm, setConfirm] = React.useState<Confirm>(null);
   const [diag, setDiag] = React.useState<string | null>(null);
+  // Settings › Units' row says which units are on: a preset by name, else "Custom".
+  const { units } = useUnits();
+  const preset = presetOf(units);
+  const unitsAside = preset === "metric" ? "Metric" : preset === "imperial" ? "Imperial (US)" : "Custom";
 
   const syncing = app.status === "syncing";
   const failed = app.error ?? app.sync.lastError;
@@ -101,6 +131,7 @@ export default function MoreScreen() {
     { icon: Bell, tint: "sand", label: "Notifications & background", href: "/settings?s=notifications" },
     { icon: Bluetooth, tint: "rose", label: "Live heart rate", href: "/settings?s=live" },
     { icon: Palette, tint: "lavender", label: "App", href: "/settings?s=app" },
+    { icon: Ruler, tint: "sand", label: "Units", aside: unitsAside, href: "/settings?s=units" },
     { icon: BotMessageSquare, tint: "mint", label: "Coach", href: "/settings?s=coach" },
     { icon: Cable, tint: "lavender", label: "Connect to Claude", href: "/settings?s=claude" },
   ];

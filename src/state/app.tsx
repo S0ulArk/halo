@@ -22,10 +22,13 @@ import { refreshRecentHeartRate } from "@/health/live";
 import { forgetChanges } from "@/health/sync";
 import { toSignInError, type GoogleSignInError } from "../../modules/pulse-google/errors";
 import { localDay } from "@/lib/time";
+import { unitsKey } from "@/lib/units";
 import type { QueryCtx } from "@/queries/ctx";
 import { useAfterTransition } from "@/ui/components/AfterTransition";
 // Live heart rate over Bluetooth (display-only; never written to the Store), available to every screen.
 import { LiveBleProvider } from "./liveBle";
+// The person's display units (Settings › Units), part of the query context and the view-model cache's stamp.
+import { useUnits } from "./units";
 
 export type Source = "health_connect" | "google" | "demo";
 export type Status = "booting" | "needs_profile" | "needs_permissions" | "syncing" | "ready" | "error";
@@ -499,15 +502,20 @@ export function useSyncProgress(): Progress | null {
   return React.useContext(ProgressCtx);
 }
 
-/** The context the ported queries take. null until the store and profile exist. */
+/**
+ * The context the ported queries take, with the person's display units (Settings › Units). null until the store and
+ * profile exist and the stored units are read, so no screen draws a metric number it would redraw a moment later.
+ */
 export function useQueryCtx(): QueryCtx | null {
   const a = useApp();
+  const { units, ready } = useUnits();
   return React.useMemo(() => {
-    if (!a.store || !a.profile) return null;
-    return { store: a.store, profile: a.profile, timeZone: a.timeZone, today: a.today, now: Math.floor(Date.now() / 1000), sync: a.sync };
-    // dataVersion is part of the key so a new scoring run produces a new ctx and every useQuery refetches.
+    if (!a.store || !a.profile || !ready) return null;
+    return { store: a.store, profile: a.profile, timeZone: a.timeZone, today: a.today, now: Math.floor(Date.now() / 1000), sync: a.sync, units };
+    // dataVersion is part of the key so a new scoring run produces a new ctx and every useQuery refetches; a change of
+    // units does the same (the view models convert as they are built).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [a.store, a.profile, a.timeZone, a.today, a.sync, a.dataVersion]);
+  }, [a.store, a.profile, a.timeZone, a.today, a.sync, a.dataVersion, units, ready]);
 }
 
 export type QueryResult<T> = { data: T | undefined; error: Error | null; loading: boolean };
@@ -515,7 +523,7 @@ export type QueryResult<T> = { data: T | undefined; error: Error | null; loading
 // ── The view-model cache ─────────────────────────────────────────────────────
 // A keyed view model is worked out once per scoring run and shared: screens showing the same day reuse it (Today,
 // Activity and Health all read the day's Home model), a screen opened again has its numbers at once, and Today warms
-// the other tabs' models in the background (prefetchQuery). The stamp (scoring run, day, zone) retires an entry.
+// the other tabs' models in the background (prefetchQuery). The stamp (scoring run, day, zone, units) retires an entry.
 type CacheEntry = { stamp: string; promise: Promise<unknown> };
 const queryCache = new Map<string, CacheEntry>();
 const CACHE_MAX = 64;
@@ -536,10 +544,11 @@ function runCached<T>(key: string, stamp: string, run: () => Promise<T>): Promis
   return promise;
 }
 
-/** The current scoring run's stamp, for prefetchQuery. */
+/** The current scoring run's stamp, for prefetchQuery; the display units are part of it (a model holds converted numbers). */
 export function useQueryStamp(): string {
   const a = useApp();
-  return `${a.dataVersion}|${a.today}|${a.timeZone}`;
+  const { units } = useUnits();
+  return `${a.dataVersion}|${a.today}|${a.timeZone}|${unitsKey(units)}`;
 }
 
 /** Works out a keyed view model ahead of time (the cache's), so the screen that needs it opens with it ready. */

@@ -6,7 +6,9 @@ import * as React from "react";
 import { View } from "react-native";
 import { Moon, type LucideIcon } from "lucide-react-native";
 import { GOAL_KEYS, GOAL_META, type GoalKey } from "@/queries/goals";
-import { isDefaultGoals, parseTarget, TARGET_LIMITS, useGoals, withEnabled, withTarget, type TargetKey } from "@/state/goals";
+import type { Units } from "@/lib/units";
+import { DEFAULT_GOALS, isDefaultGoals, parseTarget, targetLimit, targetText, useGoals, withEnabled, withTarget, type TargetKey } from "@/state/goals";
+import { useUnits } from "@/state/units";
 import { Txt } from "@/ui";
 import { STAT_ICON } from "../home/view";
 import { CalmInput, CalmSwitch, Group, IconTile, Sentence, useCalm, type CalmTint } from "./calmKit";
@@ -112,9 +114,12 @@ type FieldProps = {
   onBlur: () => void;
 };
 
-/** One goal: its switch on the name's row and, while on, the target field with its unit and a hint or error under it. */
-function GoalField({ icon, tint, label, on, onToggle, targetKey, text, error, onChange, onBlur }: FieldProps) {
-  const l = TARGET_LIMITS[targetKey];
+/**
+ * One goal: its switch on the name's row and, while on, the target field with its unit and a hint or error under it.
+ * Distance and water are typed in the person's units (km or mi, ml or fl oz).
+ */
+function GoalField({ icon, tint, label, on, onToggle, targetKey, text, error, onChange, onBlur, units }: FieldProps & { units: Units }) {
+  const l = targetLimit(targetKey, units);
   return (
     <TargetField
       icon={icon}
@@ -136,11 +141,13 @@ export function GoalsSection() {
   // A field shows what is being typed until it loses focus; then the stored target.
   const [drafts, setDrafts] = React.useState<Partial<Record<TargetKey, string>>>({});
   const [errors, setErrors] = React.useState<Partial<Record<TargetKey, string>>>({});
+  // Distance and water in km or miles, ml or fl oz (Settings › Units); stored in km and ml.
+  const { units } = useUnits();
 
-  const text = (k: TargetKey) => drafts[k] ?? (goals.targets[k] === null ? "" : String(goals.targets[k]));
+  const text = (k: TargetKey) => drafts[k] ?? targetText(k, goals.targets[k], units);
   const edit = (k: TargetKey) => (t: string) => {
     setDrafts((d) => ({ ...d, [k]: t }));
-    const r = parseTarget(k, t);
+    const r = parseTarget(k, t, units);
     setErrors((e) => ({ ...e, [k]: r.error ?? undefined }));
     if (!r.error) void update((g) => withTarget(g, k, r.value));
   };
@@ -172,13 +179,17 @@ export function GoalsSection() {
       error={errors[targetKey]}
       onChange={edit(targetKey)}
       onBlur={blur(targetKey)}
+      units={units}
     />
   );
+  // Fitbit's 8 km and 2,000 ml, in the person's units ("about 5 mi", "about 68 fl oz").
+  const distanceDefault = units.distance === "mi" ? `about ${targetText("distance", DEFAULT_GOALS.targets.distance, units)} mi` : "8 km";
+  const waterDefault = units.fluid === "floz" ? `about ${targetText("water", DEFAULT_GOALS.targets.water, units)} fl oz` : "2,000 ml";
 
   return (
     <>
       <Group title="Daily goals" padding={20} gap={4}>
-        <Body style={{ paddingBottom: 8 }}>Each goal is a ring on Home that fills through the day. Fitbit’s defaults: 10,000 steps, 8 km, 10 floors, 22 Active Zone Minutes, 30 active minutes and 2,000 ml of water.</Body>
+        <Body style={{ paddingBottom: 8 }}>{`Each goal is a ring on Home that fills through the day. Fitbit’s defaults: 10,000 steps, ${distanceDefault}, 10 floors, 22 Active Zone Minutes, 30 active minutes and ${waterDefault} of water.`}</Body>
         <Divided top>{GOAL_KEYS.map((k) => field(k))}</Divided>
       </Group>
       <Group title="Weekly goal" padding={20} gap={4}>

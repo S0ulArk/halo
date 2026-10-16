@@ -1,6 +1,7 @@
 // The cards under a coach answer, ported from Pulse's coach/Evidence.tsx and Coach.tsx (DayCard, Stat): each tool's
 // result as Pulse's own components on a white Calm card, and a teal "Based on …" link to the screen the numbers come
-// from. The day's three scores sit on their families' pastels (Recovery mint, Sleep lavender, Strain peach).
+// from. The day's three scores sit on their families' pastels (Recovery mint, Sleep lavender, Strain peach). The tools
+// return metric; the cards show the numbers in the person's units (Settings › Units).
 import * as React from "react";
 import { Pressable, View } from "react-native";
 import { useRouter, type Href } from "expo-router";
@@ -8,6 +9,8 @@ import { ArrowUpRight } from "lucide-react-native";
 import type { CoachOutputs, dayDigest } from "@/coach/tools";
 import { recoveryBand } from "@/lib/bands";
 import { normalizeReason, type Metric } from "@/lib/reasons";
+import { conversionFor, shown, type Units } from "@/lib/units";
+import { useUnits } from "@/state/units";
 import { KeyStatRow, MetricState, Sparkline, Txt, ZoneBars, type MiniRingVariant } from "@/ui";
 import { font } from "@/ui/fonts";
 import { Caption, Hairline, Num, Surface, useCalm, type CalmTint } from "@/screens/settings/calmKit";
@@ -32,6 +35,19 @@ export const PROFILE_HREF = "/settings?s=profile";
 
 function metric(m: { value: number | null; reason?: string | null; provisional?: boolean }): Metric<number> {
   return { value: m.value, reason: m.value === null ? normalizeReason(m.reason) : null, provisional: m.provisional ?? false };
+}
+
+/**
+ * A tool's number in the person's units (Settings › Units): the tools give metric, the cards show what the person
+ * reads. `delta`: a change from a baseline (skin temperature), converted without the +32.
+ */
+function shownIn(unit: string | null | undefined, units: Units, delta = false) {
+  const conv = conversionFor(unit ?? undefined, units, { delta });
+  return {
+    unit: conv?.unit ?? unit ?? undefined,
+    value: (v: number | null | undefined) => (v == null ? null : shown(v, conv)),
+    metric: (m: { value: number | null; reason?: string | null; provisional?: boolean }) => metric({ ...m, value: m.value === null ? null : shown(m.value, conv) }),
+  };
 }
 
 const twelveHour = new Map<string, Intl.DateTimeFormat>();
@@ -148,6 +164,7 @@ function Note({ children, size = 13, style }: { children: React.ReactNode; size?
 export function Evidence({ name, output }: { name: string; output: unknown }) {
   const router = useRouter();
   const c = useCalm();
+  const { units } = useUnits();
   if (!output || typeof output !== "object") return null;
   const go = (href: string) => () => router.push(href as Href);
   if (name === "get_day") {
@@ -157,11 +174,12 @@ export function Evidence({ name, output }: { name: string; output: unknown }) {
   if (name === "get_trend") {
     const d = output as CoachOutputs["get_trend"];
     if (!d.points || !d.previous) return <BasedOn href="/trends">Trends</BasedOn>;
+    const u = shownIn(d.unit, units);
     return (
       <View style={{ gap: 8 }}>
         <EvidenceCard title={`${d.metric} · ${d.start} to ${d.end}`}>
-          <KeyStatRow variant="row" label="Period average" metric={metric(d.average)} unit={d.unit ?? undefined} format="decimal1" direction="none" average={d.previous.average.value} averageLabel="Previous period" caption={`${d.observedDays} of ${d.calendarDays} days measured`} />
-          <Sparkline values={d.points.map((p) => p.value)} style={{ marginTop: 8, height: 56 }} />
+          <KeyStatRow variant="row" label="Period average" metric={u.metric(d.average)} unit={u.unit} format="decimal1" direction="none" average={u.value(d.previous.average.value)} averageLabel="Previous period" caption={`${d.observedDays} of ${d.calendarDays} days measured`} />
+          <Sparkline values={d.points.map((p) => u.value(p.value))} style={{ marginTop: 8, height: 56 }} />
         </EvidenceCard>
         <BasedOn href={`/trends?metric=${encodeURIComponent(d.key)}`}>
           {d.metric} · {d.start} to {d.end}
@@ -232,9 +250,11 @@ export function Evidence({ name, output }: { name: string; output: unknown }) {
         <EvidenceCard title={`${a.name} · ${a.day}`}>
           <Rows>
             <KeyStatRow variant="row" label="Activity strain" metric={metric(a.strain)} format="decimal1" direction="none" />
-            {a.stats.slice(0, 3).map((v) => (
-              <KeyStatRow key={v.label} variant="row" label={v.label} metric={metric(v)} unit={v.unit ?? undefined} format="decimal1" average={v.baseline} direction="none" />
-            ))}
+            {a.stats.slice(0, 3).map((v) => {
+              // Distance in km or miles, pace per km or per mile (as m:ss).
+              const u = shownIn(v.unit, units);
+              return <KeyStatRow key={v.label} variant="row" label={v.label} metric={u.metric(v)} unit={u.unit} format={v.unit === "/km" ? "pace" : "decimal1"} average={u.value(v.baseline)} direction="none" />;
+            })}
           </Rows>
           <ZoneBars variant="rows" data={a.zones} note={a.zoneNote ?? undefined} />
         </EvidenceCard>
@@ -272,9 +292,11 @@ export function Evidence({ name, output }: { name: string; output: unknown }) {
     return (
       <View style={{ gap: 8 }}>
         <EvidenceCard title={`Health Monitor · ${d.day}`}>
-          {(d.vitals ?? []).map((v) => (
-            <KeyStatRow key={v.vital} variant="row" label={v.vital} metric={metric(v)} unit={v.unit} format="decimal1" direction="none" caption={String(v.status).split("_").join(" ")} />
-          ))}
+          {(d.vitals ?? []).map((v) => {
+            // The monitor's only temperature is skin temperature's change from its baseline: °F converts it by ×9/5 alone.
+            const u = shownIn(v.unit, units, true);
+            return <KeyStatRow key={v.vital} variant="row" label={v.vital} metric={u.metric(v)} unit={u.unit} format="decimal1" direction="none" caption={String(v.status).split("_").join(" ")} />;
+          })}
         </EvidenceCard>
         <BasedOn href={`/health/monitor?d=${d.day}`}>Health Monitor · {d.day}</BasedOn>
       </View>

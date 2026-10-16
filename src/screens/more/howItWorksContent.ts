@@ -391,7 +391,7 @@ export const SCORE_DOCS: ScoreDoc[] = [
           { term: "Heart rate variability", detail: "Fitbit’s nightly HRV, in ms." },
           { term: "Respiratory rate", detail: "Breaths per minute asleep, in rpm." },
           { term: "SpO2", detail: "Blood oxygen overnight, in %." },
-          { term: "Skin temperature", detail: "Last night against the skin-temperature baseline that comes with it from Health Connect, in °C." },
+          { term: "Skin temperature", detail: "Last night against the skin-temperature baseline that comes with it from Health Connect, scored in °C and shown in °C or °F (Settings › Units)." },
         ],
       },
       {

@@ -2,6 +2,7 @@
 // Native) so the tests run in node.
 import { DAY, formatDay } from "@/lib/format";
 import { wall } from "@/lib/time";
+import { fluidFromInput, METRIC, type Units, weightFromInput } from "@/lib/units";
 import type { LogKind, Meal } from "@/queries/log";
 import type { FoodItemInput, LogInput } from "./actions";
 
@@ -86,13 +87,21 @@ export function mealAt(hhmm: string): Meal {
   return "DINNER";
 }
 
-/** The form's values as the action's input, or the first problem to show. */
-export function toInput(kind: LogKind, f: Form, time: string): LogInput | string {
+/**
+ * The form's values as the action's input, or the first problem to show. Water and weight are typed in `units` (the
+ * `ml` and `kg` fields hold fl oz or lb when those are chosen) and leave here in ml and kg, as they are stored.
+ */
+export function toInput(kind: LogKind, f: Form, time: string, units: Units = METRIC): LogInput | string {
   const s = (k: string) => f[k] as string;
   const a = (k: string) => f[k] as string[];
   const at = atOf(time);
   switch (kind) {
     case "water": {
+      if (units.fluid === "floz") {
+        // Fluid ounces may have a decimal ("12.5"); stored as whole ml.
+        const ml = fluidFromInput(s("ml"), units);
+        return ml && !Number.isNaN(ml) ? { kind, ml, at } : "Enter the amount in fluid ounces.";
+      }
       const ml = num(s("ml"));
       return ml && Number.isInteger(ml) ? { kind, ml, at } : "Enter the amount in millilitres.";
     }
@@ -102,9 +111,9 @@ export function toInput(kind: LogKind, f: Form, time: string): LogInput | string
       return typeof item === "string" ? item : { kind, meal: s("meal") as never, ...item, at };
     }
     case "weight": {
-      const kg = num(s("kg"));
+      const kg = weightFromInput(s("kg"), units);
       const fatPct = num(s("fat"));
-      if (kg == null || Number.isNaN(kg)) return "Enter your weight in kilograms.";
+      if (kg == null || Number.isNaN(kg)) return units.weight === "lb" ? "Enter your weight in pounds." : "Enter your weight in kilograms.";
       if (Number.isNaN(fatPct)) return "Body fat is a percentage, as a number.";
       return { kind, kg, fatPct, at };
     }

@@ -5,6 +5,7 @@ import { MemoryStore } from "@/data/memory";
 import { seedDemo } from "@/data/seed";
 import type { Profile } from "@/data/types";
 import { addDays } from "@/lib/time";
+import { IMPERIAL, METRIC } from "@/lib/units";
 import { runPipeline } from "@/pipeline";
 import type { QueryCtx } from "./ctx";
 import { getGoalsDay, GOAL_KEYS, type Goals } from "./goals";
@@ -14,7 +15,7 @@ import { waterOn } from "./log";
 vi.mock("@react-native-async-storage/async-storage", () => ({
   default: { getItem: async () => null, setItem: async () => {}, removeItem: async () => {} },
 }));
-const { DEFAULT_GOALS, parseGoals, parseTarget, trendGoal, validateTarget, withEnabled, withTarget } = await import("@/state/goals");
+const { DEFAULT_GOALS, parseGoals, parseTarget, targetLimit, targetText, trendGoal, validateTarget, withEnabled, withTarget } = await import("@/state/goals");
 
 const TZ = "Asia/Kolkata";
 /** A Friday; its ISO week runs 2026-09-28 to 2026-10-04. */
@@ -222,5 +223,47 @@ describe("the goal model (src/state/goals.ts)", () => {
     expect(trendGoal(DEFAULT_GOALS, "active_calories")).toBeNull();
     expect(trendGoal(DEFAULT_GOALS, "hrv")).toBeNull();
     expect(trendGoal(withEnabled(DEFAULT_GOALS, "steps", false), "steps")).toBeNull();
+  });
+});
+
+describe("goals in the person's units (Settings › Units)", () => {
+  it("takes distance in miles and water in fl oz, stores km and whole ml, and gives the limits in the unit typed", () => {
+    const us = { ...METRIC, distance: "mi", fluid: "floz" } as const;
+    expect(targetLimit("distance", us)).toMatchObject({ min: 0.7, max: 62.1, decimals: 1, unit: "mi a day" });
+    expect(targetLimit("water", us)).toMatchObject({ min: 9, max: 338, decimals: 0, unit: "fl oz a day" });
+    expect(targetLimit("steps", us)).toEqual(targetLimit("steps"));
+    const five = parseTarget("distance", "5", us);
+    expect(five.error).toBeNull();
+    expect(five.value).toBeCloseTo(8.04672, 10);
+    expect(validateTarget("distance", five.value)).toBeNull();
+    expect(parseTarget("water", "64", us)).toEqual({ value: 1893, error: null });
+    expect(parseTarget("water", "64.5", us)).toEqual({ value: null, error: "Whole numbers only" });
+    expect(parseTarget("distance", "70", us)).toEqual({ value: null, error: "Between 0.7 and 62.1" });
+    // Stored targets read back in the shown unit: Fitbit's 8 km is 5 mi, 2,000 ml is 68 fl oz.
+    expect(targetText("distance", DEFAULT_GOALS.targets.distance, us)).toBe("5");
+    expect(targetText("water", DEFAULT_GOALS.targets.water, us)).toBe("68");
+    expect(targetText("water", 1893, us)).toBe("64");
+    expect(targetText("distance", 8, METRIC)).toBe("8");
+  });
+
+  it("draws the Trends goal line in the trend's unit", () => {
+    expect(trendGoal(DEFAULT_GOALS, "distance", IMPERIAL)).toBeCloseTo(8 / 1.609344, 10);
+    expect(trendGoal(DEFAULT_GOALS, "water", IMPERIAL)).toBeCloseTo(2000 / 29.5735295625, 10);
+    expect(trendGoal(DEFAULT_GOALS, "steps", IMPERIAL)).toBe(10_000);
+  });
+
+  it("scores the day in metric and shows the rows in miles and fl oz", async () => {
+    const [a, b] = await Promise.all([getGoalsDay(TODAY, ctx, DEFAULT_GOALS), getGoalsDay(TODAY, { ...ctx, units: IMPERIAL }, DEFAULT_GOALS)]);
+    const row = (vm: typeof a, k: string) => vm.goals.find((g) => g.key === k)!;
+    const d = row(b, "distance");
+    expect(d.unit).toBe("mi");
+    expect(d.target).toBeCloseTo(8 / 1.609344, 10);
+    expect(d.value).toBeCloseTo(row(a, "distance").value! / 1.609344, 10);
+    expect(d.progress).toBe(row(a, "distance").progress);
+    expect(d.done).toBe(row(a, "distance").done);
+    d.history.forEach((h, i) => expect(h.target).toBeCloseTo(row(a, "distance").history[i].target / 1.609344, 10));
+    expect(row(b, "water").unit).toBe("fl oz");
+    expect(row(b, "steps")).toEqual(row(a, "steps"));
+    expect(b.done).toBe(a.done);
   });
 });

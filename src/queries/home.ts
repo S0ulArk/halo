@@ -48,6 +48,8 @@ import {
   toStrain,
 } from "./common";
 import type { CardStatKey, EnergyBankVM, HomeVM, KeyStat, Metric, VitalKey } from "./types";
+import { conversionFor, mapFinite, METRIC, shown, type Units } from "@/lib/units";
+import { shownPick, unitsOf } from "./units";
 
 export const VITAL_LABEL: Record<VitalKey, string> = {
   resp: "Respiratory rate",
@@ -83,6 +85,7 @@ export async function getHome(day: string, ctx: QueryCtx, opts: HomeOptions = {}
   ]);
   const keys = dashboardKeys(opts.dashboardKeys, defaults);
   const row = rows.get(day);
+  const units = unitsOf(ctx);
 
   const recovery = recoveryMetric(row, isToday);
   const sleep = sleepMetric(row, isToday);
@@ -112,10 +115,10 @@ export async function getHome(day: string, ctx: QueryCtx, opts: HomeOptions = {}
     activities: { title: isToday ? "Today’s activities" : "Activities", items: timelineOf(row, day, exs) },
     energyBank: energyBankVM(ctx, row, day, isToday, ebSeries),
     tonight: planVM(ctx, row, isToday),
-    keyStats: keyStats(rows, day, isToday, keys),
-    cardStats: Object.fromEntries(keyStats(rows, day, isToday, CARD_STATS).map((s) => [s.key, s])) as HomeVM["cardStats"],
+    keyStats: keyStats(rows, day, isToday, keys, units),
+    cardStats: Object.fromEntries(keyStats(rows, day, isToday, CARD_STATS, units).map((s) => [s.key, s])) as HomeVM["cardStats"],
     dashboard: { defaults, empty: emptyKeys(rows, day, isToday) },
-    phone: phoneDay(rows, day, isToday),
+    phone: phoneDay(rows, day, isToday, units),
     weeklyTeaser,
     outlook: outlookOf(ctx, row, { recovery, strain, target }, isToday),
     insights: isToday ? insightsOf(ctx, rows, row, day, { strain, target }) : [],
@@ -261,8 +264,11 @@ const spec = (
   format?: KeyStat["format"],
 ): StatSpec => ({ pick, metric, ...(unit && { unit }), direction, ...(href && { href }), ...(format && { format }) });
 
-/** Each dashboard metric on `row`'s day: its value path (for averages), the metric with its reason, unit and link. */
-function statSpecs(row: DayRow | undefined, isToday: boolean): Record<DashboardKey, StatSpec> {
+/**
+ * Each dashboard metric on `row`'s day: its value path (for averages), the metric with its reason, unit and link, in
+ * `units` (weight, distance, elevation, water and temperatures convert; skin temperature as a difference).
+ */
+function statSpecs(row: DayRow | undefined, isToday: boolean, units: Units = METRIC): Record<DashboardKey, StatSpec> {
   const m = row?.metrics;
   const rhr = (r: DayRow) => r.metrics?.rhrBpm ?? r.sessionRhr ?? null;
   const skin = (r: DayRow) => r.recovery?.inputs.skinTempDev ?? null;
@@ -276,7 +282,8 @@ function statSpecs(row: DayRow | undefined, isToday: boolean): Record<DashboardK
     calories: spec((r) => r.metrics?.calories, maybe(m?.calories, dailyReason), "kcal", "neutral", metricHref("calories")),
     steps: spec((r) => r.metrics?.steps, maybe(m?.steps, dailyReason), undefined, "up", metricHref("steps")),
     spo2: spec((r) => r.metrics?.spo2Pct, maybe(m?.spo2Pct, vitalReason(row, isToday)), "%", "up", "/health/monitor"),
-    skin: spec(skin, maybe(row && skin(row), skinReason), "°C", "toward_zero", "/health/monitor"),
+    // A change from the skin-temperature baseline, signed ("+0.3"), in either unit.
+    skin: spec(skin, maybe(row && skin(row), skinReason), "°C", "toward_zero", "/health/monitor", "signed1"),
   } as Record<DashboardKey, StatSpec>;
   // Shown-only readings: missing simply means the source had none for the day.
   for (const b of BODY_METRICS) {
@@ -285,12 +292,17 @@ function statSpecs(row: DayRow | undefined, isToday: boolean): Record<DashboardK
   }
   for (const e of EXTRA_METRICS as readonly ExtraMetric[])
     out[e.key as ExtraKey] = spec((r) => r.extra[e.key as ExtraKey], maybe(row?.extra[e.key as ExtraKey], "no_data"), e.unit, e.direction, metricHref(e.key), e.format);
+  for (const key of Object.keys(out) as DashboardKey[]) {
+    const s = out[key];
+    const conv = conversionFor(s.unit, units, { delta: key === "skin" });
+    if (conv) out[key] = { ...s, unit: conv.unit, pick: shownPick(s.pick, conv), metric: { ...s.metric, value: mapFinite(s.metric.value, (v) => shown(v, conv)) } };
+  }
   return out;
 }
 
 /** The dashboard rows for `keys`, in that order, each against its mean over the 30 days before `day`. */
-export function keyStats(rows: Map<string, DayRow>, day: string, isToday: boolean, keys: DashboardKey[]): KeyStat[] {
-  const specs = statSpecs(rows.get(day), isToday);
+export function keyStats(rows: Map<string, DayRow>, day: string, isToday: boolean, keys: DashboardKey[], units: Units = METRIC): KeyStat[] {
+  const specs = statSpecs(rows.get(day), isToday, units);
   return keys.map((key) => {
     const { pick, ...s } = specs[key];
     const { mean, sd } = priorStats(rows, day, pick);
@@ -309,12 +321,12 @@ function emptyKeys(rows: Map<string, DayRow>, day: string, isToday: boolean): Da
  * The band recorded no heart rate on `day` but the phone counted something: Home leads with those numbers (§11 CD2).
  * Null when the band was worn, or when the phone recorded nothing either.
  */
-function phoneDay(rows: Map<string, DayRow>, day: string, isToday: boolean): KeyStat[] | null {
+function phoneDay(rows: Map<string, DayRow>, day: string, isToday: boolean, units: Units): KeyStat[] | null {
   const row = rows.get(day);
   if (!row || (row.s1 && row.s1.hrCount > 0)) return null;
   // Calories alone is the source's resting-burn estimate, there with or without a phone: it needs movement too.
   if (!row.metrics?.steps && !row.extra.distance && !row.activities.length) return null;
-  const stats = keyStats(rows, day, isToday, PHONE_STATS).filter((s) => s.metric.value !== null);
+  const stats = keyStats(rows, day, isToday, PHONE_STATS, units).filter((s) => s.metric.value !== null);
   return stats.length ? stats : null;
 }
 

@@ -4,6 +4,7 @@
 // with up to six steps of read-only tool calls, and save the whole chat when the stream ends.
 // Never logs message content, tool output, keys or provider bodies.
 import { APICallError, generateId, isStepCount, streamText, toUIMessageStream, validateUIMessages, type ChatTransport, type LanguageModel, type UIMessage, type UIMessageChunk } from "ai";
+import { METRIC, type Units } from "@/lib/units";
 import type { QueryCtx } from "@/queries/ctx";
 import { coachHistory } from "./history";
 import { coachInstructions } from "./instructions";
@@ -30,6 +31,8 @@ export type CoachDeps = {
   allow?: () => boolean;
   /** Called when the save after a turn fails (the answer is still shown). */
   onSaveError?: (e: unknown) => void;
+  /** The person's display units (Settings › Units), read as the turn starts; metric when absent or unreadable. */
+  units?: () => Promise<Units>;
 };
 
 export const PER_MINUTE = 10;
@@ -68,8 +71,11 @@ export async function coachTurn(deps: CoachDeps, chatId: string, messages: UIMes
   if (!allow()) throw new Error("limit" satisfies CoachProblem);
   const m = await deps.model();
   if (!m) throw new Error("key" satisfies CoachProblem);
-  const ctx = deps.ctx();
-  if (!ctx) throw new Error("profile" satisfies CoachProblem);
+  const screen = deps.ctx();
+  if (!screen) throw new Error("profile" satisfies CoachProblem);
+  // The tools read every number in metric, as the instructions say; the person's units only shape the answer's wording.
+  const ctx: QueryCtx = { ...screen, units: METRIC };
+  const units = (await deps.units?.().catch(() => null)) ?? screen.units ?? METRIC;
 
   const texts = deps.texts ?? defaultTexts;
   const tools = coachTools(ctx, texts);
@@ -80,7 +86,7 @@ export async function coachTurn(deps: CoachDeps, chatId: string, messages: UIMes
   const history = await coachHistory(valid, m.model, texts, abortSignal);
   const result = streamText({
     model: m.model,
-    instructions: coachInstructions(ctx, texts, m.instructions),
+    instructions: coachInstructions(ctx, texts, m.instructions, units),
     messages: history.modelMessages,
     tools,
     stopWhen: isStepCount(6),

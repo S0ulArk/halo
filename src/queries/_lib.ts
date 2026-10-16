@@ -1,6 +1,7 @@
 // The few helpers the queries need from Pulse's src/lib/{format,bands,url,extraMetrics,dashboard}.ts and
-// src/lib/log.ts, copied here so src/queries depends on nothing outside src/core, src/lib/time and src/lib/reasons
-// (the UI's own port of those libs is written separately). Keep each function identical to the web's.
+// src/lib/log.ts, copied here so src/queries depends on nothing outside src/core, src/lib/time, src/lib/reasons and
+// src/lib/units (the UI's own port of those libs is written separately). Keep each function identical to the web's.
+// The units below are what the Store holds (metric); src/queries/units.ts converts them for display.
 import { acwrBand, type AcwrBand } from "@/core/scoring/readiness";
 
 // ── format.ts ───────────────────────────────────────────────────────────────

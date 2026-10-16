@@ -37,7 +37,7 @@ import type { FormatKey } from "@/lib/format";
 import type { EnergyBankVM, HomeVM, KeyStat, SleepPlanVM as PlanVM } from "@/queries";
 import type { EnergySeries, KeyStatRowProps, SleepPlanVM } from "@/ui";
 
-const FORMAT_BY_UNIT: Record<string, FormatKey> = { ms: "int", bpm: "int", rpm: "decimal1", "%": "int", kcal: "grouped", "°C": "signed1", min: "duration" };
+const FORMAT_BY_UNIT: Record<string, FormatKey> = { ms: "int", bpm: "int", rpm: "decimal1", "%": "int", kcal: "grouped", "°C": "signed1", "°F": "signed1", min: "duration" };
 
 /** The web's STAT_ICON, as lucide-react-native components (the caller sizes and colours them). */
 export const STAT_ICON: Record<string, LucideIcon> = {

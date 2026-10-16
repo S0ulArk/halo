@@ -94,7 +94,7 @@ export const statIcon = (key: string) => {
   return I ? <StatIcon icon={I} /> : undefined;
 };
 
-const FORMAT_BY_UNIT: Record<string, FormatKey> = { ms: "int", bpm: "int", rpm: "decimal1", "%": "int", kcal: "grouped", "°C": "signed1", min: "duration" };
+const FORMAT_BY_UNIT: Record<string, FormatKey> = { ms: "int", bpm: "int", rpm: "decimal1", "%": "int", kcal: "grouped", "°C": "signed1", "°F": "signed1", min: "duration" };
 
 /** KeyStat → KeyStatRow props. Minutes render as h:mm with no unit; unitless counts are grouped. */
 export function statProps(s: KeyStat, icons = true, onPress?: () => void): Omit<KeyStatRowProps, "variant"> {

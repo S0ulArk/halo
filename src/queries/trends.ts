@@ -4,6 +4,7 @@ import { addDays } from "@/lib/time";
 import { EXTRA_METRICS, type ExtraKey, type FormatKey, type GoodDirection, metricHref, RANGE_DAYS, RANGES, type TrendRange } from "./_lib";
 import { type DayRow, finite, loadDays, none, ok, type QueryCtx, todayOf, toStrain } from "./common";
 import type { DayPoint, Metric } from "./types";
+import { localizeDef, unitsOf } from "./units";
 
 export type TrendMetricKey =
   | "recovery"
@@ -110,6 +111,8 @@ const SPAN = RANGE_DAYS["1y"];
 
 export type TrendsVM = {
   metric: TrendMetricKey;
+  /** The unit the points are in: the metric's, in the person's units (Settings › Units). */
+  unit?: string;
   /** 365 days ending today, oldest first; a reason when there is nothing to draw yet. */
   points: Metric<DayPoint[]>;
   /** Per range: the average and the average of the range before it (null where a range has no values). */
@@ -129,7 +132,8 @@ function emptyReason(m: TrendMetric, rows: Map<string, DayRow>, today: string): 
 }
 
 export async function getTrends(metric: TrendMetricKey, ctx: QueryCtx): Promise<TrendsVM> {
-  const m = TREND_METRICS.find((x) => x.key === metric) ?? TREND_METRICS[0];
+  // In the person's units: the points, and so every average, come out converted.
+  const m = localizeDef(TREND_METRICS.find((x) => x.key === metric) ?? TREND_METRICS[0], unitsOf(ctx));
   const today = todayOf(ctx);
   // Two years: the 1Y average needs the year before it.
   const from = addDays(today, -(2 * SPAN - 1));
@@ -151,6 +155,7 @@ export async function getTrends(metric: TrendMetricKey, ctx: QueryCtx): Promise<
   });
   return {
     metric: m.key,
+    ...(m.unit && { unit: m.unit }),
     points: shown.some((p) => p.value !== null) ? ok(shown) : emptyReason(m, rows, today),
     periods,
   };

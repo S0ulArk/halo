@@ -5,8 +5,10 @@ import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, it, vi } from "vitest";
 import { MemoryStore } from "@/data/memory";
 import type { Profile } from "@/data/types";
+import { IMPERIAL, METRIC } from "@/lib/units";
 import type { QueryCtx } from "@/queries/ctx";
 import { fingerprint } from "./history";
+import { unitsInstruction } from "./instructions";
 import { coachTurn, rateGuard, streamProblem, type CoachDeps } from "./transport";
 
 const TZ = "Asia/Kolkata";
@@ -127,6 +129,51 @@ describe("coach turn", () => {
     const next = [...saved.map((m) => ({ ...m, metadata: undefined })), user("m42", "Thanks")];
     await last(await coachTurn(d, "chat-long", next));
     expect(generate).toHaveBeenCalledTimes(1);
+  });
+
+  it("tells the model the person's units, read when the turn starts, while the tools keep reading metric", async () => {
+    // The model reads the monitor (skin temperature is its one convertible vital), then answers.
+    const prompts: unknown[] = [];
+    const model = new MockLanguageModelV4({
+      doStream: async ({ prompt }) => {
+        prompts.push(prompt);
+        const toolDone = prompt.some((m) => m.role === "tool");
+        const chunks = toolDone
+          ? [
+              { type: "text-start" as const, id: "t1" },
+              { type: "text-delta" as const, id: "t1", delta: "Steady." },
+              { type: "text-end" as const, id: "t1" },
+              { type: "finish" as const, finishReason: { unified: "stop" as const, raw: undefined }, usage },
+            ]
+          : [
+              { type: "tool-call" as const, toolCallId: "call-1", toolName: "get_health", input: "{}" },
+              { type: "finish" as const, finishReason: { unified: "tool-calls" as const, raw: undefined }, usage },
+            ];
+        return { stream: simulateReadableStream({ chunks: chunks as never[], chunkDelayInMs: null }) };
+      },
+    });
+    const d = deps({ ctx: () => ({ ...ctx, units: IMPERIAL }), units: async () => IMPERIAL, model: async () => ({ model, provider: "anthropic", instructions: null }) });
+    const answer = await last(await coachTurn(d, "chat-units", [user("u1", "How are my vitals?")]));
+    const system = JSON.stringify(prompts[0]);
+    expect(system).toContain(JSON.stringify(unitsInstruction(IMPERIAL)).slice(1, -1));
+    expect(system).toContain("weight in pounds (lb)");
+    const health = answer.parts.find((p) => p.type === "tool-get_health") as { output: { vitals: { vital: string; unit: string }[] } };
+    expect(health.output.vitals.find((v) => v.vital === "Skin temp (from baseline)")?.unit).toBe("°C");
+  });
+
+  it("without a units reader, the instructions say metric", async () => {
+    const { model, prompts } = scripted();
+    await last(await coachTurn(deps({ model: async () => ({ model, provider: "anthropic", instructions: null }) }), "chat-metric", [user("u1", "Hi")]));
+    expect(JSON.stringify(prompts[0])).toContain("and the user reads metric");
+  });
+
+  it("words the units sentence for a mix of choices", () => {
+    expect(unitsInstruction(METRIC)).toBe("Tool results give every measurement in metric units (kg, cm, km, m, °C, ml), and the user reads metric, so answer in those units with energy in kcal.");
+    const mixed = unitsInstruction({ ...METRIC, weight: "lb", temperature: "f" });
+    expect(mixed).toContain("the user reads weight in pounds (lb) and temperature in °F");
+    expect(mixed).toContain("without adding 32");
+    expect(mixed).toContain("and everything else in metric");
+    expect(unitsInstruction(IMPERIAL)).not.toContain("everything else");
   });
 
   it("the per-minute guard allows ten requests a minute", () => {
