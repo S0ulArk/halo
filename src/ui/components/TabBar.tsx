@@ -1,27 +1,37 @@
+// The phone's navigation bar, in the iOS 26 pattern: a floating Liquid Glass capsule holding the four tabs (icon over
+// a small label), and the action on its own round glass button beside it. The selected tab sits in a lighter glass
+// drop that slides between tabs on a spring and stretches as it goes (Reanimated, UI thread). Both pieces refract the
+// pages scrolling under them when the bar is a GlassTarget's overlay (the tabs layout); elsewhere (the kit preview)
+// they draw glass's stand-in.
 import * as React from "react";
-import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
-import { BlurView } from "expo-blur";
 import { perf } from "@/lib/perf";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Flame, HeartPulse, House, Menu, Moon, Plus, Sparkles, type LucideIcon } from "lucide-react-native";
+import { createLucideIcon, HeartPlus, LayoutGrid, Menu, Moon, Plus, Sparkles, type LucideIcon } from "lucide-react-native";
 import { alpha } from "@/lib/utils";
 import { useCalm } from "@/ui/calm";
+import { LiquidGlass } from "@/ui/glass";
 import { reduceMotionNow } from "@/ui/motion/system";
-import { HaloLine } from "./Halo";
 import { Mark } from "./Mark";
 import { useTheme } from "@/ui/ThemeProvider";
 import { TAB_BAR_HEIGHT } from "./PageShell";
 import { Txt } from "./Text";
 import { usePress } from "./press";
 
+/** A running figure, SF Symbols' "figure.run" drawn on lucide's 24 grid (lucide has no runner). */
+const FigureRun = createLucideIcon("figure-run", [
+  ["circle", { cx: "15", cy: "4.5", r: "1.6", key: "head" }],
+  ["path", { d: "M5 20.5l4-1.5 2-4 3 2.5v4M8.5 11l2.5-3.5 4 1 2 3.5h3M11 7.5l-1 6.5", key: "body" }],
+]);
+
 export type TabItem = { key: string; label: string; icon: LucideIcon };
 export const TABS: TabItem[] = [
-  { key: "home", label: "Today", icon: House },
+  { key: "home", label: "Today", icon: LayoutGrid },
   { key: "sleep", label: "Sleep", icon: Moon },
-  { key: "activity", label: "Activity", icon: Flame },
-  { key: "health", label: "Health", icon: HeartPulse },
+  { key: "activity", label: "Activity", icon: FigureRun },
+  { key: "health", label: "Health", icon: HeartPlus },
 ];
 
 /**
@@ -43,7 +53,7 @@ export function Monogram() {
   );
 }
 
-/** A standalone "Check in" / Coach button (the bar now carries the action as its fifth item): a flat white 62 px tile. */
+/** A standalone "Check in" / Coach button (the bar carries the action on its own round button): a flat white 62 px tile. */
 export function CheckInAction({ onPress, label = "Check in" }: { onPress: () => void; label?: string }) {
   const c = useCalm();
   const { animatedStyle, onPressIn, onPressOut } = usePress();
@@ -58,96 +68,132 @@ export function CheckInAction({ onPress, label = "Check in" }: { onPress: () => 
 
 // --- The navigation bar ---
 
-/** The icon's box (and the press ripple's width). */
-const PILL_W = 64;
-const PILL_H = 28;
-/** Space above the icon; the label sits 2 px under it. 10 + 28 + 2 + 16 + 6 = TAB_BAR_HEIGHT. */
-const PAD_TOP = 10;
-/** The halo indicator over the active tab: a short luminous line that glides between tabs on a spring. */
-const INDICATOR_W = 22;
-const INDICATOR_H = 2.5;
-const GLIDE = { damping: 20, stiffness: 260, mass: 0.7 } as const;
+/** iOS system blue: the selected tab and the action's glyph. */
+const BLUE = { light: "#007AFF", dark: "#0A84FF" } as const;
+/** The capsule's and the round button's height (the same 62 dp PageShell's clearance reserves). */
+const BAR_H = TAB_BAR_HEIGHT;
+/** From the screen's sides, between the capsule and the button, and above the system navigation area. */
+const SIDE = 16;
+const GAP = 12;
+const LIFT = 6;
+/** The capsule's inner padding at its round ends, and the drop's inset from its slot. */
+const PAD = 5;
+const DROP_H = BAR_H - 10;
+const DROP_INSET = 2;
+/** The drop's glide between tabs (a touch of overshoot) and its stretch settling with a small wobble. */
+const GLIDE = { damping: 19, stiffness: 230, mass: 0.8 } as const;
+const WOBBLE = { damping: 7, stiffness: 240, mass: 0.6 } as const;
+/** The round button swells under the finger and bounces back. */
+const SWELL = { damping: 14, stiffness: 420, mass: 0.6 } as const;
+const SETTLE = { damping: 9, stiffness: 260, mass: 0.6 } as const;
 
-function NavItem({
-  icon: Icon,
-  label,
-  active,
-  onPress,
-  role,
-  accessibilityLabel,
-}: {
-  icon: LucideIcon;
-  label: string;
-  active: boolean;
-  onPress: () => void;
-  role: "tab" | "button";
-  accessibilityLabel?: string;
-}) {
-  const { c } = useTheme();
-  const calm = useCalm();
-  // The active tab in ink under the gliding halo line; the rest a fine grey outline.
-  const color = active ? calm.ink : calm.faint;
+/**
+ * The selected tab's glass drop: one view moved between slots by a spring on the UI thread (transform only),
+ * stretched along the move and settling with a wobble. Tint and rim only (glass on glass), no second live backdrop.
+ */
+function Drop({ slot, slotW, dark }: { slot: number; slotW: number; dark: boolean }) {
+  const x = useSharedValue(slot * slotW);
+  const stretch = useSharedValue(1);
+  const last = React.useRef({ slot, slotW });
+  React.useEffect(() => {
+    const prev = last.current;
+    last.current = { slot, slotW };
+    const to = slot * slotW;
+    // A new layout (first measure, rotation) jumps; a new tab glides.
+    if (prev.slotW !== slotW || prev.slot === slot || reduceMotionNow()) {
+      x.set(to);
+      stretch.set(1);
+      return;
+    }
+    x.set(withSpring(to, GLIDE));
+    const peak = 1 + Math.min(0.1 + 0.05 * Math.abs(slot - prev.slot), 0.26);
+    stretch.set(withSequence(withTiming(peak, { duration: 110, easing: Easing.out(Easing.quad) }), withSpring(1, WOBBLE)));
+  }, [slot, slotW, x, stretch]);
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateX: x.value }, { scaleX: stretch.value }, { scaleY: 1 - (stretch.value - 1) * 0.35 }],
+  }));
+  return (
+    <Animated.View pointerEvents="none" style={[{ position: "absolute", left: PAD + DROP_INSET, top: (BAR_H - DROP_H) / 2, width: slotW - DROP_INSET * 2, height: DROP_H }, style]}>
+      <LiquidGlass
+        backdrop={false}
+        style={StyleSheet.absoluteFill}
+        cornerRadius={DROP_H / 2}
+        tint="#ffffff"
+        frost={dark ? 0.14 : 0.72}
+        shadow={dark ? "0 3px 10px rgba(0,0,0,0.35)" : "0 3px 10px rgba(0,0,0,0.10)"}
+      />
+    </Animated.View>
+  );
+}
+
+function TabButton({ icon: Icon, label, selected, color, onPress }: { icon: LucideIcon; label: string; selected: boolean; color: string; onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
-      accessibilityRole={role}
-      accessibilityState={role === "tab" ? { selected: active } : undefined}
-      accessibilityLabel={accessibilityLabel ?? label}
-      android_ripple={{ color: alpha(c.foreground, 0.08), borderless: true, radius: PILL_W / 2 }}
-      style={{ flex: 1, minWidth: 0, alignItems: "center", paddingTop: PAD_TOP }}
+      accessibilityRole="tab"
+      accessibilityState={{ selected }}
+      accessibilityLabel={label}
+      style={{ flex: 1, minWidth: 0, alignItems: "center", justifyContent: "center" }}
     >
-      <View style={{ width: PILL_W, height: PILL_H, alignItems: "center", justifyContent: "center" }}>
-        <Icon size={23} color={color} strokeWidth={active ? 1.75 : 1.4} />
-      </View>
-      <Txt size={12} lineHeight={16} weight={active ? 600 : 500} numberOfLines={1} style={{ color, marginTop: 2, letterSpacing: 0.2 }}>
+      <Icon size={23} color={color} strokeWidth={1.9} />
+      <Txt size={11} lineHeight={14} weight={selected ? 600 : 500} numberOfLines={1} style={{ color, marginTop: 3, letterSpacing: -0.1 }}>
         {label}
       </Txt>
     </Pressable>
   );
 }
 
-/** The action's circle. */
-const ACTION = 52;
-
-/** The bar's centre action: a solid circle in the action colour raised half out of the bar, its label under it. */
-function CenterAction({ icon: Icon, label, accessibilityLabel, onPress }: { icon: LucideIcon; label: string; accessibilityLabel: string; onPress: () => void }) {
+/** The glass capsule: the four tabs, the drop under the selected one. */
+function TabCapsule({ tabs, current, onPress, dark }: { tabs: TabItem[]; current: number; onPress: (i: number) => void; dark: boolean }) {
   const calm = useCalm();
-  const { animatedStyle, onPressIn, onPressOut } = usePress(0.92);
+  const [width, setWidth] = React.useState(0);
+  const slotW = width > 0 && tabs.length > 0 ? (width - PAD * 2) / tabs.length : 0;
+  const blue = BLUE[dark ? "dark" : "light"];
+  const idle = alpha(calm.ink, dark ? 0.82 : 0.74);
   return (
-    <Pressable onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut} accessibilityRole="button" accessibilityLabel={accessibilityLabel} style={{ flex: 1, minWidth: 0, alignItems: "center" }}>
-      <Animated.View style={[{ marginTop: -20, width: ACTION, height: ACTION, borderRadius: ACTION / 2, backgroundColor: calm.teal, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: calm.card, boxShadow: `0 6px 16px ${calm.teal}40` }, animatedStyle]}>
-        <Icon size={22} color={calm.card} strokeWidth={2} />
-      </Animated.View>
-      {/* On the tabs' label line: the circle ends 32 px down the bar, their labels start at 40 (PAD_TOP + PILL_H + 2). */}
-      <Txt size={12} lineHeight={16} weight={600} numberOfLines={1} style={{ color: calm.teal, marginTop: PAD_TOP + PILL_H + 2 - (ACTION - 20), letterSpacing: 0.2 }}>
-        {label}
-      </Txt>
-    </Pressable>
+    <LiquidGlass style={{ flex: 1, height: BAR_H }} cornerRadius={BAR_H / 2}>
+      <View accessibilityRole="tablist" onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ flex: 1, flexDirection: "row", paddingHorizontal: PAD }}>
+        {slotW > 0 && current >= 0 && <Drop slot={current} slotW={slotW} dark={dark} />}
+        {tabs.map((t, i) => (
+          <TabButton key={t.key} icon={t.icon} label={t.label} selected={i === current} color={i === current ? blue : idle} onPress={() => onPress(i)} />
+        ))}
+      </View>
+    </LiquidGlass>
   );
 }
 
-/**
- * The active tab's halo line: one view slid between the slots by a spring on the UI thread (transform only). `slot`
- * counts the action's place too, so the line sits over the tab's own column.
- */
-function Indicator({ slot, slots }: { slot: number; slots: number }) {
-  const rowW = useSharedValue(0);
-  const at = useSharedValue(slot);
-  const shown = slot >= 0;
-  React.useEffect(() => {
-    if (slot < 0) return;
-    at.set(reduceMotionNow() ? slot : withSpring(slot, GLIDE));
-  }, [slot, at]);
-  const style = useAnimatedStyle(() => {
-    const w = (rowW.value - 12) / slots;
-    return { opacity: rowW.value > 0 && shown ? 1 : 0, transform: [{ translateX: 6 + (at.value + 0.5) * w - INDICATOR_W / 2 }] };
-  });
+/** The action on its own round glass button: a blue glyph that swells under the finger and bounces back. */
+function ActionButton({ icon: Icon, accessibilityLabel, onPress, dark }: { icon: LucideIcon; accessibilityLabel: string; onPress: () => void; dark: boolean }) {
+  const scale = useSharedValue(1);
+  const lit = useSharedValue(0);
+  const body = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const glow = useAnimatedStyle(() => ({ opacity: lit.value }));
+  const still = reduceMotionNow();
   return (
-    <View pointerEvents="none" onLayout={(e) => rowW.set(e.nativeEvent.layout.width)} style={{ position: "absolute", top: 0, left: 0, right: 0, height: INDICATOR_H + 4 }}>
-      <Animated.View style={[{ position: "absolute", top: 3, left: 0, width: INDICATOR_W }, style]}>
-        <HaloLine width={INDICATOR_W} height={INDICATOR_H} />
+    <Pressable
+      onPress={onPress}
+      onPressIn={() => {
+        if (!still) scale.set(withSpring(1.07, SWELL));
+        lit.set(withTiming(1, { duration: 120 }));
+      }}
+      onPressOut={() => {
+        if (!still) scale.set(withSpring(1, SETTLE));
+        lit.set(withTiming(0, { duration: 260 }));
+      }}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      hitSlop={4}
+    >
+      <Animated.View style={[{ width: BAR_H, height: BAR_H }, body]}>
+        <LiquidGlass style={StyleSheet.absoluteFill} cornerRadius={BAR_H / 2}>
+          {/* Lit from inside while pressed. */}
+          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: BAR_H / 2, backgroundColor: dark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.45)" }, glow]} />
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center" }]}>
+            <Icon size={Icon === Plus ? 28 : 25} color={BLUE[dark ? "dark" : "light"]} strokeWidth={Icon === Plus ? 2.4 : 2} />
+          </View>
+        </LiquidGlass>
       </Animated.View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -156,14 +202,12 @@ export type TabBarOwnProps = {
   current: number;
   onChange: (index: number, tab: TabItem) => void;
   tabs?: TabItem[];
-  /** The action, shown as the bar's last item (omit to hide it). */
+  /** The action, shown on the round button beside the tabs (omit to hide it). */
   onAction?: () => void;
-  /** The action's accessible name; its visible label is "Coach" for a coach action, else "Check in". */
+  /** The action's accessible name; a coach action ("Open Coach") shows the sparkle, else the plus. */
   actionLabel?: string;
   /** Absolute at the bottom of its parent (default), or in flow. */
   floating?: boolean;
-  /** With `floating`: the BlurTargetView of the pages under the bar, which the bar blurs (frosted glass). */
-  blurTarget?: React.RefObject<View | null>;
 };
 
 /**
@@ -188,7 +232,7 @@ const ROUTE_TAB: Record<string, string> = { index: "home", home: "home", "tab-sl
 /** A screen kept off the bar lights the tab it belongs to: the journal is Today's (its card lives there). */
 const HOST_TAB: Record<string, string> = { journal: "index" };
 
-/** The action item's visible label and icon, from its accessible name. */
+/** The action's accessible name (when none is given) and glyph: the sparkle for the coach, else the plus. */
 function actionItem(label: string | undefined): { label: string; icon: LucideIcon } {
   if (label && /coach/i.test(label)) return { label: "Coach", icon: Sparkles };
   return { label: "Check in", icon: Plus };
@@ -199,15 +243,14 @@ const haptic = () => {
 };
 
 /**
- * Phone navigation bar: full width and flush to the bottom edge, frosted over the pages (or a solid card face), a
- * faint hairline along its rounded top and the safe-area inset under it. Four destinations around the action ("Coach"
- * or "Check in"), a solid circle raised in the middle. The active tab is in ink under a short halo line that
- * glides between tabs on a spring (one transform, UI thread); the rest are fine grey outlines.
+ * Phone navigation bar: a glass capsule of four tabs and a round glass action button, floating 16 dp from the sides
+ * just above the system navigation area, the pages scrolling under both. The selected tab is iOS blue in a lighter
+ * glass drop; a press gives a light haptic.
  */
 export function TabBar(props: TabBarProps) {
-  const calmBar = useCalm();
-  const { onAction, actionLabel, floating = true, blurTarget } = props;
+  const { onAction, actionLabel, floating = true } = props;
   const insets = useSafeAreaInsets();
+  const dark = useTheme().scheme === "dark";
   // Driven by the navigator: its routes become the tabs (hidden `href: null` routes are left out).
   const nav = "state" in props && props.state ? (props as NavTabBarProps) : null;
   const own = nav ? null : (props as TabBarOwnProps);
@@ -233,52 +276,27 @@ export function TabBar(props: TabBarProps) {
     own?.onChange(i, tabs[i]);
   };
   const action = onAction ? actionItem(actionLabel) : null;
-  const dark = useTheme().scheme === "dark";
-  const half = Math.ceil(tabs.length / 2);
-  const item = (t: TabItem, i: number) => <NavItem key={t.key} icon={t.icon} label={t.label} active={i === current} onPress={() => press(i)} role="tab" />;
   return (
     <View
+      // Touches between and around the two pieces reach the page under them.
+      pointerEvents="box-none"
       style={[
         floating ? { position: "absolute", left: 0, right: 0, bottom: 0 } : null,
-        {
-          // A white sheet with rounded top corners, lifted off the page by a soft upward shadow (an edge in the dark).
-          // Floating over the pages it is frosted glass: what scrolls under it, blurred, through a light tint.
-          backgroundColor: blurTarget ? "transparent" : calmBar.card,
-          paddingBottom: insets.bottom,
-          borderTopLeftRadius: 24,
-          borderTopRightRadius: 24,
-          borderTopWidth: 1,
-          borderLeftWidth: 1,
-          borderRightWidth: 1,
-          borderColor: calmBar.hairline,
-          ...(dark ? null : { boxShadow: "0 -8px 28px rgba(48,38,22,0.07)" }),
-        },
+        { flexDirection: "row", alignItems: "center", gap: GAP, paddingHorizontal: SIDE, paddingBottom: insets.bottom + LIFT },
       ]}
     >
-      {blurTarget && (
-        // Only the glass is clipped to the rounded top: the raised centre button still rises above the bar.
-        <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden" }}>
-          <BlurView blurTarget={blurTarget} blurMethod="dimezisBlurViewSdk31Plus" intensity={dark ? 40 : 50} tint={dark ? "dark" : "light"} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
-          <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: alpha(calmBar.card, dark ? 0.62 : 0.66) }} />
-        </View>
+      <TabCapsule tabs={tabs} current={current} onPress={press} dark={dark} />
+      {action && onAction && (
+        <ActionButton
+          icon={action.icon}
+          accessibilityLabel={actionLabel ?? action.label}
+          dark={dark}
+          onPress={() => {
+            haptic();
+            onAction();
+          }}
+        />
       )}
-      <View accessibilityRole="tablist" style={{ height: TAB_BAR_HEIGHT, flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 6 }}>
-        <Indicator slot={current < 0 ? -1 : action && current >= half ? current + 1 : current} slots={tabs.length + (action ? 1 : 0)} />
-        {tabs.slice(0, half).map((t, i) => item(t, i))}
-        {/* The action in the middle: a raised teal circle (Check in, or the coach), above the bar's edge. */}
-        {action && onAction && (
-          <CenterAction
-            icon={action.icon}
-            label={action.label}
-            accessibilityLabel={actionLabel ?? action.label}
-            onPress={() => {
-              haptic();
-              onAction();
-            }}
-          />
-        )}
-        {tabs.slice(half).map((t, i) => item(t, i + half))}
-      </View>
     </View>
   );
 }
