@@ -5,29 +5,7 @@
 import * as React from "react";
 import { useRouter, type Href } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
-import {
-  Archive,
-  Bell,
-  Bluetooth,
-  BookOpen,
-  BotMessageSquare,
-  CalendarDays,
-  CalendarRange,
-  ChartLine,
-  Database,
-  HeartPulse,
-  ListChecks,
-  Palette,
-  Plug,
-  RefreshCw,
-  Sparkles,
-  SwatchBook,
-  Target,
-  Trash2,
-  UserRound,
-  History,
-  ClipboardCheck,
-} from "lucide-react-native";
+import { Archive, Bell, Bluetooth, BookOpen, BotMessageSquare, Cable, CalendarDays, CalendarRange, ChartLine, ClipboardCheck, Database, HeartPulse, History, ListChecks, Palette, Plug, RefreshCw, Sparkles, SwatchBook, Target, Trash2, UserRound } from "lucide-react-native";
 import { describeHealthConnect } from "@/health/sync";
 import { localDay } from "@/lib/time";
 import { ago, formatDay, rangeLabel } from "@/lib/format";
@@ -124,6 +102,7 @@ export default function MoreScreen() {
     { icon: Bluetooth, tint: "rose", label: "Live heart rate", href: "/settings?s=live" },
     { icon: Palette, tint: "lavender", label: "App", href: "/settings?s=app" },
     { icon: BotMessageSquare, tint: "mint", label: "Coach", href: "/settings?s=coach" },
+    { icon: Cable, tint: "lavender", label: "Connect to Claude", href: "/settings?s=claude" },
   ];
   const reports: LinkListRow[] = [
     ...(vm?.latestWeek ? [{ icon: CalendarRange, tint: "sky" as const, label: "Weekly report", aside: rangeLabel(vm.latestWeek.start, vm.latestWeek.end), href: `/reports/${vm.latestWeek.period}` }] : []),

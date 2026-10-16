@@ -10,6 +10,7 @@ import { googleToken } from "@/google/auth";
 import { syncGoogle } from "@/google/sync";
 import { syncHealthConnect } from "@/health/sync";
 import { localDay } from "@/lib/time";
+import { sendAfterSync } from "@/mcp/connector";
 import { runPipeline } from "@/pipeline";
 import { timed } from "@/lib/perf";
 import { setForeground } from "@/lib/yield";
@@ -82,6 +83,7 @@ async function run(store: Store, profile: Profile, source: Source, opts: RunSync
   if (!lock.taken && opts.waitIfLocked && (await waitForLock(opts.owner, WAIT_FOR_TASK_MS))) lock = await takeLock(opts.owner);
   if (!lock.taken) return { ran: false, skipped: `${lock.holder === "app" ? "the app" : "the background task"} is syncing`, warnings: [] };
   const warnings: string[] = [];
+  let scored = false;
   try {
     if (source === "health_connect") {
       const r = await timed(`sync-health-connect (${opts.owner})`, () => syncHealthConnect(store, { timeZone: opts.timeZone, onProgress: opts.onProgress }));
@@ -91,10 +93,16 @@ async function run(store: Store, profile: Profile, source: Source, opts: RunSync
       warnings.push(...r.warnings);
     }
     await timed(`pipeline (${opts.owner})`, () => runPipeline(store, profile, { today: localDay(Date.now() / 1000, opts.timeZone), onProgress: opts.onProgress }));
+    scored = true;
     return { ran: true, warnings };
   } finally {
     await releaseLock(opts.owner);
     await notifyAfterRun(store, opts.timeZone);
+    // The Claude connector, when set up: the task waits for the send (its process may end after); the app doesn't.
+    if (scored) {
+      const send = sendAfterSync(store, profile, opts.timeZone);
+      if (opts.owner === "task") await send;
+    }
   }
 }
 

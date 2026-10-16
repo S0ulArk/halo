@@ -3,7 +3,8 @@
 // settings") and opens at `?s=`. With none, the first section.
 //
 // Kept from the web: Profile (with its Edit sheet), Data source (status, permissions, Sync now, disconnect), App ›
-// Appearance (System / Light / Dark) and Coach. Dropped, as a phone with no server or account has nothing behind them:
+// Appearance (System / Light / Dark) and Coach. Added on the phone: Connect to Claude (claude.tsx), the person's own MCP
+// connector. Dropped, as a phone with no server or account has nothing behind them:
 // the Account card (name, email, photo upload and crop, change password, sign out, admin panel, delete account), Google
 // OAuth (connect, reconnect, switch account, the OAuth result toast), App › Install, and the coach's server-side
 // provider/key settings (the coach screen owns its own setup). App › Notifications (web push) becomes Notifications &
@@ -13,14 +14,15 @@ import { View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { DetailShell, useAfterTransition } from "@/ui";
 import { useBack } from "../detail/nav";
+import { ClaudeSection } from "./claude";
 import { GoalsSection } from "./goals";
 import { LiveHrSection } from "./liveHr";
 import { NotificationsSection } from "./notifications";
 import { WeeklyPlanSection } from "./weeklyPlan";
 import { AppSection, CoachSection, DataSourceSection, ProfileSection } from "./sections";
 
-export type SectionId = "profile" | "source" | "goals" | "notifications" | "live" | "app" | "coach";
-const IDS: SectionId[] = ["profile", "source", "goals", "notifications", "live", "app", "coach"];
+export type SectionId = "profile" | "source" | "goals" | "notifications" | "live" | "app" | "coach" | "claude";
+const IDS: SectionId[] = ["profile", "source", "goals", "notifications", "live", "app", "coach", "claude"];
 /** The web's ids and older names: ?s=account, ?s=sync, ?s=appearance. */
 const ALIAS: Record<string, SectionId> = { account: "profile", sync: "source", appearance: "app" };
 
@@ -52,6 +54,8 @@ export default function SettingsScreen() {
     <AppSection />
   ) : section === "coach" ? (
     <CoachSection />
+  ) : section === "claude" ? (
+    <ClaudeSection />
   ) : (
     <ProfileSection />
   );
