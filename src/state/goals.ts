@@ -1,9 +1,11 @@
 // Daily goals (Fitbit-style), kept on the phone (AsyncStorage "pulse.goals"): the targets, which goals are on, their
 // limits, and the hook Home, Trends and Settings read them with. One module-level store, like My Dashboard's keys
 // (src/screens/home/dashboard.ts), so every screen sees a save at once. The query that scores a day against them
-// is src/queries/goals.ts.
+// is src/queries/goals.ts. Targets are stored metric (km, ml); Settings shows and takes the distance and water goals in
+// the person's units (Settings › Units), and the goal lines on Trends follow them.
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as React from "react";
+import { conversionFor, fromShown, METRIC, roundTo, shown, type Units } from "@/lib/units";
 import { GOAL_KEYS, type GoalKey, type Goals, type GoalTargets } from "@/queries/goals";
 
 export type { GoalKey, Goals, GoalTargets } from "@/queries/goals";
@@ -46,24 +48,59 @@ export const TARGET_LIMITS: Record<TargetKey, TargetLimit> = {
   sleep: { min: 4, max: 12, decimals: 1, unit: "hours a night", optional: true },
 };
 
-const fmt = (key: TargetKey, v: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: TARGET_LIMITS[key].decimals }).format(v);
+const fmtLimit = (l: TargetLimit, v: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: l.decimals }).format(v);
 
-/** Null when `value` is allowed for `key`, else why not ("Between 1,000 and 50,000"). */
-export function validateTarget(key: TargetKey, value: number | null): string | null {
-  const l = TARGET_LIMITS[key];
+/** Null when `value` is allowed by `l`, else why not ("Between 1,000 and 50,000"). */
+function checkLimit(l: TargetLimit, value: number | null): string | null {
   if (value === null) return l.optional ? null : "Enter a number";
   if (!Number.isFinite(value)) return "Enter a number";
   if (l.decimals === 0 && !Number.isInteger(value)) return "Whole numbers only";
-  if (value < l.min || value > l.max) return `Between ${fmt(key, l.min)} and ${fmt(key, l.max)}`;
+  if (value < l.min || value > l.max) return `Between ${fmtLimit(l, l.min)} and ${fmtLimit(l, l.max)}`;
   return null;
 }
 
-/** A field's text → the target it means (blank: null) and the error to show, if any. */
-export function parseTarget(key: TargetKey, text: string): { value: number | null; error: string | null } {
+/** Null when `value` (stored, metric) is allowed for `key`, else why not ("Between 1,000 and 50,000"). */
+export function validateTarget(key: TargetKey, value: number | null): string | null {
+  return checkLimit(TARGET_LIMITS[key], value);
+}
+
+/** The targets typed in the person's units: distance (km) and water (ml); the rest have no unit choice. */
+const METRIC_UNIT: Partial<Record<TargetKey, string>> = { distance: "km", water: "ml" };
+const conversionOf = (key: TargetKey, units: Units) => conversionFor(METRIC_UNIT[key], units);
+
+/**
+ * A target's limits as typed in `units`: in miles or fluid ounces the metric limits converted and rounded inward (so
+ * each is itself allowed), with the unit after the field ("mi a day").
+ */
+export function targetLimit(key: TargetKey, units: Units = METRIC): TargetLimit {
+  const l = TARGET_LIMITS[key];
+  const conv = conversionOf(key, units);
+  if (!conv) return l;
+  const k = 10 ** l.decimals;
+  return { ...l, min: Math.ceil(shown(l.min, conv) * k) / k, max: Math.floor(shown(l.max, conv) * k) / k, unit: `${conv.unit} a day` };
+}
+
+/** A stored target as its field shows it in `units` (8 km reads "5" in miles); blank for none. */
+export function targetText(key: TargetKey, value: number | null, units: Units = METRIC): string {
+  if (value === null) return "";
+  const conv = conversionOf(key, units);
+  return conv ? String(roundTo(shown(value, conv), TARGET_LIMITS[key].decimals)) : String(value);
+}
+
+/**
+ * A field's text, typed in `units`, → the target it means (stored metric: km, whole ml; blank: null) and the error to
+ * show, if any, with the limits in the unit typed.
+ */
+export function parseTarget(key: TargetKey, text: string, units: Units = METRIC): { value: number | null; error: string | null } {
   const t = text.trim().replace(",", ".");
-  const value = t === "" ? null : Number(t);
-  const error = value !== null && Number.isNaN(value) ? "Enter a number" : validateTarget(key, value);
-  return { value: error ? null : value, error };
+  const typed = t === "" ? null : Number(t);
+  const error = typed !== null && Number.isNaN(typed) ? "Enter a number" : checkLimit(targetLimit(key, units), typed);
+  if (error) return { value: null, error };
+  const conv = conversionOf(key, units);
+  if (!conv || typed === null) return { value: typed, error: null };
+  const metric = fromShown(typed, conv);
+  // Water is kept in whole ml.
+  return { value: TARGET_LIMITS[key].decimals === 0 ? Math.round(metric) : metric, error: null };
 }
 
 /** The stored JSON → goals; anything missing or out of range falls back to the default. */
@@ -100,11 +137,15 @@ export function withTarget(goals: Goals, key: TargetKey, value: number | null): 
 /** `goals` with one goal switched on or off. */
 export const withEnabled = (goals: Goals, key: GoalKey, on: boolean): Goals => ({ ...goals, enabled: { ...goals.enabled, [key]: on } });
 
-/** The goal drawn on a metric's trend as a dashed line, or null when that metric has no goal switched on. */
-export function trendGoal(goals: Goals, metricKey: string): number | null {
+/**
+ * The goal drawn on a metric's trend as a dashed line, or null when that metric has no goal switched on; in `units`,
+ * as the trend's values are (distance in miles, water in fl oz).
+ */
+export function trendGoal(goals: Goals, metricKey: string, units: Units = METRIC): number | null {
   const keys: GoalKey[] = ["steps", "distance", "floors", "azm", "active_minutes", "active_calories", "water"];
   const k = keys.find((x) => x === metricKey);
-  return k && goals.enabled[k] ? goals.targets[k] : null;
+  const target = k && goals.enabled[k] ? goals.targets[k] : null;
+  return k && target !== null ? shown(target, conversionOf(k, units)) : null;
 }
 
 // ── Persistence ─────────────────────────────────────────────────────────────

@@ -8,6 +8,7 @@ import { BURN_DAYS, NO_CUSTOM, resolveTargets, type CustomTargets, type Targets 
 import { type DayRow, finite, loadDays, type QueryCtx, todayOf } from "./common";
 import { countedPulse, EMPTY_TOTALS, foodEntry, mealOverlaps, roundNutrient, sumFood, type FoodEntry, type FoodVia, type Totals } from "./food";
 import { MEALS, type Meal } from "./log";
+import { unitsOf } from "./units";
 
 /** The nutrients the overview averages and charts (fiber is Pulse's alone, so it shows only in today's total). */
 export const MACROS = ["kcal", "protein", "carbs", "fat"] as const;
@@ -176,7 +177,8 @@ export async function getNutrition(ctx: QueryCtx, custom: CustomTargets): Promis
     }
   }
 
-  const basis = { weightKg, heightCm: ctx.profile.heightCm, burned: before(BURN_DAYS).map((r) => r?.metrics?.calories) };
+  // The protein suggestion's basis is worded in the person's units (the grams are the same).
+  const basis = { weightKg, heightCm: ctx.profile.heightCm, burned: before(BURN_DAYS).map((r) => r?.metrics?.calories), units: unitsOf(ctx) };
   return {
     today,
     timeZone: ctx.timeZone,

@@ -9,6 +9,7 @@ import { DAY, formatDay, formatValue } from "@/lib/format";
 import { DASHBOARD_LABEL, getMetricDetail, isDetailKey, RANGES, type DetailKey, type MetricDetailVM, type TrendRange } from "@/queries";
 import { useApp, useQuery } from "@/state/app";
 import { trendGoal, useGoals } from "@/state/goals";
+import { useUnits } from "@/state/units";
 import { ChartLine } from "lucide-react-native";
 import { DeltaMark, EmptyState, KeyStatRowSkeleton, MetricState, MetricTags, ReasonPlaceholder, SectionShell, SkeletonText, TrendChart, TrendChartSkeleton, useTheme, type TrendSeries } from "@/ui";
 import { useCalm, type CalmTint } from "@/ui/calm";
@@ -115,8 +116,10 @@ function Screen({ metricKey }: { metricKey: DetailKey }) {
   const range: TrendRange = typeof params.r === "string" && (RANGES as readonly string[]).includes(params.r) ? (params.r as TrendRange) : "m";
   const dateSwitcher = useDaySwitcher(d, today);
   const { goals } = useGoals();
-  // The person's own goal (Settings › Goals) takes the reference line's place; without one, the metric's reference stays.
-  const goal = trendGoal(goals, metricKey);
+  const { units } = useUnits();
+  // The person's own goal (Settings › Goals) takes the reference line's place; without one, the metric's reference
+  // stays. In the person's units, as the history is (Settings › Units).
+  const goal = trendGoal(goals, metricKey, units);
   const { data, error } = useQuery((ctx) => getMetricDetail(metricKey, d, ctx), [metricKey, d], `metric:${metricKey}:${d}`);
   const vm = data && data.key === metricKey && data.day === d ? data : undefined;
   const title = vm?.label ?? DASHBOARD_LABEL[metricKey];

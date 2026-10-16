@@ -156,6 +156,20 @@ const UNIT_WORDS: Record<string, string> = {
   h: "hours",
   km: "kilometres",
   "/km": "per kilometre",
+  // The other choices of Settings › Units (src/lib/units.ts), and the metric ones they replace.
+  "°F": "degrees Fahrenheit",
+  kg: "kilograms",
+  lb: "pounds",
+  mi: "miles",
+  "/mi": "per mile",
+  "km/h": "kilometres per hour",
+  mph: "miles per hour",
+  m: "metres",
+  ft: "feet",
+  cm: "centimetres",
+  in: "inches",
+  ml: "millilitres",
+  "fl oz": "fluid ounces",
 };
 
 /** "124 milliseconds", "−0.4 degrees" → reads the minus sign as "minus". */

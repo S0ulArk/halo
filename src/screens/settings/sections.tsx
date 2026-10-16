@@ -10,8 +10,10 @@ import { GOOGLE_SOURCE_ENABLED } from "@/google/flags";
 import { askPermissions, openHealthConnectSettings, permissionState, READ_TYPES, type PermissionState, type ReadType } from "@/health/connect";
 import { getSourcePolicy, setSourcePolicy, SOURCE_POLICIES, SOURCE_POLICY_LABELS, type SourcePolicy } from "@/health/sourcePolicy";
 import { ago, DAY, formatDay } from "@/lib/format";
+import { amount, cmToIn, heightText } from "@/lib/units";
 import { getSettings } from "@/queries/settings";
 import { useApp, useQuery, useSyncProgress } from "@/state/app";
+import { useUnits } from "@/state/units";
 import { Mark, SkeletonText, Txt, useTheme, type ColorToken, type ThemeChoice } from "@/ui";
 import { font } from "@/ui/fonts";
 import { useNow } from "../health/shells";
@@ -35,14 +37,22 @@ export function ProfileSection() {
   const app = useApp();
   const q = useQuery(getSettings);
   const p = q.data?.profile;
-  // Numbers in the numeric face with their unit small beside them; words stay words ("Not set", "Male").
+  const { units } = useUnits();
+  // Numbers in the numeric face with their unit small beside them; words stay words ("Not set", "Male"). Height and
+  // waist follow Settings › Units: centimetres, or a height in feet and inches written out ("5 ft 9 in") and a waist
+  // in inches.
+  const ftin = units.height === "ftin";
   const rows: ProfileRow[] | null = p
     ? [
         { label: "Birth date", value: formatDay(p.birthDate, DAY.full) },
         { label: "Age", value: String(p.age), numeric: true, unit: "years" },
         { label: "Sex", value: p.sex === "male" ? "Male" : "Female" },
-        p.heightCm ? { label: "Height", value: String(p.heightCm), numeric: true, unit: "cm" } : { label: "Height", value: "Not set" },
-        p.waistCm ? { label: "Waist", value: String(p.waistCm), numeric: true, unit: "cm" } : { label: "Waist", value: "Not set" },
+        p.heightCm
+          ? ftin
+            ? { label: "Height", value: heightText(p.heightCm, units) }
+            : { label: "Height", value: amount(p.heightCm, 1), numeric: true, unit: "cm" }
+          : { label: "Height", value: "Not set" },
+        p.waistCm ? { label: "Waist", value: amount(ftin ? cmToIn(p.waistCm) : p.waistCm, 1), numeric: true, unit: ftin ? "in" : "cm" } : { label: "Waist", value: "Not set" },
         { label: "Max heart rate", value: String(p.maxHr), numeric: true, unit: "bpm", detail: p.maxHrSource === "learned" ? "learned from workouts" : p.maxHrSource },
         { label: "Time zone", value: describeZone(p.timeZone) },
       ]

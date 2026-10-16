@@ -1,5 +1,7 @@
-// First run: birth date, sex, optional max HR and height. Mirrors the web app's onboarding fields. Calm: the warm ground,
-// white rounded fields with their labels above, a teal segmented choice and a teal Continue.
+// First run: birth date, sex, units, optional max HR and height. Mirrors the web app's onboarding fields. Calm: the warm
+// ground, white rounded fields with their labels above, teal segmented choices and a teal Continue. The units choice is
+// Settings › Units' preset (metric or US), saved at once; the height is typed in it (cm, or feet and inches) and stored
+// in cm.
 import { useRouter } from "expo-router";
 import * as React from "react";
 import { Pressable, View } from "react-native";
@@ -11,7 +13,10 @@ import { Txt } from "@/ui";
 import { Wordmark } from "@/ui/components/Wordmark";
 import { CalmButton, CalmField, CalmInput, CalmSegmented, Sentence, useCalm } from "@/screens/settings/calmKit";
 import { BirthDatePicker } from "@/screens/settings/BirthDatePicker";
+import { HeightInput, useHeightDraft } from "@/screens/settings/units";
 import { maskDate } from "@/lib/dateInput";
+import { heightFromDraft, PRESETS, presetOf, type Preset } from "@/lib/units";
+import { useUnits } from "@/state/units";
 import { CalendarDays } from "lucide-react-native";
 
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -19,6 +24,10 @@ const SEXES = [
   { value: "male", label: "Male" },
   { value: "female", label: "Female" },
 ] as const;
+const UNIT_PRESETS = [
+  { value: "metric", label: "Metric" },
+  { value: "imperial", label: "Imperial (US)" },
+] as const satisfies readonly { value: Preset; label: string }[];
 
 export default function ProfileScreen() {
   const app = useApp();
@@ -29,15 +38,21 @@ export default function ProfileScreen() {
   const [calendar, setCalendar] = React.useState(false);
   const [sex, setSex] = React.useState<Sex>(app.profile?.sex ?? "male");
   const [maxHr, setMaxHr] = React.useState(app.profile?.maxHr ? String(app.profile.maxHr) : "");
-  const [heightCm, setHeightCm] = React.useState(app.profile?.heightCm ? String(app.profile.heightCm) : "");
+  const { units, set: setUnits } = useUnits();
+  const ftin = units.height === "ftin";
+  // The height typed so far follows a change of units (the draft converts itself).
+  const [height, setHeight] = useHeightDraft(app.profile?.heightCm, units);
   const [saving, setSaving] = React.useState(false);
+
+  // A preset switches every unit at once (Settings › Units).
+  const chooseUnits = (p: Preset) => void setUnits(PRESETS[p]);
 
   const m = DATE.exec(birthDate);
   const year = m ? +m[1] : 0;
   const validDate = !!m && year >= 1900 && year <= new Date().getFullYear() - 5 && +m[2] >= 1 && +m[2] <= 12 && +m[3] >= 1 && +m[3] <= 31;
   const hr = maxHr.trim() === "" ? null : Number(maxHr);
   const validHr = hr === null || (Number.isFinite(hr) && hr >= 120 && hr <= 230);
-  const h = heightCm.trim() === "" ? null : Number(heightCm);
+  const h = heightFromDraft(height, units);
   const validH = h === null || (Number.isFinite(h) && h >= 100 && h <= 250);
   const ok = validDate && validHr && validH && !saving;
   const dateError = birthDate.length >= 10 && !validDate;
@@ -105,12 +120,17 @@ export default function ProfileScreen() {
           <CalmSegmented value={sex} onChange={setSex} items={SEXES} on="ground" accessibilityLabel="Sex" />
         </CalmField>
 
-        <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-end" }}>
-          <CalmField label="Max HR" hint="(optional)" style={{ flex: 1 }}>
+        <CalmField label="Units" help="For weight, height, distance, temperature and water. Change them any time in Settings › Units.">
+          <CalmSegmented value={presetOf(units)} onChange={chooseUnits} items={UNIT_PRESETS} on="ground" accessibilityLabel="Units" />
+        </CalmField>
+
+        {/* In cm, Max HR and Height share a row; feet and inches need the whole width for their two fields. */}
+        <View style={ftin ? { gap: 22 } : { flexDirection: "row", gap: 12, alignItems: "flex-end" }}>
+          <CalmField label="Max HR" hint="(optional)" style={ftin ? undefined : { flex: 1 }}>
             <CalmInput on="ground" numeric={maxHr !== ""} value={maxHr} onChangeText={setMaxHr} placeholder="Tanaka estimate" keyboardType="number-pad" accessibilityLabel="Max HR (optional)" />
           </CalmField>
-          <CalmField label="Height" hint="(cm, optional)" style={{ flex: 1 }}>
-            <CalmInput on="ground" numeric={heightCm !== ""} value={heightCm} onChangeText={setHeightCm} placeholder="175" keyboardType="number-pad" accessibilityLabel="Height in cm (optional)" />
+          <CalmField label="Height" hint={ftin ? "(ft and in, optional)" : "(cm, optional)"} style={ftin ? undefined : { flex: 1 }}>
+            <HeightInput value={height} onChange={setHeight} units={units} on="ground" optional />
           </CalmField>
         </View>
 

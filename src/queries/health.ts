@@ -48,6 +48,8 @@ import type {
   VitalKey,
 } from "./types";
 import { metricsWithLoggedBody } from "@/data/body";
+import { conversionFor, kgToLb, METRIC, shown, type Units } from "@/lib/units";
+import { localizeStat, shownPick, unitsOf } from "./units";
 
 // ── Hub ─────────────────────────────────────────────────────────────────────
 
@@ -232,7 +234,7 @@ export async function getHealthspan(day: string, ctx: QueryCtx): Promise<Healths
         ? VO2_CAPTION[hs.vo2maxSource]
         : key === "leanMass"
           ? c
-            ? leanCaption(c, body, hs?.reason === null ? hs.age : 0)
+            ? leanCaption(c, body, hs?.reason === null ? hs.age : 0, unitsOf(ctx))
             : "Needs body fat (a smart scale, or Journal › Log › Body fat), or your weight with your height in Profile. Left out of Halo Age."
           : undefined;
     const domain: [number, number] = key === "leanMass" && c ? [target - 25, target + 10] : meta.domain;
@@ -268,10 +270,14 @@ export async function getHealthspan(day: string, ctx: QueryCtx): Promise<Healths
   };
 }
 
-/** Lean body mass's caption: the body composition behind the % (lean and fat mass in kg, and per m² of height). */
-function leanCaption(c: HealthspanContribution, b: HealthspanBody | null | undefined, age: number) {
+/**
+ * Lean body mass's caption: the body composition behind the % (lean and fat mass in the person's weight unit, and per
+ * m² of height; FFMI and FMI are indexes defined in kg/m², so they stay in it).
+ */
+function leanCaption(c: HealthspanContribution, b: HealthspanBody | null | undefined, age: number, units: Units = METRIC) {
   const parts = [`${(100 - c.value).toFixed(1)}% body fat`];
-  if (b?.leanKg != null && b.fatKg != null) parts.push(`${b.leanKg.toFixed(1)} kg lean, ${b.fatKg.toFixed(1)} kg fat`);
+  const w = (kg: number) => (units.weight === "lb" ? `${kgToLb(kg).toFixed(1)} lb` : `${kg.toFixed(1)} kg`);
+  if (b?.leanKg != null && b.fatKg != null) parts.push(`${w(b.leanKg)} lean, ${w(b.fatKg)} fat`);
   if (b?.ffmi != null && b.fmi != null) parts.push(`FFMI ${b.ffmi.toFixed(1)}, FMI ${b.fmi.toFixed(1)} kg/m²`);
   const note = c.estimated
     ? " Body fat estimated from your BMI: counts half."
@@ -342,10 +348,15 @@ export async function getMonitor(day: string, ctx: QueryCtx, preloaded?: Map<str
   ]);
   const row = rows.get(day);
   const hm = row?.healthMonitor;
+  const units = unitsOf(ctx);
   const vitals: Vital[] = VITALS.map((v) => {
+    // Skin temperature is a change from its baseline: in °F it, its range and its trend convert by ×9/5 alone. The
+    // status was decided in °C by the pipeline; only what is shown converts.
+    const conv = conversionFor(v.unit, units, { delta: v.signed });
+    const pick = shownPick(v.pick, conv);
     const reading = hm && hm.reason === null ? hm.vitals.find((x) => x.key === v.key) : undefined;
-    const value = row ? v.pick(row) : null;
-    const range = reading?.range ?? null;
+    const value = row ? pick(row) : null;
+    const range = reading?.range ? { low: shown(reading.range.low, conv), high: shown(reading.range.high, conv) } : null;
     const status = reading?.status ?? "no_data";
     let chip: Vital["chip"] = null;
     if (range && finite(value)) {
@@ -363,13 +374,13 @@ export async function getMonitor(day: string, ctx: QueryCtx, preloaded?: Map<str
       key: v.key,
       label: v.key === "skinTempDev" ? "Skin temp (from baseline)" : VITAL_LABEL[v.key],
       short: v.short,
-      unit: v.unit,
+      unit: conv?.unit ?? v.unit,
       metric: finite(value) ? ok(value, false, [...tags]) : none(reason),
       range,
       status,
       chip,
       trend: {
-        points: trendPoints(rows, day, v.pick, 30),
+        points: trendPoints(rows, day, pick, 30),
         baseline: range && v.key !== "spo2" ? { mean: (range.low + range.high) / 2, sd: (range.high - range.low) / 2 } : null,
       },
     };
@@ -466,17 +477,23 @@ async function measurements(ctx: QueryCtx, day: string, today: string): Promise<
     const latest = rs.find((r) => r.day <= day);
     const prior = latest ? rs.filter((r) => r.day >= addDays(latest.day, -30) && r.day < latest.day).map((r) => r.value) : [];
     const { mean, sd } = meanSd(prior);
-    out.push({
-      key: m.key,
-      label: m.label,
-      unit: m.unit,
-      format: m.format,
-      metric: latest ? ok(latest.value) : none("no_data"),
-      average: mean,
-      sd,
-      direction: "neutral",
-      caption: latest ? dayLabel(latest.day, today) : undefined,
-    });
+    // Weight in kg or lb, core temperature (a reading) in °C or °F.
+    out.push(
+      localizeStat(
+        {
+          key: m.key,
+          label: m.label,
+          unit: m.unit,
+          format: m.format,
+          metric: latest ? ok(latest.value) : none("no_data"),
+          average: mean,
+          sd,
+          direction: "neutral",
+          caption: latest ? dayLabel(latest.day, today) : undefined,
+        },
+        unitsOf(ctx),
+      ),
+    );
   }
   return out;
 }

@@ -17,6 +17,7 @@ import { formatValue, MISSING, type FormatKey } from "@/lib/format";
 import { CHART_GROUPS, CHART_METRICS, chartDef, DAY_VIEW, getChartDay, getChartSeries, type ChartDayVM, type ChartDef, type ChartSeriesVM, type DayView } from "@/queries/chart";
 import { useApp, useQuery } from "@/state/app";
 import { trendGoal, useGoals } from "@/state/goals";
+import { useUnits } from "@/state/units";
 import { accentFamily, Button, DateSwitcher, EmptyState, Ground, HeaderFrame, Skeleton, ToggleGroup, Txt, useTheme, type Tokens } from "@/ui";
 import type { CalmPalette } from "@/ui/calm";
 import { FAMILY_TINT } from "@/ui/components/calmKit";
@@ -183,19 +184,22 @@ export default function ChartExplorer() {
   const fonts = useChartFonts();
   const { today, sync } = useApp();
   const { goals } = useGoals();
+  // Every metric in the person's units (Settings › Units): its unit, its values and its goal line.
+  const { units } = useUnits();
 
-  const def: ChartDef = chartDef(params.metric) ?? CHART_METRICS[0];
+  // Memoised: a converted definition is a new object, and the chart's model below rebuilds when `def` changes.
+  const def: ChartDef = React.useMemo(() => chartDef(params.metric, units) ?? CHART_METRICS[0], [params.metric, units]);
   const range: Range = parseRange(typeof params.r === "string" ? params.r : undefined, !!def.day);
   const mode = range === "day" ? "day" : "daily";
   const view = mode === "day" ? def.day! : null;
   const d = typeof params.d === "string" && DAY_RE.test(params.d) && params.d <= today ? params.d : today;
   const rawParam = typeof params.compare === "string" ? params.compare : undefined;
-  const rawCompare = chartDef(rawParam);
+  const rawCompare = React.useMemo(() => chartDef(rawParam, units), [rawParam, units]);
   const picked = rawCompare && rawCompare.key !== def.key ? rawCompare : null;
   // Daily: any other metric. A day: another of the clock-sharing day views, by default the day's heart rate beside
   // Strain, stress and the Energy Bank ("none" turns that off).
   const cmpView: DayView | null = view ? dayCompareView(view, rawParam === NO_COMPARE ? NO_COMPARE : (picked?.day ?? null)) : null;
-  const cmp: ChartDef | null = mode === "daily" ? picked : cmpView ? chartDef(DAY_COMPARE.find((x) => x.view === cmpView)?.key) : null;
+  const cmp: ChartDef | null = mode === "daily" ? picked : cmpView ? chartDef(DAY_COMPARE.find((x) => x.view === cmpView)?.key, units) : null;
 
   const back = () => (router.canGoBack() ? router.back() : router.replace("/" as Href));
   // Only the keys given change; a null clears that param.
@@ -212,9 +216,10 @@ export default function ChartExplorer() {
   const day = useQuery((ctx) => (view ? getChartDay(view, d, ctx) : Promise.resolve(null)), [view, d], view ? `chartday:${view}:${d}` : undefined);
   const cmpSeries = useQuery((ctx) => (mode === "daily" && cmp ? getChartSeries(cmp.key, ctx) : Promise.resolve(null)), [mode, cmp?.key], mode === "daily" && cmp ? `chartseries:${cmp.key}` : undefined);
   const cmpDay = useQuery((ctx) => (mode === "day" && cmpView ? getChartDay(cmpView, d, ctx) : Promise.resolve(null)), [mode, cmpView, d], mode === "day" && cmpView ? `chartday:${cmpView}:${d}` : undefined);
-  const dailyVm: ChartSeriesVM | null = mode === "daily" && series.data?.key === def.key ? series.data : null;
+  // A series worked out in other units (just before a switch) waits for its replacement.
+  const dailyVm: ChartSeriesVM | null = mode === "daily" && series.data?.key === def.key && series.data.unit === def.unit ? series.data : null;
   const dayVm: ChartDayVM | null = view && day.data?.view === view && day.data.day === d ? day.data : null;
-  const cmpDailyVm = mode === "daily" && cmp && cmpSeries.data?.key === cmp.key ? cmpSeries.data : null;
+  const cmpDailyVm = mode === "daily" && cmp && cmpSeries.data?.key === cmp.key && cmpSeries.data.unit === cmp.unit ? cmpSeries.data : null;
   const cmpDayVm = mode === "day" && cmpView && cmpDay.data?.view === cmpView && cmpDay.data.day === d ? cmpDay.data : null;
   const error = mode === "daily" ? series.error : day.error;
 
@@ -258,7 +263,7 @@ export default function ChartExplorer() {
     const baseline = dailyVm?.baseline ?? null;
     // The shaded range: the normal range (daily), or the day's Strain Target under Day Strain.
     const shade = baseline ? { lo: baseline.mean - baseline.sd, hi: baseline.mean + baseline.sd, label: "Shaded: your normal range" } : view === "strain" && dayVm?.band ? { ...dayVm.band, label: `Shaded: Strain Target ${formatValue("decimal1", dayVm.band.lo)}–${formatValue("decimal1", dayVm.band.hi)}` } : null;
-    const goalY = mode === "daily" ? trendGoal(goals, def.key) : null;
+    const goalY = mode === "daily" ? trendGoal(goals, def.key, units) : null;
     // A heart-rate day draws its metric's own value as a labelled line: the day's resting heart rate, or its average.
     const ref = view === "hr" && dayVm ? dayReference(def.key, dayVm.refs) : null;
     const goal = goalY !== null ? { y: goalY, label: `Goal ${formatValue(format, goalY)}` } : mode === "daily" ? (dailyVm?.reference ?? null) : ref ? { y: ref.y, label: `${ref.label} ${valueText(ref.y, format, unit)}` } : null;
@@ -323,7 +328,7 @@ export default function ChartExplorer() {
       dataKey,
       levels: levelsFor(mode, days, extent.min, extent.max),
     };
-  }, [mode, dailyVm, dayVm, cmp, cmpView, cmpDailyVm, cmpDayVm, def, d, view, title, unit, format, c, k, goals, today, workouts]);
+  }, [mode, dailyVm, dayVm, cmp, cmpView, cmpDailyVm, cmpDayVm, def, d, view, title, unit, format, c, k, goals, units, today, workouts]);
 
   // --- The viewport JS knows about: the range's window, then wherever a gesture settled ---
   const home = React.useMemo(() => (!model ? null : (model.home ?? windowFor(range, model.primary, model.end))), [model, range]);

@@ -17,6 +17,8 @@ import {
   trendPoints,
 } from "./common";
 import type { Contributor, DriverItem, Metric, RecoveryVM } from "./types";
+import { conversionFor, mapFinite, METRIC, shown, shownSpread, type Units } from "@/lib/units";
+import { unitsOf } from "./units";
 
 const SUBJECT: Record<ChargeDriver["label"], string> = {
   HEART_RATE_VARIABILITY: "HRV",
@@ -81,7 +83,7 @@ export async function getRecovery(day: string, ctx: QueryCtx): Promise<RecoveryV
     isToday,
     recovery,
     band: recovery.value != null ? recoveryBand(recovery.value) : null,
-    contributors: contributors(row, isToday),
+    contributors: contributors(row, isToday, unitsOf(ctx)),
     insight: r?.value != null ? insightOf(r.drivers) : null,
     trend: {
       points: trendPoints(rows, day, (r) => r.recovery?.value, 182, (r) => !!r.recovery?.provisional),
@@ -91,7 +93,27 @@ export async function getRecovery(day: string, ctx: QueryCtx): Promise<RecoveryV
   };
 }
 
-export function contributors(row: DayRow | undefined, isToday: boolean): Contributor[] {
+/**
+ * Recovery's five inputs on `row`'s day with their baselines. Skin temperature is a change from its baseline, so in °F
+ * it and its spread convert by ×9/5 alone (`units`).
+ */
+export function contributors(row: DayRow | undefined, isToday: boolean, units: Units = METRIC): Contributor[] {
+  const list = contributorsMetric(row, isToday);
+  const conv = conversionFor("°C", units, { delta: true });
+  if (!conv) return list;
+  return list.map((x) =>
+    x.key !== "skinTemp"
+      ? x
+      : {
+          ...x,
+          unit: conv.unit,
+          metric: { ...x.metric, value: mapFinite(x.metric.value, (v) => shown(v, conv)) },
+          baseline: x.baseline && { mean: shown(x.baseline.mean, conv), sd: shownSpread(x.baseline.sd, conv) },
+        },
+  );
+}
+
+function contributorsMetric(row: DayRow | undefined, isToday: boolean): Contributor[] {
   const r = row?.recovery;
   const pts = (key: Contributor["key"]) => r?.drivers.find((d) => KEY_OF[d.label] === key)?.deltaPoints ?? null;
   const base = (b: { mean: number; sd: number } | null | undefined, ok = true) => (b && ok ? { mean: b.mean, sd: b.sd } : null);

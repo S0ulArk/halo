@@ -1,13 +1,16 @@
 // Nutrition `/nutrition` (a phone-only screen): today's calories, protein, carbs and fat against the person's targets
-// (protein 1.6 g per kg of their weight by default; all four editable), their 7- and 30-day daily averages, daily
-// protein and calories over the last month, and today's food: Pulse's entries to edit or delete, Fitbit's read-only.
+// (protein 1.6 g per kg of their weight by default, worded in pounds when they chose them; all four editable), their
+// 7- and 30-day daily averages, daily protein and calories over the last month, and today's food: Pulse's entries to
+// edit or delete, Fitbit's read-only.
 // Opened from the Journal's food sheet and from Today's journal card. Calm: the sand pastel of nutrition.
 import * as React from "react";
 import { Pressable, View } from "react-native";
 import { Camera, ChartColumn, Pencil, Plus, Sparkles, Trash2, TriangleAlert, Utensils, type LucideIcon } from "lucide-react-native";
 import { FORMATS } from "@/lib/format";
 import type { Metric } from "@/lib/reasons";
-import { progressOf, TARGET_KEYS, TARGET_LIMITS, parseTarget, type CustomTargets, type TargetKey, type Targets } from "@/nutrition/targets";
+import { KG_PER_LB, roundTo } from "@/lib/units";
+import { progressOf, PROTEIN_G_PER_KG, TARGET_KEYS, TARGET_LIMITS, parseTarget, type CustomTargets, type TargetKey, type Targets } from "@/nutrition/targets";
+import { useUnits } from "@/state/units";
 import { deleteLogEntry, setFoodSeparate } from "@/screens/journal/actions";
 import { useActionCtx } from "@/screens/journal/AddBehaviour";
 import { ConfirmDialog, DialogAction, ErrorAlert, Field, TextField, toast } from "@/screens/journal/controls";
@@ -134,6 +137,9 @@ function TargetsSheet({ open, onClose, suggested, custom, onSave }: { open: bool
   const [text, setText] = React.useState<Record<TargetKey, string>>(() => Object.fromEntries(TARGET_KEYS.map((k) => [k, custom[k] === null ? "" : String(custom[k])])) as Record<TargetKey, string>);
   const [errors, setErrors] = React.useState<Partial<Record<TargetKey, string>>>({});
   const [saving, setSaving] = React.useState(false);
+  // The protein rate in the person's weight unit (Settings › Units): 1.6 g per kg is 0.73 g per lb.
+  const { units } = useUnits();
+  const proteinRate = units.weight === "lb" ? `${roundTo(PROTEIN_G_PER_KG * KG_PER_LB, 2)} g per lb` : `${PROTEIN_G_PER_KG} g per kg`;
   const save = async (next?: CustomTargets) => {
     let out = next;
     if (!out) {
@@ -191,7 +197,7 @@ function TargetsSheet({ open, onClose, suggested, custom, onSave }: { open: bool
           </Field>
         ))}
         <Sentence size={13} style={{ paddingHorizontal: 4 }}>
-          Protein is suggested at 1.6 g per kg of your latest weight, calories at what you burn on an average day, fat at 30% of the calories and carbs from the rest.
+          {`Protein is suggested at ${proteinRate} of your latest weight, calories at what you burn on an average day, fat at 30% of the calories and carbs from the rest.`}
         </Sentence>
       </View>
     </BottomSheet>

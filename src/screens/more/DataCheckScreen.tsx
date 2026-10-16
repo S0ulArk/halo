@@ -10,7 +10,9 @@ import { runGoogleDataCheck } from "@/google/dataCheck";
 import { runDataCheck } from "@/health/dataCheck";
 import { formatReport, type DayCheck, type SourceLine } from "@/health/dataCheckSummary";
 import { formatDay, DAY } from "@/lib/format";
+import { conversionFor, roundTo, shown } from "@/lib/units";
 import { useApp } from "@/state/app";
+import { useUnits } from "@/state/units";
 import { DetailShell, Txt } from "@/ui";
 import { useBack } from "../detail/nav";
 import { Caption, CalmButton, CalmCard, Hairline, Num, Sentence, Surface, Title, useCalm } from "../settings/calmKit";
@@ -68,6 +70,7 @@ function Nothing({ children }: { children: string }) {
 export default function DataCheckScreen() {
   const app = useApp();
   const c = useCalm();
+  const { units } = useUnits();
   const onBack = useBack("/more");
   const [state, setState] = React.useState<{ busy: boolean; days: DayCheck[] | null; text: string; error: string | null }>({ busy: false, days: null, text: "", error: null });
   const hc = app.source === "health_connect";
@@ -130,13 +133,19 @@ export default function DataCheckScreen() {
               <Title header>{formatDay(d.day, DAY.full)}</Title>
               {d.metrics
                 .filter((m) => m.sources.length || m.pulse != null)
-                .map((m) => (
-                  <View key={m.key} style={{ gap: 8 }}>
-                    <MetricHead label={m.label} pulse={m.pulse == null ? "—" : String(m.pulse)} unit={m.unit || undefined} />
-                    {m.sources.length ? m.sources.map((s) => <SourceRow key={s.source} s={s} unit={m.unit || undefined} />) : <Nothing>{`Nothing from ${where}`}</Nothing>}
-                    <Hairline />
-                  </View>
-                ))}
+                .map((m) => {
+                  // Distance and the nightly skin temperature (a reading) in the person's units; the shared text stays metric.
+                  const conv = conversionFor(m.unit || undefined, units);
+                  const to = (v: number | null) => (v === null || !conv ? v : roundTo(shown(v, conv), 2));
+                  const unit = conv?.unit ?? (m.unit || undefined);
+                  return (
+                    <View key={m.key} style={{ gap: 8 }}>
+                      <MetricHead label={m.label} pulse={m.pulse == null ? "—" : String(to(m.pulse))} unit={unit} />
+                      {m.sources.length ? m.sources.map((s) => <SourceRow key={s.source} s={{ ...s, value: to(s.value) }} unit={unit} />) : <Nothing>{`Nothing from ${where}`}</Nothing>}
+                      <Hairline />
+                    </View>
+                  );
+                })}
               <View style={{ gap: 8 }}>
                 {/* What Pulse stored is a sentence per session ("main 23:10–07:05 asleep 452 min"): it wraps under the name. */}
                 <View accessible accessibilityLabel={`Sleep: Halo ${d.sleep.pulse.join(" | ") || "—"}`} style={{ gap: 2 }}>

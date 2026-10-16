@@ -40,6 +40,8 @@ import {
 import { recentEntries } from "./log";
 import { TREND_METRICS } from "./trends";
 import type { KeyStat, Metric } from "./types";
+import { conversionFor, type Conversion, KG_PER_LB, kgToLb, roundTo, shown, type Units } from "@/lib/units";
+import { localizeDef, unitsOf } from "./units";
 
 export type DetailKey = "steps" | "calories" | BodyKey | ExtraKey;
 export const DETAIL_KEYS: readonly DetailKey[] = ["steps", "calories", "weight", "body_fat", ...EXTRA_KEYS];
@@ -128,8 +130,9 @@ const CALORIES = {
   partialToday: true,
 };
 
-function defOf(key: DetailKey) {
-  const t = key === "calories" ? CALORIES : TREND_METRICS.find((m) => m.key === key)!;
+/** The metric's definition in `units`: its value read already converted (weight, distance, elevation, water, core temperature). */
+function defOf(key: DetailKey, units: Units) {
+  const t = localizeDef(key === "calories" ? CALORIES : TREND_METRICS.find((m) => m.key === key)!, units);
   // mobile: an extra Pulse derives itself (activity minutes, AZM, average HR) says so in place of the group's source line.
   const note = (EXTRA_METRICS as readonly ExtraMetric[]).find((m) => m.key === key)?.note;
   return { key, label: t.label, unit: t.unit, format: t.format, direction: t.direction, pick: t.pick, partialToday: !!t.partialToday, note, ...CONFIG[key] };
@@ -193,7 +196,10 @@ const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 /** The metric's screen for `day`. */
 export async function getMetricDetail(key: DetailKey, day: string, ctx: QueryCtx): Promise<MetricDetailVM> {
-  const m = defOf(key);
+  const units = unitsOf(ctx);
+  const m = defOf(key, units);
+  // Workouts' recorded distance (the distance split) in the shown unit, km or miles.
+  const km = conversionFor("km", units);
   const today = todayOf(ctx);
   const isToday = day === today;
   // Two years: the 1Y stats compare with the year before.
@@ -217,13 +223,13 @@ export async function getMetricDetail(key: DetailKey, day: string, ctx: QueryCtx
   const shown: Point[] = days.slice(-SPAN).map((d) => {
     const soFar = m.partialToday && d === today && raw(d) !== null;
     const v = soFar ? raw(d) : val(d);
-    return { day: d, value: v, ...(soFar && { provisional: true }), ...(m.stack && { parts: partsOf(m.stack, rows.get(d), v, exs) }) };
+    return { day: d, value: v, ...(soFar && { provisional: true }), ...(m.stack && { parts: partsOf(m.stack, rows.get(d), v, exs, km) }) };
   });
 
   const ranges = Object.fromEntries(RANGES.map((r) => [r, rangeStats(days.map(val), days, RANGE_DAYS[r], !!m.total)])) as Record<TrendRange, RangeStats>;
   const out = m.baseline ? outliers(days.slice(-90), val) : null;
 
-  const s: SectionCtx = { ctx, rows, day, today, isToday, val, raw, exs };
+  const s: SectionCtx = { ctx, rows, day, today, isToday, val, raw, exs, unit: m.unit, units };
   const built = await Promise.all(m.sections.map((k) => (k === "outliers" ? out : BUILD[k](s, key))));
   return {
     key,
@@ -262,13 +268,17 @@ type SectionCtx = {
   val: (d: string) => number | null;
   raw: (d: string) => number | null;
   exs: ExerciseRow[];
+  /** The metric's shown unit (`val` and `raw` are in it), and the person's units. */
+  unit: string | undefined;
+  units: Units;
 };
 
 /**
  * A day's split. Calories: active over resting (resting = total − active, active capped at the total, as on Strain).
- * Distance: recorded workouts' distance over everyday movement. Null when a day has a total but no breakdown.
+ * Distance: recorded workouts' distance over everyday movement, shown through `km` (km or miles, as `total` is). Null
+ * when a day has a total but no breakdown.
  */
-function partsOf(stack: "calories" | "distance", r: DayRow | undefined, total: number | null, exs: SectionCtx["exs"]): Record<string, number> | null {
+function partsOf(stack: "calories" | "distance", r: DayRow | undefined, total: number | null, exs: SectionCtx["exs"], km: Conversion | null = null): Record<string, number> | null {
   if (total === null || !r) return null;
   if (stack === "calories") {
     // Resting, everyday movement and workouts (strain.ts calorieSplit).
@@ -278,7 +288,7 @@ function partsOf(stack: "calories" | "distance", r: DayRow | undefined, total: n
     const workouts = Math.min(exs.filter((e) => e.day === r.day).reduce((x, e) => x + (finite(e.calories) ? Math.max(0, e.calories) : 0), 0), active);
     return { resting: total - active, everyday: active - workouts, workouts };
   }
-  const workouts = Math.min(exs.filter((e) => e.day === r.day).reduce((a, e) => a + (e.distanceM ?? 0), 0) / 1000, total);
+  const workouts = Math.min(shown(exs.filter((e) => e.day === r.day).reduce((a, e) => a + (e.distanceM ?? 0), 0) / 1000, km), total);
   return { workouts, everyday: total - workouts };
 }
 
@@ -407,7 +417,7 @@ const BUILD: Record<Exclude<SectionKind, "outliers">, (s: SectionCtx, key: Detai
   entries: async (s, key) => {
     const type = key === "water" ? "hydration-log" : "nutrition-log";
     const start = localMidnight(s.day, s.ctx.timeZone);
-    return { kind: "entries", items: (await recentEntries(s.ctx.store, start)).filter((e) => e.day === s.day && e.type === type).reverse() };
+    return { kind: "entries", items: (await recentEntries(s.ctx.store, start, 50, s.units)).filter((e) => e.day === s.day && e.type === type).reverse() };
   },
 
   balance: (s) => {
@@ -444,14 +454,14 @@ const BUILD: Record<Exclude<SectionKind, "outliers">, (s: SectionCtx, key: Detai
       ...(share(g[key], per) && { caption: share(g[key], per) }),
     });
     const rows = [row("protein", "Protein", 4), row("carbs", "Carbohydrates", 4), row("fat", "Fat", 9)];
-    // Protein's reference: 0.8 g per kg of the latest weight on or before the day.
+    // Protein's reference: 0.8 g per kg of the latest weight on or before the day (0.36 g per lb, in pounds).
     let weight: number | null = null;
     for (let k = 0; k < 2 * SPAN && weight === null; k++) weight = s.rows.get(addDays(s.day, -k))?.metrics?.weightKg ?? null;
     if (weight)
       rows.push({
         key: "protein_target",
         label: "Protein reference",
-        caption: `${PROTEIN_G_PER_KG} g per kg at ${weight.toFixed(1)} kg`,
+        caption: s.units.weight === "lb" ? `${roundTo(PROTEIN_G_PER_KG * KG_PER_LB, 2)} g per lb at ${kgToLb(weight).toFixed(1)} lb` : `${PROTEIN_G_PER_KG} g per kg at ${weight.toFixed(1)} kg`,
         metric: ok(weight * PROTEIN_G_PER_KG),
         average: null,
         direction: "none",
@@ -468,7 +478,8 @@ const BUILD: Record<Exclude<SectionKind, "outliers">, (s: SectionCtx, key: Detai
       const v = s.raw(d);
       if (v !== null) items.push({ day: d, value: v });
     }
-    const unit = key === "weight" ? "kg" : "%";
+    // The readings are in the shown unit (kg or lb for weight); a change is a difference in it.
+    const unit = key === "weight" ? s.unit : "%";
     const change = (n: 30 | 90): KeyStat => {
       const latest = items[0];
       const before = latest && items.find((x) => x.day <= addDays(latest.day, -n));

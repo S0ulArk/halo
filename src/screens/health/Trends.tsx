@@ -5,8 +5,10 @@ import { Pressable, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChartLine, ChevronDown, ChevronsUpDown } from "lucide-react-native";
 import { getTrends, parseTrendMetric, RANGES, TREND_GROUPS, TREND_METRICS, type TrendGroup, type TrendMetricKey, type TrendRange } from "@/queries";
+import { localizeDef } from "@/queries/units";
 import { useApp, useQuery } from "@/state/app";
 import { trendGoal, useGoals } from "@/state/goals";
+import { useUnits } from "@/state/units";
 import { BottomSheet, KeyStatRow, KeyStatRowSkeleton, SectionShell, TrendChart, TrendChartSkeleton, Txt } from "@/ui";
 import { useCalm, type CalmTint } from "@/ui/calm";
 import { Caption, IconTile, Num, Title } from "@/screens/detail/calmKit";
@@ -119,12 +121,15 @@ export default function TrendsScreen() {
   const openChart = useOpenChart();
   const { today } = useApp();
   const { goals } = useGoals();
-  const m = parseTrendMetric(params.metric);
+  // In the person's units (Settings › Units): the unit beside every number, and the goal line, as the points are.
+  const { units } = useUnits();
+  const m = localizeDef(parseTrendMetric(params.metric), units);
   // A metric with a goal switched on (Settings › Goals) draws it as a dashed line.
-  const goal = trendGoal(goals, m.key);
+  const goal = trendGoal(goals, m.key, units);
   const r: TrendRange = typeof params.r === "string" && (RANGES as readonly string[]).includes(params.r) ? (params.r as TrendRange) : "m";
   const { data, error } = useQuery((ctx) => getTrends(m.key, ctx), [m.key], `trends:${m.key}`);
-  const vm = data && data.metric === m.key ? data : undefined;
+  // A model worked out in other units (just before a switch) waits for its replacement.
+  const vm = data && data.metric === m.key && data.unit === m.unit ? data : undefined;
   const picker = <MetricPicker current={m.key} onPick={(key) => router.setParams({ metric: key })} />;
 
   let body: React.ReactNode;

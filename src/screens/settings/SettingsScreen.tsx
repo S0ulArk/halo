@@ -18,9 +18,10 @@ import { LiveHrSection } from "./liveHr";
 import { NotificationsSection } from "./notifications";
 import { WeeklyPlanSection } from "./weeklyPlan";
 import { AppSection, CoachSection, DataSourceSection, ProfileSection } from "./sections";
+import { UnitsSection } from "./units";
 
-export type SectionId = "profile" | "source" | "goals" | "notifications" | "live" | "app" | "coach";
-const IDS: SectionId[] = ["profile", "source", "goals", "notifications", "live", "app", "coach"];
+export type SectionId = "profile" | "source" | "goals" | "notifications" | "live" | "app" | "units" | "coach";
+const IDS: SectionId[] = ["profile", "source", "goals", "notifications", "live", "app", "units", "coach"];
 /** The web's ids and older names: ?s=account, ?s=sync, ?s=appearance. */
 const ALIAS: Record<string, SectionId> = { account: "profile", sync: "source", appearance: "app" };
 
@@ -50,6 +51,8 @@ export default function SettingsScreen() {
     <LiveHrSection />
   ) : section === "app" ? (
     <AppSection />
+  ) : section === "units" ? (
+    <UnitsSection />
   ) : section === "coach" ? (
     <CoachSection />
   ) : (

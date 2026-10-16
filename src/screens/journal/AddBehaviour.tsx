@@ -2,6 +2,7 @@
 import * as React from "react";
 import { TextInput, View } from "react-native";
 import { useApp } from "@/state/app";
+import { useUnits } from "@/state/units";
 import { Txt } from "@/ui";
 import { CalmButton, useCalm } from "../settings/calmKit";
 import { addCustomTag, type ActionCtx } from "./actions";
@@ -9,10 +10,11 @@ import { TextField } from "./controls";
 import { bumpJournal } from "./state";
 import { addErrorText, behaviourNameProblem } from "./tags";
 
-/** The actions' context from the app: null until the store and profile exist. */
+/** The actions' context from the app (with the units the Log is typed in): null until the store and profile exist. */
 export function useActionCtx(): ActionCtx | null {
   const { store, profile, timeZone } = useApp();
-  return React.useMemo(() => (store && profile ? { store, profile, timeZone } : null), [store, profile, timeZone]);
+  const { units } = useUnits();
+  return React.useMemo(() => (store && profile ? { store, profile, timeZone, units } : null), [store, profile, timeZone, units]);
 }
 
 export function AddBehaviour({ tags, onAdded, divided }: { tags: { tag: string; label: string }[]; onAdded: (tag: string, label: string) => void; divided?: boolean }) {

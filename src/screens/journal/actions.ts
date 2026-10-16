@@ -27,11 +27,15 @@ import {
 import type { QueryCtx } from "@/queries/ctx";
 import type { FoodData, FoodVia } from "@/queries/food";
 import type { JournalVM } from "@/queries/types";
+import { amount, kgToLb, METRIC, mlToFlOz, type Units } from "@/lib/units";
 
 export type ActionResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string };
 
-/** What the actions need: the Store, the person's profile and zone. Today and now are read when the action runs. */
-export type ActionCtx = { store: Store; profile: Profile; timeZone: string; nowS?: () => number };
+/**
+ * What the actions need: the Store, the person's profile and zone. Today and now are read when the action runs.
+ * `units` words the Log's range messages in what the person typed (lb, fl oz); inputs always arrive in kg and ml.
+ */
+export type ActionCtx = { store: Store; profile: Profile; timeZone: string; nowS?: () => number; units?: Units };
 
 const nowOf = (c: ActionCtx) => (c.nowS ? c.nowS() : Math.floor(Date.now() / 1000));
 const todayOf = (c: ActionCtx) => localDay(nowOf(c), c.timeZone);
@@ -144,20 +148,27 @@ const VIA_KEYS = new Set<string>(["photo", "text", "manual"]);
 /** Most foods one save takes (a photo estimate lists each food it sees). */
 export const MAX_FOODS = 20;
 
-/** The first problem with `v`, as the web's zod schema reports it; null when it's valid. */
-function invalid(v: LogInput): string | null {
+/** A metric bound in the shown unit, to one decimal, rounded inward (up for a minimum) so it is itself allowed. */
+const bound = (v: number, up: boolean) => amount((up ? Math.ceil(v * 10) : Math.floor(v * 10)) / 10, 1);
+
+/**
+ * The first problem with `v`, as the web's zod schema reports it; null when it's valid. The limits are kg and ml; the
+ * messages give them in the unit the person typed (`units`).
+ */
+function invalid(v: LogInput, units: Units = METRIC): string | null {
   if ("at" in v && v.at !== undefined && !validAt(v.at)) return "Choose a time";
+  const oz = units.fluid === "floz";
   switch (v.kind) {
     case "water":
-      if (!num(v.ml) || !Number.isInteger(v.ml)) return "Enter the amount in millilitres.";
-      if (v.ml < 10) return "At least 10 ml";
-      if (v.ml > 5000) return "At most 5,000 ml";
+      if (!num(v.ml) || !Number.isInteger(v.ml)) return oz ? "Enter the amount in fluid ounces." : "Enter the amount in millilitres.";
+      if (v.ml < 10) return oz ? `At least ${bound(mlToFlOz(10), true)} fl oz` : "At least 10 ml";
+      if (v.ml > 5000) return oz ? `At most ${bound(mlToFlOz(5000), false)} fl oz` : "At most 5,000 ml";
       return null;
     case "food":
       if (!MEAL_KEYS.has(v.meal) || (v.via !== undefined && !VIA_KEYS.has(v.via))) return ENUM;
       return invalidFood(v);
     case "weight":
-      if (!num(v.kg) || v.kg < 20 || v.kg > 300) return "Between 20 and 300 kg";
+      if (!num(v.kg) || v.kg < 20 || v.kg > 300) return units.weight === "lb" ? `Between ${bound(kgToLb(20), true)} and ${bound(kgToLb(300), false)} lb` : "Between 20 and 300 kg";
       if (v.fatPct !== null && (!num(v.fatPct) || v.fatPct < 2 || v.fatPct > 75)) return "Between 2 and 75%";
       return null;
     case "spo2":
@@ -272,7 +283,7 @@ export async function setFoodSeparate(c: ActionCtx, input: { id: string; ts: num
 
 /** Logs water, food, weight (and body fat), blood oxygen, mood, symptoms, or (female profiles) a period or ovulation test. */
 export async function logEntry(c: ActionCtx, input: LogInput): Promise<ActionResult<{ demo: boolean }>> {
-  const problem = invalid(input);
+  const problem = invalid(input, c.units);
   if (problem) return fail(problem);
   const v = input;
   const tz = c.timeZone;
@@ -298,7 +309,8 @@ export async function logEntry(c: ActionCtx, input: LogInput): Promise<ActionRes
       break;
     case "weight":
       entries = [
-        { type: "weight", ts, data: { kg: Math.round(v.kg * 10) / 10 } },
+        // 0.1 kg as typed in kg; typed in pounds, 0.01 kg, so the pounds read back as typed (170.5 lb, not 170.4).
+        { type: "weight", ts, data: { kg: c.units?.weight === "lb" ? Math.round(v.kg * 100) / 100 : Math.round(v.kg * 10) / 10 } },
         ...(v.fatPct != null ? [{ type: "body-fat" as const, ts, data: { pct: Math.round(v.fatPct * 10) / 10 } }] : []),
       ];
       break;
