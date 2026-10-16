@@ -1,11 +1,16 @@
-// The web's LinkList (src/components/shells/LinkList.tsx), as the Reports archive uses it, in the Calm grouped-list
-// style: a small spaced-capitals group label, then one white 28 px card holding the group's rows, hairlines between
-// them; each row has its label, an optional line under it, an aside and a chevron.
+// The web's LinkList (src/components/shells/LinkList.tsx), as the Reports archive uses it, as an iOS inset grouped list:
+// a small capitals header, then one card (16 px corners) holding the group's rows with hairlines inset to the text
+// between them; each row has its label, an optional line under it, an aside and the thin tertiary chevron, and settles
+// and dims under the finger (the kit's press, on the UI thread).
 import * as React from "react";
 import { Pressable, View } from "react-native";
-import { ChevronRight } from "lucide-react-native";
+import Reanimated from "react-native-reanimated";
 import { SkeletonText, Txt } from "@/ui";
-import { CALM_RADIUS, Hairline, SectionLabel, useCalm } from "../settings/calmKit";
+import { ChevronSlot } from "@/ui/components/calmKit";
+import { usePress, usePressStyle } from "@/ui/components/press";
+import { Hairline, LIST_RADIUS, SectionLabel, useCalm } from "../settings/calmKit";
+
+const PressableView = Reanimated.createAnimatedComponent(Pressable);
 
 export type LinkListRow = {
   key: string;
@@ -22,30 +27,30 @@ export type LinkListRow = {
 /** One centred column of groups (the web's MORE_COLUMN): 24 px between them. */
 export const MORE_COLUMN_GAP = 24;
 
-/** The group label over the rows: small spaced capitals, a heading for screen readers. */
+/** The group label over the rows: small capitals in grey, a heading for screen readers. */
 export function GroupLabel({ children }: { children: string }) {
   return <SectionLabel>{children}</SectionLabel>;
 }
 
 /**
- * A row's band (the 40 px a one-line row's content fills): the label's first line, the aside and the chevron are
+ * A row's band (the 28 px a one-line row's content fills): the label's first line, the aside and the chevron are
  * centred on it; the line under the label hangs below, so every row's aside sits on its label's line.
  */
-const BAND = 40;
+const BAND = 28;
 
 /** The row's inside: the label (or its placeholder) with its line under it, the aside, the chevron. */
 function RowBody({ label, description, aside, labelNode }: { label?: string; description?: string; aside?: React.ReactNode; labelNode?: React.ReactNode }) {
   const c = useCalm();
   return (
     <>
-      <View style={{ flex: 1, minWidth: 0, gap: 2, paddingTop: (BAND - 21) / 2 }}>
+      <View style={{ flex: 1, minWidth: 0, gap: 1, paddingTop: (BAND - 21) / 2 }}>
         {labelNode ?? (
-          <Txt size={16} lineHeight={21} weight={600} style={{ color: c.ink }}>
+          <Txt size={16} lineHeight={21} style={{ color: c.ink }}>
             {label}
           </Txt>
         )}
         {description && (
-          <Txt size={14} lineHeight={19} style={{ color: c.sub }}>
+          <Txt size={13} lineHeight={18} style={{ color: c.sub }}>
             {description}
           </Txt>
         )}
@@ -53,7 +58,7 @@ function RowBody({ label, description, aside, labelNode }: { label?: string; des
       {aside ? (
         <View style={{ minHeight: BAND, justifyContent: "center", flexShrink: 0 }}>
           {typeof aside === "string" ? (
-            <Txt size={13} lineHeight={18} weight={500} style={{ color: c.sub }}>
+            <Txt size={16} lineHeight={21} style={{ color: c.sub }}>
               {aside}
             </Txt>
           ) : (
@@ -62,32 +67,40 @@ function RowBody({ label, description, aside, labelNode }: { label?: string; des
         </View>
       ) : null}
       <View style={{ height: BAND, justifyContent: "center" }}>
-        <ChevronRight size={20} color={c.label} strokeWidth={1.5} />
+        <ChevronSlot shown />
       </View>
     </>
   );
 }
 
-const ROW = { minHeight: 64, flexDirection: "row", alignItems: "flex-start", gap: 12, paddingHorizontal: 18, paddingVertical: 12 } as const;
+const ROW = { minHeight: 48, flexDirection: "row", alignItems: "flex-start", gap: 12, paddingHorizontal: 16, paddingVertical: 10 } as const;
 
-/** The white card the rows share. */
+/** The card the rows share. */
 function GroupCard({ children }: { children: React.ReactNode }) {
   const c = useCalm();
-  return <View style={{ borderRadius: CALM_RADIUS, backgroundColor: c.card, overflow: "hidden", paddingVertical: 4 }}>{children}</View>;
+  return <View style={{ borderRadius: LIST_RADIUS, backgroundColor: c.card, overflow: "hidden" }}>{children}</View>;
+}
+
+/** One row: the kit's press settles and dims it under the finger. */
+function LinkRow({ r }: { r: LinkListRow }) {
+  const press = usePress(0.985);
+  const pressed = usePressStyle(press, { dim: 0.55 });
+  return (
+    <PressableView onPress={r.onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut} accessibilityRole="button" accessibilityLabel={r.accessibilityLabel ?? r.label} style={[ROW, pressed]}>
+      <RowBody label={r.label} description={r.description} aside={r.aside} />
+    </PressableView>
+  );
 }
 
 export function LinkList({ title, rows }: { title: string; rows: LinkListRow[] }) {
-  const c = useCalm();
   return (
-    <View style={{ gap: 10, minWidth: 0 }}>
+    <View style={{ gap: 7, minWidth: 0 }}>
       <GroupLabel>{title}</GroupLabel>
       <GroupCard>
         {rows.map((r, i) => (
           <React.Fragment key={r.key}>
-            {i > 0 ? <Hairline inset={18} /> : null}
-            <Pressable onPress={r.onPress} accessibilityRole="button" accessibilityLabel={r.accessibilityLabel ?? r.label} style={({ pressed }) => [ROW, { backgroundColor: pressed ? c.ground : "transparent" }]}>
-              <RowBody label={r.label} description={r.description} aside={r.aside} />
-            </Pressable>
+            {i > 0 ? <Hairline inset={16} /> : null}
+            <LinkRow r={r} />
           </React.Fragment>
         ))}
       </GroupCard>
@@ -98,14 +111,14 @@ export function LinkList({ title, rows }: { title: string; rows: LinkListRow[] }
 /** Loading shape (spec §5.19): bars for a blank group title and blank row labels; the chevrons stay. */
 export function LinkListSkeleton({ title, rows }: { title: string; rows: number }) {
   return (
-    <View style={{ gap: 10, minWidth: 0 }} importantForAccessibility="no-hide-descendants">
-      {title ? <GroupLabel>{title}</GroupLabel> : <SkeletonText role="button" width={112} style={{ marginHorizontal: 6 }} />}
+    <View style={{ gap: 7, minWidth: 0 }} importantForAccessibility="no-hide-descendants">
+      {title ? <GroupLabel>{title}</GroupLabel> : <SkeletonText role="footnote" width={112} style={{ marginHorizontal: 16 }} />}
       <GroupCard>
         {Array.from({ length: rows }, (_, i) => (
           <React.Fragment key={i}>
-            {i > 0 ? <Hairline inset={18} /> : null}
+            {i > 0 ? <Hairline inset={16} /> : null}
             <View style={ROW}>
-              <RowBody labelNode={<SkeletonText role="label" size={16} lineHeight={21} width={112} />} />
+              <RowBody labelNode={<SkeletonText role="body" size={16} lineHeight={21} width={112} />} />
             </View>
           </React.Fragment>
         ))}

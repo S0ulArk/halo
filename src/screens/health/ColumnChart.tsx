@@ -1,3 +1,8 @@
+// Category columns (steps by hour, the weekday pattern, weekly totals against a target; metric detail, spec §11 MD1),
+// ported from the web's Recharts ColumnChart, in the Apple Health chart language: capsule-topped bars in Activity's
+// blue (the highlighted ones in full and the rest at 35 % when some are highlighted), dashed hairline rows with the
+// value axis on the right, the labels under the plot, a target as a dashed guide with its pill at the plot's right
+// end. The bars rise from the floor once as the chart mounts; a finger scrubs a soft column with the bar's readout.
 import * as React from "react";
 import { Group, Path } from "@shopify/react-native-skia";
 import { niceTicks, scaleLinear } from "@/lib/charts";
@@ -12,14 +17,15 @@ import {
   ChartFigure,
   Grid,
   GuideLine,
-  labelGutter,
   measure,
   Pill,
+  RightAxis,
   ScrubBand,
   ScrubBars,
   ScrubLabel,
   sp,
   SText,
+  textWidth,
   toPaths,
   useBandScrub,
   useChartFonts,
@@ -52,7 +58,7 @@ export type ColumnChartProps = {
 };
 
 const H = 176;
-const X0 = 12;
+const X0 = 4;
 
 /** The Calm column at a width: rounded top (a full capsule while thin) from `top` down to `bottom`. */
 function columnD(x: number, w: number, top: number, bottom: number) {
@@ -60,7 +66,7 @@ function columnD(x: number, w: number, top: number, bottom: number) {
   return barPath(x, top, w, Math.max(0, bottom - top), r, w <= 12 ? r : 0);
 }
 
-/** The plot's box and scales at a width, shared by the drawing and the scrub layers. */
+/** The plot's box and scales at a width (`gutter` is the value axis on the right), shared by the drawing and the scrub layers. */
 function frameOf(n: number, max: number, gutter: number, width: number) {
   const x1 = width - gutter;
   const plotTop = 8;
@@ -88,8 +94,7 @@ function ScrubColumns({ scrub, data, max, gutter, color, width }: { scrub: Scrub
 }
 
 /**
- * Category columns: steps by hour, the weekday pattern, weekly totals against a target (metric detail, spec §11 MD1),
- * ported from the web's Recharts ColumnChart. Columns with `highlight` take the data colour; when none is highlighted
+ * The columns. Columns with `highlight` take the data colour in full and the rest sit at 35 %; when none is highlighted
  * every column does. A finger over the plot shows the column's title and value (the web's tooltip), on the UI thread.
  */
 export function ColumnChart({ summary, data, format, unit, tickEvery = 1, reference }: ColumnChartProps) {
@@ -102,7 +107,10 @@ export function ColumnChart({ summary, data, format, unit, tickEvery = 1, refere
   const any = data.some((d) => d.highlight);
   const unitText = unit ? (unit === "%" ? "%" : ` ${unit}`) : "";
   const max = Math.max(0, ...data.map((d) => d.value ?? 0), reference?.y ?? 0) || 1;
-  const gutter = labelGutter([reference?.label], 12);
+  const ticks = niceTicks(0, max, 3);
+  const tickText = ticks.map((v) => formatValue(format, v));
+  // The value axis on the right: as wide as its widest label, the gap and air.
+  const gutter = Math.max(...tickText.map(textWidth)) + AXIS.gap + 2;
   const scrub = useBandScrub(X0, gutter, data.length);
   // Each column's tooltip, precomputed so the scrub only picks one.
   const tips = React.useMemo(() => {
@@ -121,7 +129,7 @@ export function ColumnChart({ summary, data, format, unit, tickEvery = 1, refere
       height={H}
       summary={summary}
       scrub={scrub}
-      deps={[data, format, unit, tickEvery, reference?.y, reference?.label, c, k, ink]}
+      deps={[data, format, unit, tickEvery, reference?.y, reference?.label, c, k, ink, gutter]}
       drawIn={summary}
       reveal="rise"
       underlay={({ width }) => {
@@ -153,29 +161,22 @@ export function ColumnChart({ summary, data, format, unit, tickEvery = 1, refere
       }}
     >
       {({ width, fonts: f }) => {
-        const { x1, plotTop, plotBottom, barW, y, cx } = frame(width);
+        const { x1, plotBottom, y, cx } = frame(width);
         const ds = columnsOf(data, max, gutter, width);
+        const axis = f.num(500, AXIS.fontSize);
         return (
           <Group>
-            <Grid ys={niceTicks(0, max, 3).filter((v) => v > 0).map(y)} x1={X0} x2={x1} />
-            {data.map((d, i) => {
-              const x = cx(i) - barW / 2;
-              const col = ds[i];
-              return (
-                <Group key={i}>
-                  {/* A soft full-height track behind each column, so the scale reads without a y-axis. */}
-                  <Path path={sp(columnD(x, barW, plotTop, plotBottom))} color={k.wash} />
-                  {col && <Path path={sp(col)} color={ink} opacity={!any || d.highlight ? 1 : k.dim} />}
-                </Group>
-              );
-            })}
+            <Grid ys={ticks.map(y)} x1={X0} x2={x1} />
+            <RightAxis x={x1} ys={ticks.map(y)} texts={tickText} font={axis} />
+            {ds.map((col, i) => (col ? <Path key={i} path={sp(col)} color={ink} opacity={!any || data[i].highlight ? 1 : k.dim} /> : null))}
             {data.map((d, i) =>
-              i % tickEvery === 0 ? <SText key={`t${i}`} x={cx(i)} y={plotBottom + AXIS.tickMargin + 12} text={d.label} font={f.num(500, 12)} color={k.axis} anchor="middle" /> : null,
+              i % tickEvery === 0 ? <SText key={`t${i}`} x={cx(i)} y={plotBottom + AXIS.tickMargin + AXIS.fontSize} text={d.label} font={axis} color={k.axis} anchor="middle" /> : null,
             )}
             {reference && (
               <Group>
                 <GuideLine x1={X0} x2={x1} y1={y(reference.y)} y2={y(reference.y)} />
-                <Pill x={x1 + 4} y={y(reference.y)} text={reference.label} />
+                {/* The target's pill at the plot's right end, on its line. */}
+                <Pill x={x1 - Math.max(textWidth(reference.label) - 6, measure(f.num(700, 11), reference.label)) - 12} y={y(reference.y)} text={reference.label} />
               </Group>
             )}
           </Group>

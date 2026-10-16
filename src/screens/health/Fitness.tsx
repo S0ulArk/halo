@@ -1,16 +1,21 @@
-// Fitness `/health/fitness` (spec §7.10), ported from Pulse's health/fitness/page.tsx and its loading.tsx: latest
-// values, no date switcher.
+// Fitness `/health/fitness` (spec §7.10), ported from Pulse's health/fitness/page.tsx and its loading.tsx, as an Apple
+// Health detail page with the latest values and no date switcher: the hero (VO2 max large, rolling into place, its
+// category and source, the percentile as a ring that sweeps in), the percentile on its ruler with the category words,
+// the VO2 max trend, Fitness Age, the training load ratio on its ruler, then fitness, fatigue and form over 90 days.
 import * as React from "react";
 import { View } from "react-native";
 import { Gauge } from "lucide-react-native";
-import { DAY, formatDay, formatValue, MISSING } from "@/lib/format";
+import { DAY, formatDay, formatValue } from "@/lib/format";
 import { alpha } from "@/lib/utils";
 import { getFitness, type FitnessVM } from "@/queries";
 import { useQuery } from "@/state/app";
 import { MetricTags, ReasonPlaceholder, SectionShell, Skeleton, SkeletonText, TickScale, TickScaleSkeleton, TrendChart, TrendChartSkeleton, Txt, useTheme } from "@/ui";
 import { useCalm } from "@/ui/calm";
 import { TonePill } from "@/ui/components/Meter";
-import { CalmCard, Caption, Num, Sentence } from "@/screens/detail/calmKit";
+import { Caption, Sentence } from "@/screens/detail/calmKit";
+import { Card } from "@/ui/components/Card";
+import { ActivityRings } from "@/ui/components/Halo";
+import { CardHead, RollingValue } from "./kit";
 import { DetailScreen, LoadError } from "@/screens/detail/DetailScreen";
 import { useBack, useRefresh } from "@/screens/detail/nav";
 import { FITNESS_INFO } from "./detailInfo";
@@ -36,38 +41,68 @@ const CATEGORIES = ["Poor", "Fair", "Good", "Excellent", "Superior"];
 const ESTIMATED = "Estimated from resting heart rate and activity";
 const NO_FITNESS_AGE = "Fitness Age needs 4 of the last 7 days with a resting heart rate and 12 hours of heart rate.";
 
-/** The lead card in the activity pastel: VO2 max large with its unit, its category, where it came from and the estimate tag. */
+const RING = 96;
+
+/**
+ * The hero: VO2 max large with its unit (rolling into place), its category in colour and where it came from, the
+ * estimate tag, and beside it the percentile for your age and sex as a blue ring that sweeps in with the number inside.
+ */
 function Hero({ vo2 }: { vo2: FitnessVM["vo2"] }) {
   const c = useCalm();
   const v = vo2.value;
   if (!v)
     return (
-      <CalmCard tint="sky" icon={Gauge} title="VO2 max" subtitle="No VO2 max yet. Fitbit estimates it from runs and resting heart rate." style={{ alignSelf: "stretch" }}>
-        <Num value={MISSING} size={64} color={c.faint} />
-      </CalmCard>
+      <Card style={{ alignSelf: "stretch" }}>
+        <View style={{ gap: 10 }}>
+          <CardHead tint="sky" icon={Gauge} title="VO2 max" />
+          <RollingValue value={null} size={56} />
+          <Sentence>No VO2 max yet. Fitbit estimates it from runs and resting heart rate.</Sentence>
+        </View>
+      </Card>
     );
   const source = v.source === "run" ? `Measured on ${formatDay(v.sourceDay, DAY.monthDay)}` : v.source === "daily" ? "Daily estimate from Fitbit" : ESTIMATED;
   return (
-    <CalmCard tint="sky" icon={Gauge} title="VO2 max" subtitle={source} style={{ alignSelf: "stretch" }}>
-      <View accessible accessibilityLabel={`VO2 max ${formatValue("decimal1", v.value)} millilitres per kilogram per minute, ${categoryWord(v.category)}`} style={{ gap: 6 }}>
-        <Num value={formatValue("decimal1", v.value)} unit="ml/kg/min" size={64} color={c.tintInk.sky} />
-        <Txt size={17} lineHeight={22} weight={600} style={{ color: categoryInk(c, v.category) }}>
-          {categoryWord(v.category)}
-        </Txt>
+    <Card style={{ alignSelf: "stretch" }}>
+      <View style={{ gap: 10 }}>
+        <CardHead tint="sky" icon={Gauge} title="VO2 max" />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+          <View accessible accessibilityLabel={`VO2 max ${formatValue("decimal1", v.value)} millilitres per kilogram per minute, ${categoryWord(v.category)}`} style={{ flex: 1, minWidth: 0, gap: 4 }}>
+            <RollingValue value={formatValue("decimal1", v.value)} unit="ml/kg/min" size={56} />
+            <Txt size={17} lineHeight={22} weight={600} style={{ color: categoryInk(c, v.category) }}>
+              {categoryWord(v.category)}
+            </Txt>
+          </View>
+          <ActivityRings size={RING} rings={[{ progress: v.percentile / 100, color: c.system.blue }]} delay={160} accessibilityLabel={`${ordinal(v.percentile)} percentile`}>
+            <Txt size={20} lineHeight={24} weight={700} style={{ color: c.ink, fontVariant: ["tabular-nums"] }}>
+              {ordinal(v.percentile)}
+            </Txt>
+            <Txt size={11} lineHeight={14} weight={600} style={{ color: c.sub }}>
+              percentile
+            </Txt>
+          </ActivityRings>
+        </View>
+        <Sentence size={13}>{source}</Sentence>
+        {vo2.provisional && <MetricTags extra={["estimate"]} align="flex-start" />}
       </View>
-      {vo2.provisional && <MetricTags extra={["estimate"]} align="flex-start" />}
-    </CalmCard>
+    </Card>
   );
 }
 
 function HeroSkeleton() {
+  const c = useCalm();
   return (
-    <CalmCard tint="sky" icon={Gauge} title="VO2 max" style={{ alignSelf: "stretch" }}>
-      <View importantForAccessibility="no-hide-descendants" style={{ gap: 6 }}>
-        <SkeletonText role="value" size={64} lineHeight={72} chars={4} />
-        <SkeletonText role="label" width={64} />
+    <Card style={{ alignSelf: "stretch" }}>
+      <View importantForAccessibility="no-hide-descendants" style={{ gap: 10 }}>
+        <CardHead tint="sky" icon={Gauge} title="VO2 max" />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+          <View style={{ flex: 1, gap: 4 }}>
+            <SkeletonText role="valueHero" size={56} lineHeight={64} chars={4} />
+            <SkeletonText role="label" width={64} />
+          </View>
+          <ActivityRings size={RING} rings={[{ progress: null, color: c.system.gray }]} />
+        </View>
       </View>
-    </CalmCard>
+    </Card>
   );
 }
 
@@ -121,7 +156,7 @@ function FitnessAge({ m }: { m: FitnessVM["fitnessAge"] }) {
   return (
     <View style={{ gap: 12 }}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
-        <Num value={formatValue("decimal1", v.fitnessAge)} unit="years" size={36} color={c.tintInk.sky} />
+        <RollingValue value={formatValue("decimal1", v.fitnessAge)} unit="years" size={36} color={c.tintInk.sky} />
         <TonePill tone={chip.tone}>{chip.text}</TonePill>
       </View>
       <Sentence>{`Your age ${formatValue("decimal1", v.age)}. Estimated VO2 max ${formatValue("decimal1", v.vo2max)} ml/kg/min, from a resting heart rate of ${formatValue("int", v.restingHr)} bpm.`}</Sentence>
@@ -138,7 +173,7 @@ function TrainingLoad({ tl }: { tl: FitnessVM["trainingLoad"]["value"] }) {
     <View style={{ gap: 16 }}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
         <View>
-          <Num value={formatValue("decimal2", tl.acwr)} size={36} />
+          <RollingValue value={formatValue("decimal2", tl.acwr)} size={36} />
           <Caption style={{ marginTop: 4 }}>Acute to chronic ratio</Caption>
         </View>
         <TonePill tone={tl.tone}>{STATUS[tl.status].word}</TonePill>

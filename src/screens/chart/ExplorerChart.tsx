@@ -3,13 +3,17 @@
 // screen each frame by one affine transform of the path (so strokes keep their width at any zoom); the axes, grid,
 // bands and labels are re-recorded as a Skia picture from the viewport. JS only hears about the viewport when a gesture
 // settles (to refit the y axis and the summary), never per frame.
+//
+// In the Apple Health chart language: dashed hairline rows, the metric's axis on the right (a compared metric's on the
+// left, in its colour), capsule-topped bars with the past at 35 % and the latest in full, a smooth line over a fill that
+// fades to nothing with its latest point ringed in the card colour, a solid hairline crosshair, and a raised rounded
+// readout card.
 import * as React from "react";
 import { View } from "react-native";
 import {
   Canvas,
   Circle,
   createPicture,
-  DashPathEffect,
   Group,
   Line,
   LinearGradient,
@@ -17,6 +21,7 @@ import {
   Path,
   Picture,
   RoundedRect,
+  Shadow,
   Skia,
   StrokeCap,
   Text as SkText,
@@ -34,7 +39,7 @@ import { useCalm } from "@/ui/calm";
 import { useReduceMotion } from "@/ui/motion";
 import { useTheme } from "@/ui/ThemeProvider";
 import { softFill } from "@/ui/components/calmKit";
-import { GRID_DOT, LINE, measure, NativeReveal, pastel, useChartInk, type ChartFonts } from "@/ui/components/ChartFrame";
+import { GRID, LINE, measure, NativeReveal, pastel, useChartInk, type ChartFonts } from "@/ui/components/ChartFrame";
 import { lengthText, STAGE_NAME, type Domain, type Series } from "./model";
 
 export type StageLane = { stage: "awake" | "rem" | "light" | "deep"; from: number; to: number };
@@ -98,7 +103,10 @@ export type ExplorerChartProps = {
   fonts: ChartFonts;
 };
 
-const BASE_LEFT = 48;
+/** The value axis's band beside the plot: the metric's on the right, a compared metric's on the left. */
+const AXIS_W = 48;
+/** The plot's left edge with nothing to its left. */
+const BARE_LEFT = 8;
 const TOP = 10;
 /** The lane over a day's plot that names its stretches (workouts, sleep, naps) and the night's bed and wake. */
 const NAME_LANE = 18;
@@ -176,8 +184,8 @@ export function ExplorerChart(p: ExplorerChartProps) {
   const laneW = React.useMemo(() => Math.max(...laneNames.map((t) => measure(laneFont, t))), [laneNames, laneFont]);
 
   // --- Layout: the night's lanes need room for their names; a day names its stretches in a lane over the plot ---
-  const LEFT = p.stages.length ? Math.max(BASE_LEFT, Math.ceil(laneW) + 14) : BASE_LEFT;
-  const right = p.compare ? 48 : 14;
+  const LEFT = p.stages.length ? Math.max(AXIS_W, Math.ceil(laneW) + 14) : p.compare ? AXIS_W : BARE_LEFT;
+  const right = AXIS_W;
   const plotW = Math.max(1, width - LEFT - right);
   const lanes = p.stages.length ? LANES : 0;
   const named = p.mode === "day" && (p.spans.length > 0 || p.bed !== null || p.wake !== null);
@@ -302,7 +310,8 @@ export function ExplorerChart(p: ExplorerChartProps) {
       if (v === null || v === undefined) return null;
       const per = plotW / sp;
       const w = Math.min(24, per * 0.6);
-      const r = Math.min(8, w / 2);
+      // Apple Health's bar top: a full half-circle at any width.
+      const r = w / 2;
       const base = bottom - ((Math.max(l, 0) - l) / (h - l)) * plotH;
       const cx = LEFT + (xs[i] - s) * per;
       const y = bottom - ((v - l) / (h - l)) * plotH;
@@ -349,11 +358,18 @@ export function ExplorerChart(p: ExplorerChartProps) {
   const clip = React.useMemo(() => rect(LEFT, top - 6, plotW, plotH + 6), [LEFT, top, plotW, plotH]);
 
   // --- Axes, grid and bands (recorded per frame from the viewport) ---
-  // The Calm chart language: a dotted grid and faint axis text, soft dashed guides, pastel spans, bands and stage lanes.
+  // Dashed hairline rows and grey axis text, soft dashed guides, pastel spans, bands and stage lanes.
   const workoutsFirst = p.emphasis === "workouts";
+  // A line's latest point is ringed in the card colour (bars mark the latest in full ink instead, a running total with its pill).
+  const lastIdx = React.useMemo(() => {
+    if (p.primary.mark === "bar" || p.latest) return -1;
+    for (let i = p.primary.ys.length - 1; i >= 0; i--) if (p.primary.ys[i] !== null) return i;
+    return -1;
+  }, [p.primary, p.latest]);
+  const lastColor = lastIdx >= 0 ? (p.readout.colors[lastIdx] ?? p.lineColor) : p.lineColor;
   const paints = React.useMemo(
     () => ({
-      grid: paint(k.grid, { width: GRID_DOT.size, dash: [0, GRID_DOT.gap], round: true }),
+      grid: paint(k.grid, { width: GRID.width, dash: GRID.dash }),
       band: paint(alpha(p.bands ? k.ink : p.lineColor, p.bands ? 0.05 : 0.09)),
       text: paint(k.axis),
       text2: paint(p.compareColor),
@@ -363,6 +379,7 @@ export function ExplorerChart(p: ExplorerChartProps) {
       ink: paint(k.ink),
       ring: paint(k.ring),
       latest: paint(p.lineColor),
+      last: paint(lastColor),
       workout: paint(alpha(calm.tintInk.peach, workoutsFirst ? 0.16 : 0.1)),
       sleep: paint(alpha(calm.tintInk.lavender, workoutsFirst ? 0.04 : 0.08)),
       workoutEdge: paint(calm.tintInk.peach),
@@ -373,7 +390,7 @@ export function ExplorerChart(p: ExplorerChartProps) {
       stage: { awake: paint(c.stageAwake), rem: paint(c.stageRem), light: paint(c.stageLight), deep: paint(c.stageDeep) },
       block: { awake: paint(pastel(c.stageAwake, k, 0.85)), rem: paint(pastel(c.stageRem, k, 0.85)), light: paint(pastel(c.stageLight, k, 0.85)), deep: paint(pastel(c.stageDeep, k, 0.85)) },
     }),
-    [c, calm, k, p.compareColor, p.bands, p.lineColor, workoutsFirst],
+    [c, calm, k, p.compareColor, p.bands, p.lineColor, workoutsFirst, lastColor],
   );
   const levels = p.levels;
   const baseline = p.baseline;
@@ -450,20 +467,20 @@ export function ExplorerChart(p: ExplorerChartProps) {
         const h = hi.value;
         const px = (x: number) => LEFT + ((x - s) / sp) * plotW;
         const py = (v: number) => bottom - ((v - l) / (h - l)) * plotH;
-        // Left axis
+        // The metric's axis on the right, Apple Health's
         for (const t of yTicks.value) {
           const y = py(t.v);
           if (y < top - 0.5 || y > bottom + 0.5) continue;
-          canvas.drawText(t.text, LEFT - 8 - axisFont.getTextWidth(t.text), y + 12 * 0.32, paints.text, axisFont);
+          canvas.drawText(t.text, plotRight + 8, y + 12 * 0.32, paints.text, axisFont);
         }
-        // Right axis (compare), in the compare colour
+        // A compared metric's axis on the left, in its colour
         if (hasCompare) {
           const l2 = lo2.value;
           const h2 = hi2.value;
           for (const t of y2Ticks.value) {
             const y = bottom - ((t.v - l2) / (h2 - l2)) * plotH;
             if (y < top - 0.5 || y > bottom + 0.5) continue;
-            canvas.drawText(t.text, plotRight + 8, y + 12 * 0.32, paints.text2, axisFont);
+            canvas.drawText(t.text, LEFT - 8 - axisFont.getTextWidth(t.text), y + 12 * 0.32, paints.text2, axisFont);
           }
         }
         // Bottom axis: the finest tick level that leaves room for its labels
@@ -536,7 +553,17 @@ export function ExplorerChart(p: ExplorerChartProps) {
             goalBox = { x: plotRight - w - 2, y: y - 9, w };
           }
         }
-        // The latest point, ringed in the card colour, its value on a pill over it (under it near the top)
+        // A line's latest point, ringed in the card colour
+        if (lastIdx >= 0) {
+          const v = ys[lastIdx];
+          const x = px(xs[lastIdx]);
+          const y = v === null || v === undefined ? NaN : py(v);
+          if (x >= LEFT - 1 && x <= plotRight + 1 && y >= top - 1 && y <= bottom + 1) {
+            canvas.drawCircle(x, y, 6.5, paints.ring);
+            canvas.drawCircle(x, y, 4.5, paints.last);
+          }
+        }
+        // The running total's latest point, ringed in the card colour, its value on a pill over it (under it near the top)
         if (latest) {
           const v = ys[latest.index];
           if (v !== null && v !== undefined) {
@@ -599,8 +626,6 @@ export function ExplorerChart(p: ExplorerChartProps) {
   const shown = useDerivedValue(() => (idx.value >= 0 && dotX.value >= LEFT - 1 && dotX.value <= plotRight + 1 ? 1 : 0));
   const vTop = useDerivedValue(() => vec(dotX.value, top));
   const vBottom = useDerivedValue(() => vec(dotX.value, bottom));
-  const hLeft = useDerivedValue(() => vec(LEFT, dotY.value));
-  const hRight = useDerivedValue(() => vec(plotRight, dotY.value));
   const fg = k.ink;
   const readoutColors = p.readout.colors;
   const dotColor = useDerivedValue(() => (idx.value < 0 ? fg : (readoutColors[idx.value] ?? fg)));
@@ -822,14 +847,9 @@ export function ExplorerChart(p: ExplorerChartProps) {
           </NativeReveal>
           <Canvas pointerEvents="none" style={{ position: "absolute", left: 0, top: 0, width, height }}>
             {/* Crosshair, dots and readout */}
-            {/* The Calm crosshair: a dashed cursor in the ink at 30 %, the dot with a white ring, a white readout card with a soft edge. */}
+            {/* Apple Health's selection: a solid hairline in the ink at 30 %, the dot ringed in white, a raised readout card. */}
             <Group opacity={shown}>
-              <Line p1={vTop} p2={vBottom} color={k.cursor} strokeWidth={1.5} strokeCap="round" style="stroke">
-                <DashPathEffect intervals={[3, 5]} />
-              </Line>
-              <Line p1={hLeft} p2={hRight} color={alpha(k.ink, 0.14)} strokeWidth={1} style="stroke">
-                <DashPathEffect intervals={[2, 4]} />
-              </Line>
+              <Line p1={vTop} p2={vBottom} color={k.cursor} strokeWidth={1} style="stroke" />
               <Circle cx={dotX} cy={dotY} r={12} color={halo} opacity={0.16} />
               <Circle cx={dotX} cy={dotY} r={8} color={k.scrubRing} />
               <Circle cx={dotX} cy={dotY} r={5} color={dotColor} />
@@ -839,7 +859,9 @@ export function ExplorerChart(p: ExplorerChartProps) {
                   <Circle cx={dot2X} cy={dot2Y} r={4.5} color={dot2Color} />
                 </Group>
               )}
-              <RoundedRect x={boxX} y={boxTop} width={boxW} height={box.height} r={12} color={k.readout} />
+              <RoundedRect x={boxX} y={boxTop} width={boxW} height={box.height} r={12} color={k.readout}>
+                <Shadow dx={0} dy={1} blur={4} color={k.readoutShadow} />
+              </RoundedRect>
               <RoundedRect x={boxX} y={boxTop} width={boxW} height={box.height} r={12} color={k.readoutEdge} style="stroke" strokeWidth={1} />
               <SkText x={textX} y={boxTop + 10 + 12} text={dateText} font={dateFont} color={k.sub} />
               {names?.primary ? <SkText x={textX} y={valueY} text={names.primary} font={seriesFont} color={k.sub} /> : null}
