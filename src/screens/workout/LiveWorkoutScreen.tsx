@@ -298,7 +298,7 @@ function HapticsCard({ value, onChange }: { value: boolean; onChange: (v: boolea
 function GuidanceCard({ tone, title, body }: { tone: GuidanceTone; title: string; body: string }) {
   const k = useCalm();
   return (
-    <View accessible accessibilityLiveRegion="polite" accessibilityLabel={`${title}. ${body}`} style={{ borderRadius: 32, borderWidth: 1, borderColor: k.tintEdge[toneTint(tone)], backgroundColor: k.tint[toneTint(tone)], padding: 20, gap: 4 }}>
+    <View accessible accessibilityLiveRegion="polite" accessibilityLabel={`${title}. ${body}`} style={{ borderRadius: 20, borderWidth: 1, borderColor: k.tintEdge[toneTint(tone)], backgroundColor: k.tint[toneTint(tone)], padding: 20, gap: 4 }}>
       <Txt size={17} lineHeight={22} weight={600} style={{ color: toneInk(k, tone) }}>
         {title}
       </Txt>

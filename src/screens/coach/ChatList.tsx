@@ -188,7 +188,7 @@ export function ChatList({ current, onOpen, onNew }: { current: string | null; o
         groups.map((g, i) => (
           <View key={`${g.label}-${i}`} accessibilityLabel={g.label} style={{ gap: 10 }}>
             <SectionLabel>{g.label}</SectionLabel>
-            <View style={{ borderRadius: 32, borderWidth: 1, borderColor: c.edge, backgroundColor: c.card, ...(c.shadow ? { boxShadow: c.shadow } : null), overflow: "hidden", paddingVertical: 4 }}>
+            <View style={{ borderRadius: 20, borderWidth: 1, borderColor: c.edge, backgroundColor: c.card, ...(c.shadow ? { boxShadow: c.shadow } : null), overflow: "hidden", paddingVertical: 4 }}>
               {g.chats.map((chat, k) => (
                 <React.Fragment key={chat.id}>
                   {k > 0 && <Hairline inset={18} />}

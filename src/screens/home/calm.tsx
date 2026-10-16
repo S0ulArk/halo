@@ -19,6 +19,7 @@ import { GrowIn } from "@/ui/motion/Rise";
 import { HeartTrace } from "@/ui/components/BandHero";
 import { CalmSurface, PillAction } from "@/ui/components/CalmSurface";
 import { StreakFlame, UserAvatar } from "@/ui/components/HomeHeader";
+import { GlassButton, GlassCapsule } from "@/ui/components/GlassButton";
 import { GoLiveButton, GoLiveSheet, StopLiveButton } from "@/screens/settings/liveHr";
 import { ACTIVITY_TAB, HEALTH_TAB, SLEEP_TAB } from "./tabs";
 import { chartHref } from "@/screens/chart/href";
@@ -92,25 +93,24 @@ export function CalmTopBar({
   onAvatar: () => void;
 }) {
   const c = useCalm();
+  // iOS 26's bar: round glass buttons and a glass capsule for the streak, the day pill between them.
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 48 }}>
-      <Pressable onPress={onAvatar} accessibilityRole="button" accessibilityLabel="Settings" hitSlop={6} style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: c.card, borderWidth: 1, borderColor: c.edge, alignItems: "center", justifyContent: "center", ...(c.shadow ? { boxShadow: c.shadow } : null) }}>
-        <UserAvatar src={null} size={30} />
-      </Pressable>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44 }}>
+      <GlassButton onPress={onAvatar} accessibilityLabel="Settings">
+        <UserAvatar src={null} size={24} />
+      </GlassButton>
       {streak && streak.days > 0 ? (
-        <View accessibilityLabel={`${streak.days}-day streak`} style={{ flexDirection: "row", alignItems: "center", gap: 4, height: 32, paddingHorizontal: 10, borderRadius: 16, backgroundColor: c.card, borderWidth: 1, borderColor: c.edge }}>
+        <GlassCapsule accessibilityLabel={`${streak.days}-day streak`} style={{ gap: 4, paddingHorizontal: 11 }}>
           <StreakFlame u={0.56} />
-          <Txt size={14} lineHeight={18} weight={600} style={[TABULAR, { color: c.ink }]}>
+          <Txt size={15} lineHeight={20} weight={700} style={[TABULAR, { color: c.ink }]}>
             {streak.days}
           </Txt>
-        </View>
+        </GlassCapsule>
       ) : null}
       <View style={{ flex: 1, alignItems: "center" }}>
-        <DateSwitcher {...dateSwitcher} narrow style={{ backgroundColor: c.card, height: 40, borderRadius: 20, paddingHorizontal: 4, borderWidth: 1, borderColor: c.edge }} />
+        <DateSwitcher {...dateSwitcher} narrow style={{ height: 38, borderRadius: 19, paddingHorizontal: 2 }} />
       </View>
-      <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: c.card, borderWidth: 1, borderColor: c.edge, alignItems: "center", justifyContent: "center", ...(c.shadow ? { boxShadow: c.shadow } : null) }}>
-        <SyncStatus status={sync.status} now={sync.now} onPress={sync.onPress} hideText />
-      </View>
+      <SyncStatus status={sync.status} now={sync.now} onPress={sync.onPress} hideText />
     </View>
   );
 }

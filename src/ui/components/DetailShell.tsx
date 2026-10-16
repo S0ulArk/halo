@@ -1,10 +1,15 @@
+// The detail page frame (Settings, Your data, How Halo works, Coach, Breathe, Live workout): iOS's large-title page. The
+// bar floats over a keyboard-aware scroll view whose content opens with the large title; as it scrolls the inline title
+// and the scroll edge take over (DetailHeader), all on the UI thread off the scroll offset.
 import * as React from "react";
 import { View, type StyleProp, type ViewStyle } from "react-native";
-import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { KeyboardAwareScrollView, type KeyboardAwareScrollViewRef } from "react-native-keyboard-controller";
+import Animated, { useAnimatedRef, useScrollOffset } from "react-native-reanimated";
+import { GlassTarget } from "@/ui/glass";
 import { useTheme } from "@/ui/ThemeProvider";
 import type { Tokens } from "@/ui/theme";
 import { DateSwitcher, type DateSwitcherProps } from "./DateSwitcher";
-import { DetailHeader, type DetailHeaderProps } from "./DetailHeader";
+import { DetailHeader, DetailLargeTitle, useBarInset, type DetailHeaderProps } from "./DetailHeader";
 import type { InfoContent } from "./InfoButton";
 import { useAfterTransition } from "./AfterTransition";
 import { dialGlow, Glow, GLOW_SCHEME } from "./Glow";
@@ -88,49 +93,59 @@ export function DetailShell({ title, subtitle, info, onBack, dateSwitcher, dismi
   const opened = useAfterTransition();
   const below = opened || !hero;
   const clearance = useBottomClearance("detail");
+  const top = useBarInset();
+  // The scroll offset on the UI thread, for the bar's inline title and scroll edge (the keyboard-aware view is a
+  // Reanimated ScrollView, so its native scroll events reach the offset with no JS).
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  const y = useScrollOffset(scrollRef);
   return (
     // The root's own fill is the ground (solid): no second full-screen layer.
     <View style={{ flex: 1, backgroundColor: ground === "healthspan" ? c.groundHealthspan : c.background }}>
-      <DetailHeader title={title} subtitle={subtitle} info={info} onBack={onBack} dismiss={dismiss} align={align} titleIcon={titleIcon} action={action} ground={ground} dateTitle={inHeader ? dateSwitcher : undefined} />
-      {/* Keyboard-aware (react-native-keyboard-controller): a focused field scrolls clear of the keyboard, with room under
-          it to scroll the rest of the page past; a tap outside a field and its buttons closes the keyboard. */}
-      <KeyboardAwareScrollView
-        bottomOffset={keyboardOffset}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: bottomInset ?? clearance }, contentStyle]}
-        contentInsetAdjustmentBehavior="never"
-      >
-        {banner && <View style={{ marginBottom: 16 }}>{banner}</View>}
-        {dateSwitcher && !inHeader && (
-          // The Calm white date pill, centred over the page (spec §11 F15).
-          <View style={{ marginBottom: 24, alignItems: "center" }}>
-            <DateSwitcher {...dateSwitcher} placement="header" />
+      {/* The page is the glass's backdrop: the bar's round buttons (its overlay) bend what scrolls under them. */}
+      <GlassTarget style={{ flex: 1 }} overlay={<DetailHeader title={title} info={info} onBack={onBack} dismiss={dismiss} align={align} action={action} ground={ground} scrollY={y} />}>
+        {/* Keyboard-aware (react-native-keyboard-controller): a focused field scrolls clear of the keyboard, with room under
+            it to scroll the rest of the page past; a tap outside a field and its buttons closes the keyboard. */}
+        <KeyboardAwareScrollView
+          // The view hands its Reanimated ScrollView to the ref (useImperativeHandle), which is what the offset tracks.
+          ref={scrollRef as unknown as React.Ref<KeyboardAwareScrollViewRef>}
+          bottomOffset={keyboardOffset}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[{ paddingHorizontal: 16, paddingTop: top, paddingBottom: bottomInset ?? clearance }, contentStyle]}
+          contentInsetAdjustmentBehavior="never"
+        >
+          <DetailLargeTitle title={title} subtitle={subtitle} titleIcon={titleIcon} dateTitle={inHeader ? dateSwitcher : undefined} y={y} />
+          {banner && <View style={{ marginBottom: 16 }}>{banner}</View>}
+          {dateSwitcher && !inHeader && (
+            // The Calm white date pill, centred over the page (spec §11 F15).
+            <View style={{ marginBottom: 24, alignItems: "center" }}>
+              <DateSwitcher {...dateSwitcher} placement="header" />
+            </View>
+          )}
+          <View style={{ gap: 32 }}>
+            {(hero || side) && (
+              <View style={{ gap: 24 }}>
+                {hero && <HeroSlot hero={hero} glow={glow} />}
+                {side && (
+                  <View>
+                    {/* Calm: no notch; the hero is a card of its own. */}
+                    {side}
+                  </View>
+                )}
+              </View>
+            )}
+            {below && (summary || !hero) && insight}
+            {below && primary}
+            {opened && secondary && secondary.length > 0 && (
+              <View style={{ gap: 12 }}>
+                {secondary.map((s, i) => (
+                  <React.Fragment key={i}>{s}</React.Fragment>
+                ))}
+              </View>
+            )}
+            {opened && footer}
           </View>
-        )}
-        <View style={{ gap: 32 }}>
-          {(hero || side) && (
-            <View style={{ gap: 24 }}>
-              {hero && <HeroSlot hero={hero} glow={glow} />}
-              {side && (
-                <View>
-                  {/* Calm: no notch; the hero is a card of its own. */}
-                  {side}
-                </View>
-              )}
-            </View>
-          )}
-          {below && (summary || !hero) && insight}
-          {below && primary}
-          {opened && secondary && secondary.length > 0 && (
-            <View style={{ gap: 12 }}>
-              {secondary.map((s, i) => (
-                <React.Fragment key={i}>{s}</React.Fragment>
-              ))}
-            </View>
-          )}
-          {opened && footer}
-        </View>
-      </KeyboardAwareScrollView>
+        </KeyboardAwareScrollView>
+      </GlassTarget>
     </View>
   );
 }

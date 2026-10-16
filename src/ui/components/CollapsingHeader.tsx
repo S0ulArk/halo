@@ -1,11 +1,13 @@
+// Healthspan's header: the plain iOS bar (glass back, centred title) that grows a band with the compact hero and its
+// two stats once the hero scrolls under it.
 import * as React from "react";
-import { Animated, Easing, Pressable, View } from "react-native";
+import { Animated, Easing, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ChevronLeft } from "lucide-react-native";
 import { useCalm } from "@/ui/calm";
 import { font } from "@/ui/fonts";
 import { useTheme } from "@/ui/ThemeProvider";
 import { HeaderRow } from "./DetailHeader";
+import { BackButton } from "./GlassButton";
 import { InfoButton, type InfoContent } from "./InfoButton";
 import { Txt } from "./Text";
 
@@ -60,7 +62,7 @@ function Stat({ stat, t }: { stat?: HeaderStat; t: Animated.Value }) {
         {stat.value}
       </Txt>
       {/* The Calm caption under the number. One line: "Pace of aging" fits a 330 px phone at 0.85 of its size rather than wrapping out of the band. */}
-      <Txt size={11} lineHeight={15} weight={600} uppercase color={c.faint} align="center" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} style={{ letterSpacing: 1.4 }}>
+      <Txt size={12} lineHeight={16} weight={600} uppercase color={c.sub} align="center" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} style={{ letterSpacing: 0.4 }}>
         {stat.label}
       </Txt>
     </Animated.View>
@@ -99,19 +101,10 @@ export function CollapsingHeader({ title, subtitle, info, onBack, ground, collap
       <View style={{ backgroundColor: fill, paddingTop: insets.top }}>
         <HeaderRow
           style={sub ? { alignItems: "flex-start", paddingBottom: 4 } : undefined}
-          left={
-            <Pressable
-              onPress={onBack}
-              accessibilityRole="button"
-              accessibilityLabel="Back"
-              style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 22, backgroundColor: calm.card, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.7 : 1 })}
-            >
-              <ChevronLeft size={24} color={calm.ink} strokeWidth={2} />
-            </Pressable>
-          }
+          left={<BackButton onPress={onBack} />}
           center={
-            <Animated.View pointerEvents={collapsed ? "none" : "auto"} style={{ alignItems: "center", paddingTop: sub ? 10 : 0, opacity: t.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) }}>
-              <Txt size={18} lineHeight={24} weight={600} color={calm.ink} align="center" numberOfLines={2}>
+            <Animated.View pointerEvents={collapsed ? "none" : "auto"} style={{ alignItems: "center", paddingTop: sub ? 8 : 0, opacity: t.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) }}>
+              <Txt size={17} lineHeight={22} weight={600} color={calm.ink} align="center" numberOfLines={2}>
                 {title}
               </Txt>
               {sub && (

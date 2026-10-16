@@ -1,3 +1,4 @@
+// The kit's bottom sheet (@gorhom/bottom-sheet v5) in iOS's sheet look, with the keyboard and scroll fixes it needs.
 import * as React from "react";
 import { BackHandler, TextInput, useWindowDimensions, View, type LayoutChangeEvent, type NativeScrollEvent } from "react-native";
 import {
@@ -19,16 +20,16 @@ import { KeyboardController, useKeyboardHandler } from "react-native-keyboard-co
 import Animated, { css, useAnimatedReaction, useSharedValue, type SharedValue } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { X } from "lucide-react-native";
-import { alpha } from "@/lib/utils";
 import { AccentScope, useScreenAccent, type AccentFamily } from "@/ui/accents";
 import { useCalm } from "@/ui/calm";
 import { useKeepFocusedInputVisible, type Scroller } from "@/ui/keyboard";
 import { EntranceScope } from "@/ui/motion/Entrance";
+import { haptic } from "@/ui/motion/haptics";
 import { reduceMotionNow } from "@/ui/motion/system";
 import { ThemeBridge, useTheme, type Theme } from "@/ui/ThemeProvider";
 import { Button } from "./Button";
-import { OnCard } from "./calmKit";
+import { OnSheet } from "./calmKit";
+import { BackButton, BAR_BUTTON } from "./GlassButton";
 import { useCoverLayer } from "./Overlay";
 import { Txt } from "./Text";
 
@@ -38,24 +39,23 @@ export type BottomSheetProps = {
   title: string;
   description?: string;
   children: React.ReactNode;
-  /** Stacked full-width actions: `Button size="sheet"` (the teal primary, then `variant="outline-pill"`, a quiet grey). */
+  /** Stacked full-width actions: `Button size="sheet"` (the filled blue primary, then `variant="outline-pill"`, a quiet grey). */
   footer?: React.ReactNode;
+  /** The header's filled Done capsule on the right, iOS's, for a sheet whose one action is to finish. */
+  done?: { label?: string; onPress: () => void; disabled?: boolean };
   /** `tall`: the sheet takes 92 % of the screen whatever its content. */
   size?: "default" | "tall";
   /** With the keyboard open, the room kept under a focused field (16): more keeps a button under the field in view. */
   keyboardGap?: number;
 };
 
-/** A section label inside a sheet ("Time ───"): 13/18 semibold grey, sentence case, a `line` hairline to the edge. */
+/** A section label inside a sheet, iOS's grouped header: 13/18 capitals in the secondary grey, inset as a field's label. */
 export function SheetSection({ children }: { children: string }) {
   const c = useCalm();
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-      <Txt size={13} lineHeight={18} weight={600} style={{ color: c.sub }}>
-        {children}
-      </Txt>
-      <View style={{ flex: 1, height: 1, backgroundColor: c.line }} />
-    </View>
+    <Txt size={13} lineHeight={18} accessibilityRole="header" style={{ color: c.sub, letterSpacing: 0.1, paddingHorizontal: 4 }}>
+      {children.toUpperCase()}
+    </Txt>
   );
 }
 
@@ -110,6 +110,7 @@ type Chrome = {
   title: string;
   description?: string;
   footer?: React.ReactNode;
+  done?: BottomSheetProps["done"];
   close: () => void;
   bottom: number;
   /** The footer's measured height (it floats over the scroll view's foot). */
@@ -148,10 +149,10 @@ function makeContainer(store: Store<Chrome | null>) {
         <AccentScope family={chrome.accent}>
           {/* Cards inside a sheet appear with it: no entrance cascade of their own over the slide. */}
           <EntranceScope>
-            {/* The sheet is a white card: quiet fills inside it (pills, secondary buttons) take the ground's grey. */}
-            <OnCard>
+            {/* The sheet's face is the grouped ground: quiet fills straight on it (fields, chips) take the card colour. */}
+            <OnSheet>
               <ChromeCtx.Provider value={chrome}>{children}</ChromeCtx.Provider>
-            </OnCard>
+            </OnSheet>
           </EntranceScope>
         </AccentScope>
       </ThemeBridge>
@@ -159,44 +160,60 @@ function makeContainer(store: Store<Chrome | null>) {
   };
 }
 
-/** The sheet material: the white Calm card (`calm.card`) with 28 px top corners, one solid fill, no outline. */
+/** iOS's sheet corner: the large, continuous-looking 38 px radius of an iOS 26 sheet. */
+const SHEET_RADIUS = 38;
+
+/** The sheet material: the grouped ground (the elevated grey in the dark) with 38 px top corners, one solid fill. */
 function SheetBackground({ style }: BottomSheetBackgroundProps) {
   const c = useCalm();
-  // The sheet's face with a faint hairline along its rounded top, as the tab bar has.
-  return <View pointerEvents="none" style={[style, { borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: c.card, borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, borderColor: c.hairline }]} />;
+  return <View pointerEvents="none" style={[style, { borderTopLeftRadius: SHEET_RADIUS, borderTopRightRadius: SHEET_RADIUS, backgroundColor: c.sheet }]} />;
 }
 
-/** The dim behind the sheet in the ground's colour, fading with it; a tap closes the sheet. */
+/** The system dim behind the sheet, fading with it; a tap closes the sheet. */
 function SheetBackdrop(props: BottomSheetBackdropProps) {
-  const c = useCalm();
-  return <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={1} pressBehavior="close" style={[props.style, { backgroundColor: alpha(c.ground, 0.88) }]} />;
+  const { c } = useTheme();
+  return <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={1} pressBehavior="close" style={[props.style, { backgroundColor: c.dim }]} />;
 }
 
 /**
- * The handle: a 40 × 5 grab bar in `line` over the header grid (44 | title | 44, a round close button on the right),
- * the title in Figtree 600 18/24 ink. The whole of it drags.
+ * The handle, iOS's: a 36 × 5 grabber over the header (a round glass close button on the left, the title in Inter 600
+ * 17/22 in the middle, the filled Done capsule on the right when the sheet has one). The whole of it drags.
  */
 function SheetHandle() {
   const c = useCalm();
-  const { title, description, close } = useChrome();
+  const { title, description, close, done } = useChrome();
   return (
     <View>
-      <View style={{ alignSelf: "center", marginTop: 10, width: 36, height: 4, borderRadius: 2, backgroundColor: c.hairline }} />
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingTop: 6, paddingBottom: 12 }}>
-        <View style={{ width: 44 }} />
-        <View style={{ flex: 1, alignItems: "center" }}>
-          <Txt size={18} lineHeight={24} weight={600} align="center" style={{ color: c.ink }}>
+      <View style={{ alignSelf: "center", marginTop: 6, width: 36, height: 5, borderRadius: 2.5, backgroundColor: c.tertiary }} />
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 }}>
+        <View style={{ flex: 1, alignItems: "flex-start" }}>
+          <BackButton onPress={close} dismiss="close" />
+        </View>
+        <View style={{ flexShrink: 1, alignItems: "center" }}>
+          <Txt size={17} lineHeight={22} weight={600} align="center" accessibilityRole="header" style={{ color: c.ink }}>
             {title}
           </Txt>
           {description && (
-            <Txt size={14} lineHeight={19} align="center" style={{ color: c.sub, marginTop: 2 }}>
+            <Txt size={13} lineHeight={18} align="center" style={{ color: c.sub, marginTop: 1 }}>
               {description}
             </Txt>
           )}
         </View>
-        <Button variant="secondary" size="icon-touch" onPress={close} accessibilityLabel="Close">
-          <X size={20} color={c.ink} strokeWidth={2} />
-        </Button>
+        <View style={{ flex: 1, alignItems: "flex-end" }}>
+          {done && (
+            <Button
+              size="sm"
+              disabled={done.disabled}
+              onPress={() => {
+                haptic.confirm();
+                done.onPress();
+              }}
+              style={{ minHeight: BAR_BUTTON, borderRadius: BAR_BUTTON / 2, paddingHorizontal: 16 }}
+            >
+              {done.label ?? "Done"}
+            </Button>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -209,7 +226,7 @@ function SheetFooter({ animatedFooterPosition }: BottomSheetFooterProps) {
   const onLayout = React.useCallback((e: LayoutChangeEvent) => footerHeight.set(e.nativeEvent.layout.height), [footerHeight]);
   return (
     <BottomSheetFooter animatedFooterPosition={animatedFooterPosition}>
-      <View onLayout={onLayout} style={{ gap: 10, paddingHorizontal: 16, paddingTop: 12, paddingBottom: Math.max(bottom, 16), backgroundColor: c.card }}>
+      <View onLayout={onLayout} style={{ gap: 10, paddingHorizontal: 16, paddingTop: 12, paddingBottom: Math.max(bottom, 16), backgroundColor: c.sheet }}>
         {footer}
       </View>
     </BottomSheetFooter>
@@ -370,9 +387,9 @@ function SheetContent({ children, cacheKey, estimate, footer, keyboardGap, botto
 
 /**
  * Tasks (check-in, vital and contributor detail) as a bottom drawer (spec §4.8, the web's ResponsiveSheet on a
- * phone), Calm: the white card with 28 px top corners and no outline, a 40 × 5 grab handle in `line`, a round close
- * button at the right, the centred title in Figtree 600 18/24, stacked actions in the footer, over a ground-coloured
- * dim.
+ * phone), iOS's sheet: the grouped ground with 38 px top corners, a 36 × 5 grabber, a round glass close button on the
+ * left, the centred title in Inter 600 17/22, a filled Done capsule on the right when the sheet has one (`done`),
+ * stacked actions in the footer, over the system dim.
  *
  * Built on @gorhom/bottom-sheet (Reanimated + Gesture Handler), in the app's own window: it springs open, follows a
  * drag and closes on a downward fling (or a tap on the dim, the X, Android's back), sized to its content up to 92 %
@@ -381,7 +398,7 @@ function SheetContent({ children, cacheKey, estimate, footer, keyboardGap, botto
  * Over the keyboard: the sheet rises with it, shrinking its scroll area when it would pass the status bar, so the
  * footer's actions stay above the keyboard; the focused field is then scrolled into view above the footer.
  */
-export function BottomSheet({ open, onClose, title, description, children, footer, size = "default", keyboardGap = 16 }: BottomSheetProps) {
+export function BottomSheet({ open, onClose, title, description, children, footer, done, size = "default", keyboardGap = 16 }: BottomSheetProps) {
   const theme = useTheme();
   const accent = useScreenAccent();
   const insets = useSafeAreaInsets();
@@ -399,7 +416,7 @@ export function BottomSheet({ open, onClose, title, description, children, foote
   const close = React.useCallback(() => latest.current.onClose(), []);
 
   const footerHeight = useSharedValue(0);
-  const chrome: Chrome = { theme, accent, title, description, footer, close, bottom: insets.bottom, footerHeight };
+  const chrome: Chrome = { theme, accent, title, description, footer, done, close, bottom: insets.bottom, footerHeight };
   const [store] = React.useState(() => createStore<Chrome | null>(null));
   React.useLayoutEffect(() => store.set(chrome));
   const [Container] = React.useState(() => makeContainer(store));

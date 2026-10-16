@@ -82,7 +82,7 @@ function Loading({ title, dateSwitcher }: { title: string; dateSwitcher: React.C
       title={title}
       dateSwitcher={dateSwitcher}
       hero={
-        <View importantForAccessibility="no-hide-descendants" style={{ alignSelf: "stretch", gap: 10, borderRadius: 32, borderWidth: 1, borderColor: c.edge, backgroundColor: c.card, ...(c.shadow ? { boxShadow: c.shadow } : null), padding: 20 }}>
+        <View importantForAccessibility="no-hide-descendants" style={{ alignSelf: "stretch", gap: 10, borderRadius: 20, borderWidth: 1, borderColor: c.edge, backgroundColor: c.card, ...(c.shadow ? { boxShadow: c.shadow } : null), padding: 20 }}>
           <SkeletonText role="caption" width={64} />
           <SkeletonText role="value" size={64} lineHeight={72} chars={5} />
           <SkeletonText role="caption" width={160} />

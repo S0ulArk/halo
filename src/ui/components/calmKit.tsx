@@ -1,7 +1,7 @@
-// The Calm design's shared parts for the kit's components (the reference is Home, src/screens/home/calm.tsx): the
-// metric family → pastel map, the tone pastels, the icon tile, a number with its small grey unit, the caps caption
-// under a number, and the surface a control sits on (so a quiet fill reads on a white card and on the grey ground
-// alike). Every colour comes from useCalm() (src/ui/calm.ts).
+// The shared parts of the kit's components, in the iOS look (the reference is Apple Health and Settings): the metric
+// family → system colour map, the tone colours, the icon square, a number with its small grey unit, the small caps
+// caption under a number, and the surface a control sits on (so a quiet fill reads on a white card, on the grey ground
+// and on a sheet alike). Every colour comes from useCalm() (src/ui/calm.ts).
 import * as React from "react";
 import { View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { ChevronRight } from "lucide-react-native";
@@ -11,7 +11,7 @@ import { useCalm, type CalmPalette, type CalmTint } from "@/ui/calm";
 import { font } from "@/ui/fonts";
 import { Txt } from "./Text";
 
-/** One soft pastel per metric family. */
+/** One system colour per metric family (as its tint: mint green, lavender indigo, peach orange, sky blue…). */
 export const FAMILY_TINT: Record<AccentFamily, CalmTint> = {
   recovery: "mint",
   sleep: "lavender",
@@ -23,8 +23,8 @@ export const FAMILY_TINT: Record<AccentFamily, CalmTint> = {
 };
 
 /**
- * A family's pastel, or null. Recovery follows its band when `value` is a recovery score (0-100): green mint, yellow
- * sand, red rose, as Home colours its Recovery number.
+ * A family's tint, or null. Recovery follows its band when `value` is a recovery score (0-100): green, yellow, red
+ * (mint, sand, rose), as Home colours its Recovery number.
  */
 export function familyTint(family: AccentFamily | null | undefined, value?: number | null): CalmTint | null {
   if (!family) return null;
@@ -35,29 +35,37 @@ export function familyTint(family: AccentFamily | null | undefined, value?: numb
   return FAMILY_TINT[family];
 }
 
-/** A delta tone or a chip tone as a pastel: good mint, warning sand, alert rose; neutral has none (a quiet grey). */
+/** A delta tone or a chip tone as a tint: good green, warning yellow, alert pink-red; neutral has none (a quiet grey). */
 export function toneTint(tone: Tone | ChipTone): CalmTint | null {
   return tone === "good" || tone === "optimal" ? "mint" : tone === "bad" || tone === "warning" ? "sand" : tone === "alert" ? "rose" : null;
 }
 
 // --- The surface under a control ---
 
-export type CalmSurface = "ground" | "card";
+/** Where a control sits: the grouped ground, a card, or straight on a bottom sheet. */
+export type CalmSurface = "ground" | "card" | "sheet";
 const Surface = React.createContext<CalmSurface>("ground");
 
-/** Marks everything under it as sitting on a card (Card, sheets and dialogs provide it). */
+/** Marks everything under it as sitting on a card (Card provides it, and a card inside a sheet). */
 export function OnCard({ children }: { children: React.ReactNode }) {
   return <Surface.Provider value="card">{children}</Surface.Provider>;
+}
+
+/** Marks everything under it as sitting straight on a bottom sheet (the sheet's content provides it). */
+export function OnSheet({ children }: { children: React.ReactNode }) {
+  return <Surface.Provider value="sheet">{children}</Surface.Provider>;
 }
 
 export const useSurface = (): CalmSurface => React.useContext(Surface);
 
 /**
- * The quiet fill of a pill, a secondary button or a segmented track: a card's white on the ground; on a card the
- * ground's grey (light) or the raised chip (dark), so it never vanishes into the surface under it.
+ * The quiet fill of a pill, a secondary button or a field: the card colour on the ground and on a sheet (white on the
+ * light grey, the raised grey on the dark sheet); on a card the ground's grey (light) or the raised chip (dark), so it
+ * never vanishes into the surface under it.
  */
 export function softFill(c: CalmPalette, surface: CalmSurface): string {
   if (surface === "ground") return c.card;
+  if (surface === "sheet") return c.sheetFill;
   return c.chip === c.card ? c.ground : c.chip;
 }
 
@@ -86,32 +94,40 @@ export function recolorIcon(node: React.ReactNode, color: string, size?: number)
   return node;
 }
 
+/** An iOS icon square's corner radius at `size` (7 on the 29 px Settings square). */
+export const iconRadius = (size: number) => Math.round(size * 0.24);
+
 /**
- * The Calm icon tile (Home's): a 44 px rounded square in the family's pastel with the icon in its ink. Without a tint
- * it is a quiet grey tile with the icon in the ink colour. A swatch (not an icon) is drawn as given, centred.
+ * The icon square, iOS Settings': the family's system colour with the icon in white. Given a `bg` it is a soft square
+ * with the icon in the family's colour instead; without a tint, a quiet grey square with a grey icon. A swatch (not an
+ * icon) is drawn as given, centred.
  */
-export function IconTile({ icon, tint, size = 44, radius = 14, iconSize, bg, style }: { icon: React.ReactNode; tint: CalmTint | null; size?: number; radius?: number; iconSize?: number; bg?: string; style?: StyleProp<ViewStyle> }) {
+export function IconTile({ icon, tint, size = 44, radius, iconSize, bg, style }: { icon: React.ReactNode; tint: CalmTint | null; size?: number; radius?: number; iconSize?: number; bg?: string; style?: StyleProp<ViewStyle> }) {
   const c = useCalm();
-  const fill = bg ?? (tint ? c.tint[tint] : softFill(c, "card"));
-  const ink = tint ? c.tintInk[tint] : c.sub;
+  const solid = !!tint && !bg;
+  const fill = bg ?? (tint ? c.tintInk[tint] : softFill(c, "card"));
+  const ink = solid ? "#ffffff" : tint ? c.tintInk[tint] : c.sub;
   return (
-    <View style={[{ width: size, height: size, borderRadius: radius, backgroundColor: fill, alignItems: "center", justifyContent: "center" }, style]}>
-      {recolorIcon(icon, ink, iconSize ?? Math.round(size / 2))}
+    <View style={[{ width: size, height: size, borderRadius: radius ?? iconRadius(size), backgroundColor: fill, alignItems: "center", justifyContent: "center" }, style]}>
+      {recolorIcon(icon, ink, iconSize ?? Math.round(size * 0.55))}
     </View>
   );
 }
 
 // --- List rows ---
 
+/** The disclosure chevron's glyph size and weight: iOS's thin, tertiary chevron. */
+export const CHEVRON = { size: 18, stroke: 2.4 } as const;
+
 /**
- * A list row's trailing chevron, or an empty box of the same size when the row opens nothing: every row of a list
- * keeps the column, so the values beside it share one right edge and the lines under them wrap at one width.
+ * A list row's trailing chevron (iOS's: thin, in the tertiary grey), or an empty box of the same size when the row opens
+ * nothing: every row of a list keeps the column, so the values beside it share one right edge.
  */
-export function ChevronSlot({ shown, size = 18, color, style }: { shown: boolean; size?: number; color?: string; style?: StyleProp<ViewStyle> }) {
+export function ChevronSlot({ shown, size = CHEVRON.size, color, style }: { shown: boolean; size?: number; color?: string; style?: StyleProp<ViewStyle> }) {
   const c = useCalm();
   return (
     <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={[{ width: size, height: size, flexShrink: 0 }, style]}>
-      {shown && <ChevronRight size={size} color={color ?? c.label} strokeWidth={1.5} />}
+      {shown && <ChevronRight size={size} color={color ?? c.tertiary} strokeWidth={CHEVRON.stroke} />}
     </View>
   );
 }
@@ -125,9 +141,8 @@ export const onBand = (band: number, h: number) => Math.max(0, (band - h) / 2);
 // --- Numbers ---
 
 /**
- * A number with its unit beside it on the baseline (Home's Num): Barlow (tabular), a step lighter from 28 px
- * up,, in the number's colour, the unit small (0.42×, at least 12 px) and grey in the text face, so "43 ms" reads as a value with a
- * unit, never as a phrase.
+ * A number with its unit beside it on the baseline, as Apple Health sets "80 BPM": Inter bold (tabular) in the number's
+ * colour, the unit half its size, semibold and grey, so "43 ms" reads as a value with a unit, never as a phrase.
  */
 export function Num({ value, unit, size, color, unitColor, style, numberOfLines = 1 }: { value: string; unit?: string; size: number; color?: string; unitColor?: string; style?: StyleProp<TextStyle>; numberOfLines?: number }) {
   const c = useCalm();
@@ -137,7 +152,7 @@ export function Num({ value, unit, size, color, unitColor, style, numberOfLines 
         {value}
       </Txt>
       {unit ? (
-        <Txt size={unitSize(size)} lineHeight={Math.round(unitSize(size) * 1.3)} weight={500} numberOfLines={1} style={{ color: unitColor ?? c.sub, marginLeft: unit === "%" ? 1 : 4 }}>
+        <Txt size={unitSize(size)} lineHeight={Math.round(unitSize(size) * 1.3)} weight={600} numberOfLines={1} style={{ color: unitColor ?? c.sub, marginLeft: unit === "%" ? 1 : 3 }}>
           {unit}
         </Txt>
       ) : null}
@@ -145,25 +160,25 @@ export function Num({ value, unit, size, color, unitColor, style, numberOfLines 
   );
 }
 
-/** The unit's size beside a number of `size` px: 0.42×, never under 12 px. */
-export const unitSize = (size: number) => Math.max(12, Math.round(size * 0.42));
+/** The unit's size beside a number of `size` px: half of it, never under 12 px. */
+export const unitSize = (size: number) => Math.max(12, Math.round(size * 0.5));
 
-/** The caps caption under a number: 11 px semibold, tracked 1.4, the faint grey, never mistaken for the value. */
+/** The small caps caption under a number ("RESTING"): 12 px semibold capitals in the secondary grey. */
 export function Caption({ children, color, numberOfLines = 1, style }: { children: string; color?: string; numberOfLines?: number; style?: StyleProp<TextStyle> }) {
   const c = useCalm();
   return (
-    <Txt size={11} lineHeight={15} weight={600} numberOfLines={numberOfLines} style={[{ color: color ?? c.faint, letterSpacing: 1.4 }, style]}>
+    <Txt size={12} lineHeight={16} weight={600} numberOfLines={numberOfLines} style={[{ color: color ?? c.sub, letterSpacing: 0.4 }, style]}>
       {children.toUpperCase()}
     </Txt>
   );
 }
 
-/** The Calm text styles, for places that build their own Text (ValueUnit's unit, the chart readouts). */
+/** The kit's text styles, for places that build their own Text (ValueUnit's unit, the chart readouts). */
 export const CALM_TYPE = {
-  /** Titles: Figtree 600 17/22. */
+  /** Titles: Inter 600 17/22 (iOS's headline). */
   title: { size: 17, line: 22, weight: 600 },
-  /** Sentences: 14/19. */
-  sentence: { size: 14, line: 19, weight: 400 },
-  /** Labels under numbers: 11/15 600 caps, 1.4 tracking. */
-  caption: { size: 11, line: 15, weight: 600, tracking: 1.4 },
+  /** Sentences: 15/20 (iOS's subhead). */
+  sentence: { size: 15, line: 20, weight: 400 },
+  /** Labels under numbers: 12/16 600 caps, 0.4 tracking. */
+  caption: { size: 12, line: 16, weight: 600, tracking: 0.4 },
 } as const;

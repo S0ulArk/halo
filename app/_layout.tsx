@@ -50,7 +50,7 @@ export default function RootLayout() {
                     (drawn at the host, not where it is declared) still reads them; BottomSheet bridges the screen's own. */}
                   <BottomSheetModalProvider>
                     {/* Nothing mounts before the fonts: Android measures text once, so text laid out with the fallback
-                      font stays clipped after Figtree arrives. */}
+                      font stays clipped after Inter arrives. */}
                     {fontsLoaded ? <Gate /> : <Splash />}
                   </BottomSheetModalProvider>
                 </OverlayHost>

@@ -7,11 +7,13 @@ import { RefreshControl, ScrollView, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { CircleAlert } from "lucide-react-native";
 import { DateSwitcher, DetailHeader, EmptyState, Ground, useTheme, type DetailShellProps } from "@/ui";
-import { QUIET_SCROLL, useBottomClearance } from "@/ui/components/PageShell";
+import { DetailLargeTitle, useBarInset } from "@/ui/components/DetailHeader";
+import { useBottomClearance } from "@/ui/components/PageShell";
 import { useAfterTransition } from "@/ui/components/AfterTransition";
 import { HeroSlot, KEYBOARD_GAP } from "@/ui/components/DetailShell";
 import Animated from "react-native-reanimated";
 import { RevealScroll, Rise, useRevealScroll } from "@/ui/motion/Rise";
+import { GlassTarget } from "@/ui/glass";
 
 type ScrollRef = React.ComponentRef<typeof ScrollView>;
 type ViewRef = React.ComponentRef<typeof View>;
@@ -119,79 +121,73 @@ export function DetailScreen({
   // Keyboard-aware only where there are fields: the score screens keep a plain (Reanimated) ScrollView, whose offset
   // on the UI thread lets sections below the fold rise as they scroll into view (motion/Rise).
   const Scroll = (keyboardAware ? KeyboardAwareScrollView : Animated.ScrollView) as unknown as typeof ScrollView;
-  const { setRef: setScrollRef, y: scrollY } = useRevealScroll(scrollRef, !keyboardAware);
+  // The offset also drives the floating bar (its inline title and scroll edge), so the view reports every frame's
+  // position to the UI thread. A keyboard-aware page's blocks don't rise (RevealScroll stays off there).
+  const { setRef: setScrollRef, y: scrollY } = useRevealScroll(scrollRef);
+  const top = useBarInset();
   return (
     <View style={{ flex: 1, backgroundColor: c.background }}>
       <Ground variant={ground} />
-      <DetailHeader
-        title={title}
-        subtitle={subtitle}
-        info={info}
-        onBack={onBack}
-        lead={lead}
-        dismiss={dismiss}
-        align={align}
-        titleIcon={titleIcon}
-        action={action}
-        ground={ground}
-        dateTitle={inHeader ? dateSwitcher : undefined}
-      />
-      <Scroll
-        ref={setScrollRef}
-        scrollEventThrottle={QUIET_SCROLL}
-        {...(keyboardAware ? { bottomOffset: keyboardOffset, keyboardShouldPersistTaps: "handled" as const } : null)}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: bottomInset ?? clearance }}
-        contentInsetAdjustmentBehavior="never"
-        refreshControl={
-          onRefresh ? (
-            <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={c.foregroundSecondary} colors={[c.foreground]} progressBackgroundColor={c.card} />
-          ) : undefined
-        }
-      >
-        <RevealScroll.Provider value={scrollY}>
-          <View ref={anchors?.content} collapsable={false}>
-            {banner && <View style={{ marginBottom: 16 }}>{banner}</View>}
-            {dateSwitcher && !inHeader && (
-              <View style={{ marginBottom: 16, alignItems: "center" }}>
-                {/* Bare chevrons and the day, no pill: "‹ Mon, Sep 14 ›" (spec §11 F15). */}
-                <DateSwitcher {...dateSwitcher} placement="header" />
+      {/* The page is the glass's backdrop: the bar's round buttons (its overlay) bend what scrolls under them. */}
+      <GlassTarget style={{ flex: 1 }} overlay={<DetailHeader title={title} info={info} onBack={onBack} lead={lead} dismiss={dismiss} align={align} action={action} ground={ground} scrollY={scrollY} />}>
+        <Scroll
+          ref={setScrollRef}
+          scrollEventThrottle={16}
+          {...(keyboardAware ? { bottomOffset: keyboardOffset, keyboardShouldPersistTaps: "handled" as const } : null)}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: top, paddingBottom: bottomInset ?? clearance }}
+          contentInsetAdjustmentBehavior="never"
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} progressViewOffset={top} tintColor={c.foregroundSecondary} colors={[c.foreground]} progressBackgroundColor={c.card} />
+            ) : undefined
+          }
+        >
+          <RevealScroll.Provider value={keyboardAware ? null : scrollY}>
+            <View ref={anchors?.content} collapsable={false}>
+              <DetailLargeTitle title={title} subtitle={subtitle} titleIcon={titleIcon} dateTitle={inHeader ? dateSwitcher : undefined} y={scrollY} />
+              {banner && <View style={{ marginBottom: 16 }}>{banner}</View>}
+              {dateSwitcher && !inHeader && (
+                <View style={{ marginBottom: 16, alignItems: "center" }}>
+                  {/* Bare chevrons and the day, no pill: "‹ Mon, Sep 14 ›" (spec §11 F15). */}
+                  <DateSwitcher {...dateSwitcher} placement="header" />
+                </View>
+              )}
+              {/* Calm: one column of cards 14 px apart, the hero a pastel card of its own (no glow behind it). */}
+              <View style={{ gap: 14 }}>
+                {/* Each block rises into place as the screen opens (a tab) or once its push has landed, cascading, and the
+                    ones below the fold as they scroll in. A block mounting mid-push slides in with the screen instead. */}
+                {(hero || side) && (
+                  <View style={{ gap: 14 }}>
+                    {hero && (
+                      <Rise index={0}>
+                        <HeroSlot hero={hero} glow={heroGlow ?? null} />
+                      </Rise>
+                    )}
+                    {side && (
+                      <Rise index={1}>
+                        {/* Calm: no notch; the hero is a card of its own. */}
+                        {side}
+                      </Rise>
+                    )}
+                  </View>
+                )}
+                {below && (summary || !hero) && insight && <Rise index={2}>{insight}</Rise>}
+                {below && primary && <Rise index={2}>{primary}</Rise>}
+                {opened && rest.length > 0 && (
+                  <View style={{ gap: 14 }}>
+                    {rest.map((s, i) => (
+                      <Rise key={i} index={3 + i}>
+                        {s}
+                      </Rise>
+                    ))}
+                  </View>
+                )}
+                {opened && footer && <Rise index={3 + rest.length}>{footer}</Rise>}
               </View>
-            )}
-            {/* Calm: one column of cards 14 px apart, the hero a pastel card of its own (no glow behind it). */}
-            <View style={{ gap: 14 }}>
-              {/* Each block rises into place as the screen opens (a tab) or once its push has landed, cascading, and the
-                  ones below the fold as they scroll in. A block mounting mid-push slides in with the screen instead. */}
-              {(hero || side) && (
-                <View style={{ gap: 14 }}>
-                  {hero && (
-                    <Rise index={0}>
-                      <HeroSlot hero={hero} glow={heroGlow ?? null} />
-                    </Rise>
-                  )}
-                  {side && (
-                    <Rise index={1}>
-                      {/* Calm: no notch; the hero is a card of its own. */}
-                      {side}
-                    </Rise>
-                  )}
-                </View>
-              )}
-              {below && (summary || !hero) && insight && <Rise index={2}>{insight}</Rise>}
-              {below && primary && <Rise index={2}>{primary}</Rise>}
-              {opened && rest.length > 0 && (
-                <View style={{ gap: 14 }}>
-                  {rest.map((s, i) => (
-                    <Rise key={i} index={3 + i}>
-                      {s}
-                    </Rise>
-                  ))}
-                </View>
-              )}
-              {opened && footer && <Rise index={3 + rest.length}>{footer}</Rise>}
             </View>
-          </View>
-        </RevealScroll.Provider>
-      </Scroll>
+          </RevealScroll.Provider>
+        </Scroll>
+      </GlassTarget>
     </View>
   );
 }

@@ -21,6 +21,9 @@ export {
   useSlide,
   Reveal,
   usePop,
+  SPRING,
+  iosSpring,
+  haptic,
   type EasingFn,
   type EntranceOptions,
   type FadeInProps,
@@ -62,7 +65,8 @@ export { InsightCard, type InsightCardProps } from "./components/InsightCard";
 export { HomeInsight, type HomeInsightItem } from "./components/HomeInsight";
 export { TonightPlan, type SleepPlanVM } from "./components/TonightPlan";
 export { DateSwitcher, stepDay, weekOf, type DateSwitcherProps } from "./components/DateSwitcher";
-export { DetailHeader, DetailHeaderRow, HeaderFade, HeaderFrame, HeaderRow, HEADER_FADE, TitleHeader, type DetailHeaderProps } from "./components/DetailHeader";
+export { DetailHeader, DetailHeaderRow, DetailLargeTitle, HeaderFade, HeaderFrame, HeaderRow, HEADER_FADE, LargeTitle, NavBar, TitleHeader, useBarInset, BAR_ROW, type DetailHeaderProps } from "./components/DetailHeader";
+export { GlassButton, GlassCapsule, BackButton, BAR_BUTTON } from "./components/GlassButton";
 export { AfterTransition, useAfterTransition } from "./components/AfterTransition";
 export { DetailShell, type DetailShellProps } from "./components/DetailShell";
 export { PageShell, Ground, type PageShellProps } from "./components/PageShell";
@@ -70,4 +74,6 @@ export { HomeHeader, StreakFlame, UserAvatar, type HomeHeaderProps, type HeaderR
 export { SyncStatus, syncView, type SyncShellStatus } from "./components/SyncStatus";
 export { TabBar, TABS, Glass, CheckInAction, Monogram, type TabItem, type TabBarProps } from "./components/TabBar";
 export { ChartFigure, Pill, GlowDot, Grid, AxisText } from "./components/ChartFrame";
-export { usePress } from "./components/press";
+export { usePress, usePressStyle, PRESS } from "./components/press";
+export { SegmentedControl, type SegmentItem, type SegmentedControlProps } from "./components/Segmented";
+export { Switch } from "./components/Switch";

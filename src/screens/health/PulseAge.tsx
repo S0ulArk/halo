@@ -83,7 +83,7 @@ export function PulseAgeHero({ age, deltaYears, provisional = false, reason, you
 export function PulseAgeHeroSkeleton({ orbSize = 280, children }: { orbSize?: number; children?: React.ReactNode }) {
   const c = useCalm();
   return (
-    <View importantForAccessibility="no-hide-descendants" style={{ alignSelf: "stretch", borderRadius: 32, borderWidth: 1, borderColor: c.tintEdge.mint, backgroundColor: c.tint.mint, padding: 20, gap: 18 }}>
+    <View importantForAccessibility="no-hide-descendants" style={{ alignSelf: "stretch", borderRadius: 20, borderWidth: 1, borderColor: c.tintEdge.mint, backgroundColor: c.tint.mint, padding: 20, gap: 18 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
         <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: c.chip, alignItems: "center", justifyContent: "center" }}>
           <Hourglass size={22} color={c.tintInk.mint} strokeWidth={1.75} />

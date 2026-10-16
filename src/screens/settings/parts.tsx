@@ -1,13 +1,16 @@
-// The small pieces Settings, More and Your data share, in the Calm style: grey body sentences, the label/value row,
-// hairlines between rows, the two-up button grid, the Calm pill buttons, the icon tile beside a row's name, the
-// segmented radio (theme, sex), a tinted callout, the confirmation dialog and the progress bar. Every colour comes
-// from useCalm(); the exported names and props are the ones the screens have always used.
+// The small pieces Settings, More and Your data share, in the iOS Settings look: grey body sentences, the label/value
+// row (the label in ink, the value in grey), half-point hairlines between rows, the two-up button grid, iOS's button
+// styles, the icon square beside a row's name, the segmented control (theme, sex), a tinted callout, the alert-style
+// confirmation dialog and the progress bar. Every colour comes from useCalm(); the exported names and props are the
+// ones the screens have always used.
 import * as React from "react";
 import { Animated, Easing, Pressable, StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from "react-native";
 import type { LucideIcon } from "lucide-react-native";
 import { OverlayModal } from "@/ui/components/Overlay";
+import { iconRadius } from "@/ui/components/calmKit";
 import { MOTION, Txt, useTheme, type ButtonProps, type ColorToken } from "@/ui";
-import { font } from "@/ui/fonts";
+import { TABULAR } from "@/ui/fonts";
+import { haptic } from "@/ui/motion/haptics";
 import { CalmButton, CalmProgress, CalmSegmented, Sentence, useCalm, type CalmTint, type On } from "./calmKit";
 
 type Palette = ReturnType<typeof useCalm>;
@@ -37,7 +40,7 @@ export function toneOf(c: Palette, token: ColorToken | undefined): string {
   }
 }
 
-/** A grey sentence (14/19), as a block. */
+/** A grey sentence (15/20), as a block. */
 export function Body({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   return (
     <View style={style}>
@@ -47,9 +50,9 @@ export function Body({ children, style }: { children: React.ReactNode; style?: S
 }
 
 /**
- * One settings row: the label left in ink, the value right in grey (or the row's own control). `numeric` sets the
- * value in the numeric face with `unit` small and grey beside it; `detail` is a grey line under the value. The label
- * and the value's first line share one line however either wraps (a one-line row sits in the middle of its 52 px).
+ * One settings row, iOS's: the label left in ink, the value right in grey (or the row's own control). `numeric` sets
+ * the value in tabular figures with `unit` beside it; `detail` is a grey line under the value. The label and the
+ * value's first line share one line however either wraps (a one-line row sits in the middle of its 48 px).
  */
 export function Row({
   label,
@@ -70,32 +73,30 @@ export function Row({
 }) {
   const c = useCalm();
   const color = toneOf(c, valueColor);
-  // The first line: the numeric value's 22 px (a word's 20).
-  const line = value !== undefined && !numeric ? 20 : 22;
   return (
     <View
       accessible={value !== undefined}
       accessibilityLabel={value !== undefined ? `${label}: ${value}${unit ? ` ${unit}` : ""}${detail ? `, ${detail}` : ""}` : undefined}
-      style={{ minHeight: 52, flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12, paddingVertical: (52 - line) / 2 }}
+      style={{ minHeight: 48, flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12, paddingVertical: (48 - 21) / 2 }}
     >
-      <Txt size={15} lineHeight={20} weight={500} style={{ color: c.ink, flexShrink: 0, maxWidth: "50%", marginTop: (line - 20) / 2 }}>
+      <Txt size={16} lineHeight={21} style={{ color: c.ink, flexShrink: 0, maxWidth: "50%" }}>
         {label}
       </Txt>
       {value !== undefined ? (
         <View style={{ flexShrink: 1, alignItems: "flex-end" }}>
           {numeric ? (
             <View style={{ flexDirection: "row", alignItems: "baseline" }}>
-              <Txt size={18} lineHeight={22} style={[font.numeric(700), { color: valueColor === "foregroundSecondary" ? c.ink : color }]}>
+              <Txt size={16} lineHeight={21} weight={500} style={[TABULAR, { color }]}>
                 {value}
               </Txt>
               {unit ? (
-                <Txt size={13} lineHeight={18} weight={500} style={{ color: c.sub, marginLeft: 4 }}>
+                <Txt size={16} lineHeight={21} style={{ color: c.sub, marginLeft: 4 }}>
                   {unit}
                 </Txt>
               ) : null}
             </View>
           ) : (
-            <Txt size={15} lineHeight={20} align="right" style={{ color }}>
+            <Txt size={16} lineHeight={21} align="right" style={{ color }}>
               {value}
             </Txt>
           )}
@@ -106,20 +107,20 @@ export function Row({
           ) : null}
         </View>
       ) : (
-        <View style={{ minHeight: line, justifyContent: "center" }}>{children}</View>
+        <View style={{ minHeight: 21, justifyContent: "center" }}>{children}</View>
       )}
     </View>
   );
 }
 
-/** Hairlines between children (and on top with `top`). */
+/** Half-point hairlines (iOS's separator) between children, and on top with `top`. */
 export function Divided({ children, top = false, style }: { children: React.ReactNode; top?: boolean; style?: StyleProp<ViewStyle> }) {
   const c = useCalm();
   const items = React.Children.toArray(children).filter(Boolean);
   return (
-    <View style={[top ? { borderTopWidth: 1, borderTopColor: c.line } : null, style]}>
+    <View style={[top ? { borderTopWidth: 0.5, borderTopColor: c.line } : null, style]}>
       {items.map((child, i) => (
-        <View key={i} style={i > 0 ? { borderTopWidth: 1, borderTopColor: c.line } : undefined}>
+        <View key={i} style={i > 0 ? { borderTopWidth: 0.5, borderTopColor: c.line } : undefined}>
           {child}
         </View>
       ))}
@@ -137,10 +138,7 @@ export function Cell({ wide = false, children }: { wide?: boolean; children: Rea
   return <View style={wide ? { width: "100%" } : { flexGrow: 1, flexBasis: "40%" }}>{children}</View>;
 }
 
-/**
- * The quiet action button: a Calm pill with teal ink, grey on a card (white on the ground with `on="ground"`);
- * `danger` makes it a rose wash with rose ink.
- */
+/** The quiet action button: iOS's tinted capsule (blue at 15 %, blue text); `danger` makes it the red one. */
 export function OutlineButton({ children, danger = false, onPress, disabled, accessibilityLabel, style, on = "card", icon }: Omit<ButtonProps, "variant" | "size"> & { danger?: boolean; on?: On; icon?: LucideIcon }) {
   return (
     <CalmButton variant={danger ? "danger" : "secondary"} on={on} onPress={onPress} disabled={disabled} accessibilityLabel={accessibilityLabel} icon={icon} style={style}>
@@ -149,13 +147,13 @@ export function OutlineButton({ children, danger = false, onPress, disabled, acc
   );
 }
 
-/** The 44 px tile beside a row's name: a soft square in a family's pastel. */
+/** The 44 px square beside a row's name: a family's soft fill under its own coloured glyph (iOS's tinted icon). */
 export function Tile({ children, tint = "sky" }: { children: React.ReactNode; tint?: CalmTint }) {
   const c = useCalm();
-  return <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: c.tint[tint], alignItems: "center", justifyContent: "center", overflow: "hidden" }}>{children}</View>;
+  return <View style={{ width: 44, height: 44, borderRadius: iconRadius(44), backgroundColor: c.tint[tint], alignItems: "center", justifyContent: "center", overflow: "hidden" }}>{children}</View>;
 }
 
-/** The segmented radio (theme, sex): options on the ground's grey, the chosen one solid teal. */
+/** The segmented radio (theme, sex): iOS's segmented control, the thumb sliding to the chosen option. */
 export function Segmented<V extends string>({
   value,
   onChange,
@@ -179,9 +177,9 @@ export function Segmented<V extends string>({
 export function Callout({ tint = "sand", icon: Icon, title, children, role = "summary", style }: { tint?: CalmTint; icon?: LucideIcon; title: string; children?: React.ReactNode; role?: "summary" | "alert"; style?: StyleProp<ViewStyle> }) {
   const c = useCalm();
   return (
-    <View accessibilityRole={role} style={[{ borderRadius: 20, backgroundColor: c.tint[tint], padding: 16, gap: 6 }, style]}>
+    <View accessibilityRole={role} style={[{ borderRadius: 16, backgroundColor: c.tint[tint], padding: 14, gap: 6 }, style]}>
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
-        {Icon ? <Icon size={18} color={c.tintInk[tint]} strokeWidth={2} style={{ marginTop: 1 }} /> : null}
+        {Icon ? <Icon size={18} color={c.tintInk[tint]} strokeWidth={2.2} style={{ marginTop: 1 }} /> : null}
         <Txt size={15} lineHeight={20} weight={600} style={{ color: c.ink, flex: 1 }}>
           {title}
         </Txt>
@@ -207,8 +205,9 @@ export type ConfirmProps = {
 };
 
 /**
- * The confirmation dialog: a white 28 px card over the dim, the title and a grey sentence, then the action (teal, or
- * rose when it removes data) above Cancel. Closing is blocked while the action runs.
+ * The confirmation dialog, an iOS alert: a card with 28 px corners that settles in from a touch larger over the dim,
+ * the centred title and a grey sentence, then the action (filled blue, or red when it removes data) above Cancel.
+ * Closing is blocked while the action runs.
  */
 export function ConfirmDialog({ open, onClose, title, description, confirm, pending, onConfirm, danger = false, error }: ConfirmProps) {
   const { c: t0 } = useTheme();
@@ -230,6 +229,7 @@ export function ConfirmDialog({ open, onClose, title, description, confirm, pend
   if (!open && !closing) return null;
   const close = () => !busy && onClose();
   const run = async () => {
+    haptic.confirm();
     setBusy(true);
     try {
       await onConfirm();
@@ -246,23 +246,23 @@ export function ConfirmDialog({ open, onClose, title, description, confirm, pend
         <Animated.View
           accessibilityViewIsModal
           style={{
-            width: Math.min(384, width - 32),
+            width: Math.min(340, width - 48),
             borderRadius: 28,
             backgroundColor: c.card,
             overflow: "hidden",
-            padding: 24,
-            gap: 20,
+            padding: 20,
+            gap: 18,
             opacity: t,
-            transform: [{ scale: t.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) }],
+            transform: [{ scale: t.interpolate({ inputRange: [0, 1], outputRange: [1.08, 1] }) }],
           }}
         >
-          <View style={{ gap: 8 }}>
-            <Txt size={17} lineHeight={22} weight={600} accessibilityRole="header" style={{ color: c.ink }}>
+          <View style={{ gap: 6 }}>
+            <Txt size={17} lineHeight={22} weight={600} align="center" accessibilityRole="header" style={{ color: c.ink }}>
               {title}
             </Txt>
-            <Sentence>{description}</Sentence>
+            <Sentence align="center">{description}</Sentence>
             {!!error && (
-              <Sentence color={c.tintInk.rose} accessibilityRole="alert">
+              <Sentence align="center" color={c.system.red} accessibilityRole="alert">
                 {error}
               </Sentence>
             )}
@@ -271,7 +271,7 @@ export function ConfirmDialog({ open, onClose, title, description, confirm, pend
             <CalmButton variant={danger ? "danger" : "primary"} onPress={() => void run()} disabled={busy}>
               {busy && pending ? pending : confirm}
             </CalmButton>
-            <CalmButton variant="secondary" on="card" onPress={close} disabled={busy}>
+            <CalmButton variant="quiet" onPress={close} disabled={busy}>
               Cancel
             </CalmButton>
           </View>
@@ -281,7 +281,7 @@ export function ConfirmDialog({ open, onClose, title, description, confirm, pend
   );
 }
 
-/** A thin teal progress bar on the grey track. */
+/** A thin blue progress bar on the quiet track. */
 export function ProgressBar({ value }: { value: number }) {
   return <CalmProgress value={value} />;
 }

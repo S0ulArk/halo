@@ -373,7 +373,7 @@ function MealList({ vm, google, onEdit, onDelete, onSeparate, onAdd }: { vm: Nut
       <SectionLabel>Today’s food</SectionLabel>
       {meals.map((g: MealGroup) => (
         <View key={g.meal} style={{ gap: 8 }}>
-          <View style={{ borderRadius: 32, borderWidth: 1, borderColor: c.edge, backgroundColor: c.card, ...(c.shadow ? { boxShadow: c.shadow } : null), overflow: "hidden", paddingVertical: 4 }}>
+          <View style={{ borderRadius: 20, borderWidth: 1, borderColor: c.edge, backgroundColor: c.card, ...(c.shadow ? { boxShadow: c.shadow } : null), overflow: "hidden", paddingVertical: 4 }}>
             <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 12, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 2 }}>
               <Caption>{g.label}</Caption>
               <Num value={grouped(g.kcal)} unit="kcal" size={15} />
