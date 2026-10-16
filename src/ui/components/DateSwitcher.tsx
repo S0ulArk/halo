@@ -1,10 +1,18 @@
+// The day (or week) switcher under a page's large title: a capsule in the card colour with the action blue's chevrons
+// either side of the day, iOS's; a tap on the day opens the month calendar. Every press settles and dims on the UI
+// thread (the kit's press) and a step ticks under the finger.
 import * as React from "react";
 import { ActivityIndicator, Pressable, View, type StyleProp, type ViewStyle } from "react-native";
+import Animated from "react-native-reanimated";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
 import { dayLabel, rangeLabel } from "@/lib/format";
 import { useCalm } from "@/ui/calm";
+import { haptic } from "@/ui/motion/haptics";
 import { CalendarSheet, type CalendarContext } from "./CalendarSheet";
+import { usePress, usePressStyle } from "./press";
 import { Txt } from "./Text";
+
+const PressableView = Animated.createAnimatedComponent(Pressable);
 
 export type DateSwitcherProps = {
   mode: "day" | "week";
@@ -47,28 +55,35 @@ export function weekOf(day: string): [string, string] {
   return [mon, addDays(mon, 6)];
 }
 
-/** A soft chevron in the pill: grey, a faint disc while pressed, a hairline grey where it stops. */
+/** A chevron in the capsule: the action blue, the tertiary grey where it stops; it settles under the finger and ticks. */
 function Step({ dir, disabled, unit, box, onPress }: { dir: -1 | 1; disabled: boolean; unit: string; box: number; onPress: () => void }) {
   const c = useCalm();
-  const color = disabled ? c.line : c.sub;
+  const press = usePress(0.86);
+  const pressed = usePressStyle(press, { dim: 0.5 });
+  const color = disabled ? c.tertiary : c.teal;
   return (
-    <Pressable
-      onPress={onPress}
+    <PressableView
+      onPress={() => {
+        haptic.select();
+        onPress();
+      }}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={`${dir < 0 ? "Previous" : "Next"} ${unit}`}
       accessibilityState={{ disabled }}
       hitSlop={4}
-      style={({ pressed }) => ({ width: box, height: box, borderRadius: box / 2, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? c.line : "transparent" })}
+      style={[{ width: box, height: box, borderRadius: box / 2, alignItems: "center", justifyContent: "center" }, pressed]}
     >
-      {dir < 0 ? <ChevronLeft size={18} color={color} strokeWidth={2.25} /> : <ChevronRight size={18} color={color} strokeWidth={2.25} />}
-    </Pressable>
+      {dir < 0 ? <ChevronLeft size={20} color={color} strokeWidth={2.4} /> : <ChevronRight size={20} color={color} strokeWidth={2.4} />}
+    </PressableView>
   );
 }
 
 /**
- * The Calm date pill: a white pill (`calm.card`, 40 px, radius 20) with soft grey chevrons either side of the day in
- * Figtree 600 ink; a tap on the day opens the calendar. In a detail header it is the title.
+ * The date capsule: the card colour (40 px, round ends) with blue chevrons either side of the day in Inter 600 ink; a
+ * tap on the day opens the calendar. In a detail page it sits under the large title.
  */
 export function DateSwitcher({ mode, date, today, firstDay, onChange, onOpenCalendar, calendar, placement = "body", narrow = false, loading = false, style }: DateSwitcherProps) {
   const c = useCalm();
@@ -85,18 +100,22 @@ export function DateSwitcher({ mode, date, today, firstDay, onChange, onOpenCale
   const label = week ? rangeLabel(weekStart, weekEnd) : dayLabel(date, today);
   const bare = placement === "header";
   const stepBox = narrow ? 32 : 36;
+  const labelPress = usePress(0.95);
+  const labelStyle = usePressStyle(labelPress, { dim: 0.55 });
 
   return (
     <View style={[{ flexDirection: "row", alignItems: "center", height: 40, borderRadius: 20, backgroundColor: c.card, paddingHorizontal: 2 }, style]}>
       <Step dir={-1} disabled={atStart} unit={unit} box={stepBox} onPress={() => by(-step)} />
-      <Pressable
+      <PressableView
         onPress={openCalendar}
+        onPressIn={labelPress.onPressIn}
+        onPressOut={labelPress.onPressOut}
         disabled={!openCalendar}
         accessibilityRole="button"
         accessibilityLabel={`${label}. Open calendar`}
         accessibilityState={{ busy: loading }}
         hitSlop={{ top: 8, bottom: 8 }}
-        style={({ pressed }) => ({ height: 36, minWidth: bare ? 104 : narrow ? 0 : 88, borderRadius: 18, paddingHorizontal: narrow ? 6 : 10, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? c.line : "transparent" })}
+        style={[{ height: 36, minWidth: bare ? 104 : narrow ? 0 : 88, borderRadius: 18, paddingHorizontal: narrow ? 6 : 10, alignItems: "center", justifyContent: "center" }, labelStyle]}
       >
         {loading ? (
           <ActivityIndicator size="small" color={c.teal} />
@@ -105,7 +124,7 @@ export function DateSwitcher({ mode, date, today, firstDay, onChange, onOpenCale
             {label}
           </Txt>
         )}
-      </Pressable>
+      </PressableView>
       <Step dir={1} disabled={atEnd} unit={unit} box={stepBox} onPress={() => by(step)} />
       {ownCalendar && (
         <CalendarSheet

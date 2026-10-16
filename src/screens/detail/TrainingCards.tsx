@@ -1,19 +1,23 @@
 // The Activity tab's training cards and the Activity screen's Training Effect (version 19): Garmin-style Training
-// Readiness with Recovery Time, Training Status, and a workout's Aerobic Training Effect. Built from the kit (SectionShell,
-// HaloRing, TonePill, the calm text and number primitives, CalmProgress), so they follow its look; nothing animates here
-// but the ring's own draw-on (Reanimated, in HaloRing), and the cards rise with their section (DetailScreen's Rise).
+// Readiness with Recovery Time, Training Status, and a workout's Aerobic Training Effect, in Apple Fitness's look: an
+// Activity ring with the score in it and the band word in its tone's colour, numbers in Inter bold with small grey
+// units, each factor a slim capsule bar, Training Effect as five rounded steps lit up to the workout's level. The ring
+// sweeps in on its spring and the bars grow in once, staggered, on the UI thread (scales, never a re-layout); the
+// cards rise with their section (DetailScreen's Rise).
 import * as React from "react";
 import { View } from "react-native";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { clock, formatValue } from "@/lib/format";
 import { reasonCopy } from "@/lib/reasons";
 import type { TrainingEffectVM, TrainingVM } from "@/queries";
 import { ReasonPlaceholder, SectionShell, Txt, type InfoContent } from "@/ui";
 import { useCalm } from "@/ui/calm";
 import { HaloRing } from "@/ui/components/Halo";
+import { alpha } from "@/lib/utils";
 import { TonePill } from "@/ui/components/Meter";
-import { CalmProgress } from "@/screens/settings/calmKit";
 import { SOURCE_NOTE } from "./info";
 import { Caption, Num, Sentence, Title, toneInk } from "./calmKit";
+import { useGrowIn } from "./ios";
 
 /** An info sheet's paragraph in the kit's body text. */
 function P({ children }: { children: React.ReactNode }) {
@@ -85,6 +89,22 @@ const hoursText = (h: number) => {
   return min === 60 ? `${whole + 1} h` : min ? `${whole} h ${min} min` : `${whole} h`;
 };
 
+/** A factor's colour by its value: 75+ green, 50+ blue, 25+ amber, under that red; none the track grey. */
+const factorColor = (c: ReturnType<typeof useCalm>, v: number | null) => (v === null ? c.tertiary : v >= 75 ? c.tintInk.mint : v >= 50 ? c.tintInk.sky : v >= 25 ? c.tintInk.sand : c.system.red);
+
+/** A slim capsule bar filled to `value` (0-1), growing in from its left end once, `index` steps after the first. */
+function Bar({ value, color, index }: { value: number; color: string; index: number }) {
+  const c = useCalm();
+  const grow = useGrowIn(index, 160);
+  const anim = useAnimatedStyle(() => ({ transform: [{ scaleX: grow.value }] }));
+  const pct = Math.max(0, Math.min(1, value)) * 100;
+  return (
+    <View accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: Math.round(pct) }} style={{ height: 6, borderRadius: 3, backgroundColor: c.fill, overflow: "hidden" }}>
+      <Animated.View style={[{ width: `${pct}%`, height: "100%", borderRadius: 3, backgroundColor: color, transformOrigin: "left center" }, anim]} />
+    </View>
+  );
+}
+
 /** Training Readiness with its factors and Recovery Time (the Activity tab). */
 export function TrainingReadinessCard({ vm, timeZone }: { vm: TrainingVM; timeZone: string }) {
   const c = useCalm();
@@ -97,42 +117,45 @@ export function TrainingReadinessCard({ vm, timeZone }: { vm: TrainingVM; timeZo
       ) : (
         <View style={{ gap: 16 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-            <HaloRing size={84} progress={r.value.score / 100} stroke={7} track={c.line} color={toneInk(c, r.value.tone)}>
+            <HaloRing size={88} progress={r.value.score / 100} stroke={9} track={alpha(toneInk(c, r.value.tone) === c.sub ? c.ink : toneInk(c, r.value.tone), 0.16)} color={toneInk(c, r.value.tone) === c.sub ? c.teal : toneInk(c, r.value.tone)}>
               <View accessible accessibilityLabel={`Training Readiness ${r.value.score} of 100, ${r.value.band}`} style={{ alignItems: "center" }}>
-                <Num value={String(r.value.score)} size={28} color={c.ink} />
+                <Num value={String(r.value.score)} size={26} color={c.ink} />
               </View>
             </HaloRing>
-            <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-                <TonePill tone={r.value.tone}>{r.value.band}</TonePill>
-                {r.value.atWake !== null && vm.isToday && r.value.atWake !== r.value.score ? (
-                  <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}>
-                    <Caption>At wake</Caption>
-                    <Num value={String(r.value.atWake)} size={15} color={c.sub} />
-                  </View>
-                ) : null}
-              </View>
+            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+              <Txt size={20} lineHeight={25} weight={700} style={{ color: toneInk(c, r.value.tone) === c.sub ? c.ink : toneInk(c, r.value.tone) }}>
+                {r.value.band}
+              </Txt>
+              {r.value.atWake !== null && vm.isToday && r.value.atWake !== r.value.score ? (
+                <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}>
+                  <Caption>At wake</Caption>
+                  <Num value={String(r.value.atWake)} size={15} color={c.sub} />
+                </View>
+              ) : null}
               <Sentence size={13}>{r.value.line}</Sentence>
             </View>
           </View>
           {rt && (
-            <View accessible accessibilityLabel={rt.hours > 0 ? `Recovery time ${hoursText(rt.hours)}` : "Recovery time: fully recovered"} style={{ gap: 2 }}>
+            <View accessible accessibilityLabel={rt.hours > 0 ? `Recovery time ${hoursText(rt.hours)}` : "Recovery time: fully recovered"} style={{ gap: 2, borderTopWidth: 0.5, borderTopColor: c.line, paddingTop: 12 }}>
               <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", justifyContent: "space-between", columnGap: 12 }}>
-                <Title size={15}>Recovery time</Title>
+                <Txt size={16} lineHeight={21} style={{ color: c.ink }}>
+                  Recovery time
+                </Txt>
                 {rt.hours > 0 ? <Num value={hoursText(rt.hours)} size={20} color={c.tintInk.peach} /> : <Sentence color={c.tintInk.mint}>Recovered</Sentence>}
               </View>
               {rt.readyAt !== null && vm.isToday ? <Sentence size={13}>{`Ready for hard training around ${clock(rt.readyAt, timeZone)}${rt.hours >= 24 ? ` in ${Math.round(rt.hours / 24)} day${Math.round(rt.hours / 24) === 1 ? "" : "s"}` : ""}`}</Sentence> : null}
             </View>
           )}
-          <View style={{ gap: 12 }}>
-            {r.value.factors.map((f) => (
+          <View style={{ gap: 12, borderTopWidth: 0.5, borderTopColor: c.line, paddingTop: 12 }}>
+            {r.value.factors.map((f, i) => (
               <View key={f.key} accessible accessibilityLabel={`${f.label}: ${f.value === null ? "not available" : `${f.value} of 100`}`} style={{ gap: 6 }}>
                 <View style={{ flexDirection: "row", alignItems: "baseline", gap: 12 }}>
-                  <Sentence>{f.label}</Sentence>
-                  <View style={{ flex: 1 }} />
+                  <Txt size={15} lineHeight={20} style={{ color: c.ink, flex: 1 }}>
+                    {f.label}
+                  </Txt>
                   <Num value={f.value === null ? "--" : String(f.value)} size={15} color={f.value === null ? c.faint : c.ink} />
                 </View>
-                <CalmProgress value={(f.value ?? 0) / 100} color={f.value === null ? c.line : f.value >= 75 ? c.tintInk.mint : f.value >= 50 ? c.tintInk.sky : f.value >= 25 ? c.tintInk.sand : c.tintInk.rose} height={6} />
+                <Bar value={(f.value ?? 0) / 100} color={factorColor(c, f.value)} index={i} />
               </View>
             ))}
           </View>
@@ -157,12 +180,14 @@ export function TrainingStatusCard({ vm }: { vm: TrainingVM }) {
         />
       ) : (
         <View style={{ gap: 14 }}>
-          <View style={{ gap: 6 }}>
-            <Title>{s.value.status}</Title>
+          <View style={{ gap: 4 }}>
+            <Txt size={22} lineHeight={28} weight={700} style={{ color: toneInk(c, s.value.tone) === c.sub ? c.ink : toneInk(c, s.value.tone) }}>
+              {s.value.status}
+            </Txt>
             <Sentence>{s.value.line}</Sentence>
           </View>
           {/* Two columns at most: the numbers on their own line under each label, so nothing truncates at 363 dp. */}
-          <View style={{ flexDirection: "row", flexWrap: "wrap", rowGap: 12 }}>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", rowGap: 12, borderTopWidth: 0.5, borderTopColor: c.line, paddingTop: 12 }}>
             <View style={{ width: "50%", gap: 2 }}>
               <Caption>Load ratio</Caption>
               <Num value={s.value.loadRatio === null ? "--" : formatValue("decimal2", s.value.loadRatio)} size={20} color={s.value.loadRatio === null ? c.faint : c.ink} />
@@ -187,9 +212,32 @@ export function TrainingStatusCard({ vm }: { vm: TrainingVM }) {
   );
 }
 
+/** Training Effect's five levels as rounded steps, lit in the tone's colour up to the workout's level (a part step at the top). */
+function EffectSteps({ te, color }: { te: number; color: string }) {
+  const c = useCalm();
+  return (
+    <View style={{ flexDirection: "row", gap: 4 }}>
+      {[0, 1, 2, 3, 4].map((i) => (
+        <View key={i} style={{ flex: 1, height: 8, borderRadius: 4, backgroundColor: c.fill, overflow: "hidden" }}>
+          <EffectFill share={Math.max(0, Math.min(1, te - i))} color={color} index={i} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** One step's light, growing in from its left once after the step before it. */
+function EffectFill({ share, color, index }: { share: number; color: string; index: number }) {
+  const grow = useGrowIn(index, 160, 420);
+  const anim = useAnimatedStyle(() => ({ transform: [{ scaleX: grow.value }] }));
+  if (share <= 0) return null;
+  return <Animated.View style={[{ width: `${share * 100}%`, height: "100%", borderRadius: 4, backgroundColor: color, transformOrigin: "left center" }, anim]} />;
+}
+
 /** A workout's Aerobic Training Effect, its main benefit and the recovery time it added (the Activity screen). */
 export function TrainingEffectCard({ te }: { te: TrainingEffectVM | null }) {
   const c = useCalm();
+  const ink = te ? (toneInk(c, te.tone) === c.sub ? c.teal : toneInk(c, te.tone)) : c.sub;
   return (
     <SectionShell variant="card" title="Training effect" accent="activity" info={TRAINING_EFFECT_INFO}>
       {te === null ? (
@@ -197,11 +245,11 @@ export function TrainingEffectCard({ te }: { te: TrainingEffectVM | null }) {
       ) : (
         <View style={{ gap: 14 }}>
           <View accessible accessibilityLabel={`Aerobic Training Effect ${formatValue("decimal1", te.te)} of 5, ${te.label}`} style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 12, rowGap: 8 }}>
-            <Num value={formatValue("decimal1", te.te)} unit="of 5" size={36} color={toneInk(c, te.tone)} />
+            <Num value={formatValue("decimal1", te.te)} unit="of 5" size={36} color={ink} />
             <TonePill tone={te.tone}>{te.label}</TonePill>
           </View>
-          <CalmProgress value={te.te / 5} color={toneInk(c, te.tone)} height={6} />
-          <View style={{ gap: 4 }}>
+          <EffectSteps te={te.te} color={ink} />
+          <View style={{ gap: 4, borderTopWidth: 0.5, borderTopColor: c.line, paddingTop: 12 }}>
             <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", columnGap: 8 }}>
               <Caption>Main benefit</Caption>
               <Title size={15}>{te.benefit}</Title>
@@ -209,9 +257,11 @@ export function TrainingEffectCard({ te }: { te: TrainingEffectVM | null }) {
             <Sentence size={13}>{te.benefitLine}</Sentence>
           </View>
           {te.recoveryHours > 0 ? (
-            <View accessible accessibilityLabel={`Adds ${hoursText(te.recoveryHours)} of recovery time`} style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", columnGap: 8 }}>
-              <Caption>Adds recovery time</Caption>
-              <Num value={hoursText(te.recoveryHours)} size={17} color={c.tintInk.peach} />
+            <View accessible accessibilityLabel={`Adds ${hoursText(te.recoveryHours)} of recovery time`} style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", justifyContent: "space-between", columnGap: 8 }}>
+              <Txt size={16} lineHeight={21} style={{ color: c.ink }}>
+                Adds recovery time
+              </Txt>
+              <Num value={hoursText(te.recoveryHours)} size={20} color={c.tintInk.peach} />
             </View>
           ) : null}
         </View>

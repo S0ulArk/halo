@@ -1,25 +1,29 @@
-// Sleep's measure cards (Calm), ported from the web's src/app/(app)/sleep/SleepCards.tsx:
-// hours against need as two bars, the last five nights' bed and wake times against your usual ones, and the planner's
-// bedtimes. Plain views and one SVG path, no chart library.
+// Sleep's measure cards, ported from the web's src/app/(app)/sleep/SleepCards.tsx, in Apple Health's chart language:
+// hours against need as two rounded capsule bars (the need's parts stacked, a legend list under them), the last five
+// nights' bed and wake times as rounded floating bars against dashed rules with the clock on the right and the optimal
+// times a dashed line, and tonight's bedtimes as an inset grouped list. Plain views and one SVG path, no chart library;
+// the bars grow in once on the UI thread (a scale from their start, never a re-layout).
 import * as React from "react";
 import { View } from "react-native";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import Svg, { Line, Path } from "react-native-svg";
 import { deltaTone } from "@/lib/bands";
 import { clock, hmm } from "@/lib/format";
 import { alpha } from "@/lib/utils";
 import type { KeyStat, SleepVM } from "@/queries";
-import { DeltaMark, ReasonPlaceholder, Txt, useTheme } from "@/ui";
+import { DeltaMark, InfoButton, ReasonPlaceholder, Txt, useTheme } from "@/ui";
 import { useCalm } from "@/ui/calm";
-import { onBand } from "@/ui/components/calmKit";
-import { Caption, Grouped, Num, Sentence, Title } from "./calmKit";
-import { Divided } from "./view";
+import { font, TABULAR } from "@/ui/fonts";
+import { Caption, Num, Sentence } from "./calmKit";
+import { TONIGHT_INFO } from "./info";
+import { ListGroup, ListRow, useGrowIn } from "./ios";
 
-const BAR = { height: 14, borderRadius: 7 } as const;
+const BAR = 12;
 const signed = (min: number, sign: "+" | "−") => `${sign}${hmm(Math.abs(min))}`;
 
 /**
- * A card's headline: the percentage large in the sleep ink with its arrow against the prior 30 nights, and their mean
- * under it as a small number with its label.
+ * A card's headline: the percentage large in the sleep indigo with its arrow against the prior 30 nights, and their
+ * mean under it as a small number with its label.
  */
 function Headline({ value, stat }: { value: number; stat?: KeyStat }) {
   const c = useCalm();
@@ -28,11 +32,11 @@ function Headline({ value, stat }: { value: number; stat?: KeyStat }) {
   return (
     <View accessible accessibilityLabel={`${Math.round(value)}%${avg !== null ? `, prior 30-night average ${Math.round(avg)}%` : ""}`}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <Num value={String(Math.round(value))} unit="%" size={36} color={c.tintInk.lavender} />
+        <Num value={String(Math.round(value))} unit="%" size={34} color={c.tintInk.lavender} />
         {t && <DeltaMark dir={t.dir} tone={t.tone} />}
       </View>
       {avg !== null && (
-        <View style={{ marginTop: 4, flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", columnGap: 6 }}>
+        <View style={{ marginTop: 2, flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", columnGap: 6 }}>
           <Num value={String(Math.round(avg))} unit="%" size={15} color={c.sub} />
           <Caption>Prior 30-night average</Caption>
         </View>
@@ -41,27 +45,27 @@ function Headline({ value, stat }: { value: number; stat?: KeyStat }) {
   );
 }
 
-const LEGEND_LINE = 19;
-
-/** A swatch, a name and a right-aligned value: the legend under a bar, as a plain grouped list. */
+/** A coloured dot, a name and a right-aligned value: the legend under a bar, as an inset list's rows. */
 function Legend({ rows }: { rows: { swatch: string; label: string; value: string }[] }) {
   const c = useCalm();
   return (
-    <View style={{ marginTop: 16 }}>
-      <Grouped>
-        {rows.map((r) => (
-          // The swatch and the value stay on the name's first line if it wraps.
-          <View key={r.label} accessible accessibilityLabel={`${r.label} ${r.value}`} style={{ minHeight: 40, flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 10 }}>
-            <View style={{ width: 12, height: 12, borderRadius: 4, marginTop: onBand(LEGEND_LINE, 12), backgroundColor: r.swatch }} />
-            <Txt size={14} lineHeight={LEGEND_LINE} style={{ flex: 1, color: c.sub }}>
-              {r.label}
-            </Txt>
-            <View style={{ marginTop: onBand(LEGEND_LINE, 18) }}>
-              <Num value={r.value} size={16} />
-            </View>
-          </View>
-        ))}
-      </Grouped>
+    <View style={{ marginTop: 14, borderTopWidth: 0.5, borderTopColor: c.line }}>
+      {rows.map((r, i) => (
+        <View
+          key={r.label}
+          accessible
+          accessibilityLabel={`${r.label} ${r.value}`}
+          style={[{ minHeight: 40, flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 9 }, i > 0 && { borderTopWidth: 0.5, borderTopColor: c.line }]}
+        >
+          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: r.swatch }} />
+          <Txt size={15} lineHeight={20} style={{ flex: 1, color: c.ink }}>
+            {r.label}
+          </Txt>
+          <Txt size={15} lineHeight={20} style={[TABULAR, { color: c.sub }]}>
+            {r.value}
+          </Txt>
+        </View>
+      ))}
     </View>
   );
 }
@@ -71,12 +75,21 @@ function BarTitle({ label, value }: { label: string; value: string }) {
   const c = useCalm();
   return (
     <View style={{ marginBottom: 8, flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-      <Txt size={14} lineHeight={19} weight={600} style={{ flexShrink: 1, color: c.ink }}>
+      <Txt size={15} lineHeight={20} weight={600} style={{ flexShrink: 1, color: c.ink }}>
         {label}
       </Txt>
-      <Num value={value} size={18} color={c.tintInk.lavender} />
+      <Txt size={17} lineHeight={22} style={[font.numberAt(17), { color: c.tintInk.lavender }]}>
+        {value}
+      </Txt>
     </View>
   );
+}
+
+/** A capsule that grows in from its left end (a scale on the UI thread), `index` steps after its card's first. */
+function GrowBar({ index, style }: { index: number; style: object }) {
+  const grow = useGrowIn(index, 140);
+  const anim = useAnimatedStyle(() => ({ transform: [{ scaleX: grow.value }] }));
+  return <Animated.View style={[style, { transformOrigin: "left center" }, anim]} />;
 }
 
 export function HoursVsNeed({ vm }: { vm: SleepVM }) {
@@ -90,9 +103,9 @@ export function HoursVsNeed({ vm }: { vm: SleepVM }) {
   const pct = (min: number) => `${Math.min(100, (min / scale) * 100)}%` as const;
   const { baselineMin, strainMin, debtMin, napMin } = h.parts;
   const parts: [number, string][] = [
-    [baselineMin, alpha(c.foreground, 0.7)],
+    [baselineMin, alpha(calm.ink, 0.55)],
     [strainMin, c.strain],
-    [debtMin, alpha(c.foreground, 0.35)],
+    [debtMin, alpha(calm.ink, 0.22)],
   ];
   return (
     <View>
@@ -100,10 +113,10 @@ export function HoursVsNeed({ vm }: { vm: SleepVM }) {
       <View style={{ marginTop: 16, gap: 16 }}>
         <View>
           <BarTitle label="Hours of sleep" value={hmm(h.asleepMin)} />
-          <View style={[BAR, { backgroundColor: calm.tint.lavender }]}>
-            <View style={[BAR, { position: "absolute", top: 0, bottom: 0, left: 0, width: pct(h.asleepMin), backgroundColor: c.sleep }]} />
+          <View style={{ height: BAR, borderRadius: BAR / 2, backgroundColor: calm.fill }}>
+            <GrowBar index={0} style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: pct(h.asleepMin), borderRadius: BAR / 2, backgroundColor: c.sleep }} />
             {/* Where the need ends: a hairline through the track, so a short night leaves a visible gap and a long one a visible surplus. */}
-            <View style={{ position: "absolute", top: -4, bottom: -4, left: pct(h.needMin), width: 2, marginLeft: -1, borderRadius: 1, backgroundColor: c.foreground }} />
+            <View style={{ position: "absolute", top: -4, bottom: -4, left: pct(h.needMin), width: 2, marginLeft: -1, borderRadius: 1, backgroundColor: calm.ink }} />
           </View>
         </View>
         <View>
@@ -113,7 +126,9 @@ export function HoursVsNeed({ vm }: { vm: SleepVM }) {
           ) : (
             <View style={{ flexDirection: "row", gap: 2, width: pct(h.needMin) }}>
               {parts.map(([min, color], i) => (
-                <View key={i} style={[BAR, { flexGrow: Math.max(0, min), flexBasis: 0, backgroundColor: color }, i === 0 && { borderTopRightRadius: 0, borderBottomRightRadius: 0 }]} />
+                <View key={i} style={{ flexGrow: Math.max(0, min), flexBasis: 0, height: BAR, overflow: "hidden", borderRadius: BAR / 2 }}>
+                  <GrowBar index={1 + i} style={{ flex: 1, borderRadius: BAR / 2, backgroundColor: color }} />
+                </View>
               ))}
             </View>
           )}
@@ -122,9 +137,9 @@ export function HoursVsNeed({ vm }: { vm: SleepVM }) {
       {!h.calibrating && (
         <Legend
           rows={[
-            { swatch: alpha(c.foreground, 0.7), label: "Healthy minimum", value: hmm(baselineMin) },
+            { swatch: alpha(calm.ink, 0.55), label: "Healthy minimum", value: hmm(baselineMin) },
             { swatch: c.strain, label: "Recent strain", value: signed(strainMin, "+") },
-            { swatch: alpha(c.foreground, 0.35), label: "Sleep debt", value: signed(debtMin, "+") },
+            { swatch: alpha(calm.ink, 0.22), label: "Sleep debt", value: signed(debtMin, "+") },
             ...(napMin > 0 ? [{ swatch: c.sleep, label: "Naps", value: signed(napMin, "−") }] : []),
           ]}
         />
@@ -166,6 +181,15 @@ function optimalPath(points: ({ x: number; y: number } | null)[], sx: number, sy
 
 const PLOT_H = 208;
 const LABEL_H = 16;
+const AXIS_W = 40;
+const NIGHT_W = 16;
+
+/** One night's bar: a capsule from bed to wake that grows down from bedtime once (a scale on the UI thread). */
+function NightBar({ index, top, height, color }: { index: number; top: number; height: number; color: string }) {
+  const grow = useGrowIn(index, 140);
+  const anim = useAnimatedStyle(() => ({ transform: [{ scaleY: grow.value }] }));
+  return <Animated.View style={[{ position: "absolute", left: "50%", marginLeft: -NIGHT_W / 2, width: NIGHT_W, borderRadius: NIGHT_W / 2, top, height, backgroundColor: color, transformOrigin: "top" }, anim]} />;
+}
 
 export function SleepConsistency({ vm }: { vm: SleepVM }) {
   const { c } = useTheme();
@@ -192,7 +216,7 @@ export function SleepConsistency({ vm }: { vm: SleepVM }) {
       width / 100,
       PLOT_H / 100,
     );
-  const dash = alpha(c.foreground, 0.55);
+  const dash = alpha(calm.ink, 0.5);
   return (
     <View>
       <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 12 }}>
@@ -210,49 +234,32 @@ export function SleepConsistency({ vm }: { vm: SleepVM }) {
         accessible
         accessibilityRole="image"
         accessibilityLabel={`Bed and wake times for the last five nights${last ? `, last night ${at(last.bed)} to ${at(last.wake)}` : ""}`}
-        style={{ marginTop: 16, flexDirection: "row", gap: 12 }}
+        style={{ marginTop: 16, flexDirection: "row", gap: 8 }}
       >
-        <View style={{ height: PLOT_H, width: 40 }}>
-          {ticks.map((t) => (
-            <Txt key={t} role="numericSmall" weight={600} lineHeight={14} style={{ position: "absolute", right: 0, top: yOf(t) - 7 }}>
-              {at(t)}
-            </Txt>
-          ))}
-        </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <View style={{ height: PLOT_H }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
-            {ticks.map((t) => (
-              <View key={t} style={{ position: "absolute", left: 0, right: 0, top: yOf(t), height: 1, backgroundColor: calm.line }} />
-            ))}
+            {/* Dashed hairline rules at the clock times, as Apple Health's grid. */}
+            {width > 0 && (
+              <Svg width={width} height={PLOT_H} style={{ position: "absolute", top: 0, left: 0 }} pointerEvents="none">
+                {ticks.map((t) => (
+                  <Line key={t} x1={0} x2={width} y1={yOf(t)} y2={yOf(t)} stroke={calm.line} strokeWidth={0.8} strokeDasharray={[2, 4]} />
+                ))}
+              </Svg>
+            )}
             <View style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0, flexDirection: "row" }}>
               {cm.nights.map((n, i) => (
                 <View key={i} style={{ flex: 1 }}>
-                  {n && (
-                    <View
-                      style={{
-                        position: "absolute",
-                        left: "50%",
-                        marginLeft: -9,
-                        width: 18,
-                        borderRadius: 6,
-                        top: yOf(n.bed),
-                        height: Math.max(0, yOf(n.wake) - yOf(n.bed)),
-                        backgroundColor: i === 4 ? c.sleep : alpha(c.foreground, 0.3),
-                      }}
-                    />
-                  )}
+                  {n && <NightBar index={i} top={yOf(n.bed)} height={Math.max(0, yOf(n.wake) - yOf(n.bed))} color={i === 4 ? c.sleep : alpha(c.sleep, 0.35)} />}
                 </View>
               ))}
             </View>
             {/* Each night's optimal bed and wake time, joined into one dashed line that eases from night to night. */}
             {width > 0 && (
               <Svg width={width} height={PLOT_H} style={{ position: "absolute", top: 0, left: 0, overflow: "visible" }} pointerEvents="none">
-                {[optimal((n) => n.typicalBed), optimal((n) => n.typicalWake)].map((d, i) =>
-                  d ? <Path key={i} d={d} fill="none" stroke={dash} strokeWidth={1.5} strokeDasharray={[5, 4]} /> : null,
-                )}
+                {[optimal((n) => n.typicalBed), optimal((n) => n.typicalWake)].map((d, i) => (d ? <Path key={i} d={d} fill="none" stroke={dash} strokeWidth={1.5} strokeDasharray={[5, 4]} /> : null))}
               </Svg>
             )}
-            {/* Last night's times beside its bar, as WHOOP labels them: bed above, wake below, clear of the dashed lines. */}
+            {/* Last night's times beside its bar: bed above, wake below, clear of the dashed lines. */}
             <View pointerEvents="none" style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0, flexDirection: "row" }}>
               {cm.nights.map((n, i) => (
                 <View key={i} style={{ flex: 1 }}>
@@ -268,11 +275,19 @@ export function SleepConsistency({ vm }: { vm: SleepVM }) {
           </View>
           <View style={{ marginTop: 8, flexDirection: "row" }}>
             {cm.nights.map((n, i) => (
-              <Txt key={i} role="caption" size={13} lineHeight={16} weight={i === 4 ? 700 : 500} color={i === 4 ? "foreground" : "mutedForeground"} align="center" style={{ flex: 1 }}>
+              <Txt key={i} size={12} lineHeight={16} weight={i === 4 ? 700 : 600} align="center" style={{ flex: 1, color: i === 4 ? calm.ink : calm.sub }}>
                 {n?.label ?? "·"}
               </Txt>
             ))}
           </View>
+        </View>
+        {/* The clock on the right, as Apple Health sets its value axis. */}
+        <View style={{ height: PLOT_H, width: AXIS_W }}>
+          {ticks.map((t) => (
+            <Txt key={t} size={11} lineHeight={14} style={[TABULAR, { position: "absolute", left: 0, top: yOf(t) - 7, color: calm.sub }]}>
+              {at(t)}
+            </Txt>
+          ))}
         </View>
       </View>
     </View>
@@ -284,56 +299,44 @@ function Label({ top, text }: { top: number; text: string }) {
   const { c } = useTheme();
   return (
     <View style={{ position: "absolute", top, left: -24, right: -24, alignItems: "center" }}>
-      <Txt role="numericCaption" weight={700} color={c.sleep} numberOfLines={1}>
+      <Txt size={12} lineHeight={16} weight={700} numberOfLines={1} style={[TABULAR, { color: c.sleep }]}>
         {text}
       </Txt>
     </View>
   );
 }
 
-/** Tonight's bedtimes for each goal and the typical wake, worked back from the need (the planner section). */
+/**
+ * Tonight's bedtimes for each goal and the typical wake, worked back from the need (the planner section), as an inset
+ * grouped list: each goal's share of the need under its name, its bedtime on the right in the sleep indigo; the night's
+ * need and the minutes left to fall asleep in the footer.
+ */
 export function Planner({ vm, timeZone }: { vm: SleepVM; timeZone: string }) {
   const calm = useCalm();
   const m = vm.planner;
+  const info = <InfoButton info={TONIGHT_INFO} label="Tonight’s sleep" variant="card" />;
   if (m.value === null)
     return (
-      <ReasonPlaceholder
-        reason={m.reason}
-        nightsLeft={m.nightsLeft}
-        size="md"
-        copy={m.reason === "calibrating" ? "Sleep Planner needs 7 nights to learn your wake time." : undefined}
-      />
+      <ListGroup title="Tonight’s sleep" right={info} inset={16}>
+        <View style={{ padding: 16 }}>
+          <ReasonPlaceholder reason={m.reason} nightsLeft={m.nightsLeft} size="md" copy={m.reason === "calibrating" ? "Sleep Planner needs 7 nights to learn your wake time." : undefined} />
+        </View>
+      </ListGroup>
     );
   const plan = m.value;
-  // The time on the name's line, wherever the caption wraps.
-  const row = (label: string, caption: string, time: string) => (
-    <View key={label} accessible accessibilityLabel={`${label}, ${caption}: ${time}`} style={{ minHeight: 56, flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 10 }}>
-      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Title size={15}>{label}</Title>
-        <Sentence size={13}>{caption}</Sentence>
-      </View>
-      <View style={{ flexShrink: 0 }}>
-        <Num value={time} size={20} color={calm.tintInk.lavender} />
-      </View>
-    </View>
-  );
+  const footer = [`Need tonight ${hmm(plan.needMin)}.`, plan.latencyMin >= 1 ? `Bedtimes leave ${Math.round(plan.latencyMin)} min to fall asleep.` : null].filter(Boolean).join(" ");
   return (
-    <View style={{ gap: 8 }}>
-      <Divided>
-        {plan.plans.map((p) => row(p.label, `${Math.round(p.share * 100)}% of need`, clock(p.bedtimeAt, timeZone)))}
-        {row("Typical wake", plan.weekdayWake ? "Weekday wake time" : "Weekend wake time", clock(plan.wakeAt, timeZone))}
-      </Divided>
-      <View accessible accessibilityLabel={`Need tonight ${hmm(plan.needMin)}`} style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
-        <Caption>Need tonight</Caption>
-        <Num value={hmm(plan.needMin)} size={16} />
-      </View>
-      {plan.latencyMin >= 1 ? (
-        // The bedtimes leave the minutes you usually take to fall asleep (median of recent nights).
-        <View accessible accessibilityLabel={`Bedtimes leave ${Math.round(plan.latencyMin)} minutes to fall asleep`} style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
-          <Caption>Time to fall asleep</Caption>
-          <Num value={String(Math.round(plan.latencyMin))} unit="min" size={16} />
-        </View>
-      ) : null}
-    </View>
+    <ListGroup title="Tonight’s sleep" right={info} inset={16} footer={footer}>
+      {plan.plans.map((p) => (
+        <ListRow key={p.label} label={p.label} detail={`${Math.round(p.share * 100)}% of need`} value={clock(p.bedtimeAt, timeZone)} bold valueColor={calm.tintInk.lavender} accessibilityLabel={`${p.label}, ${Math.round(p.share * 100)}% of need: bedtime ${clock(p.bedtimeAt, timeZone)}`} />
+      ))}
+      <ListRow
+        label="Typical wake"
+        detail={plan.weekdayWake ? "Weekday wake time" : "Weekend wake time"}
+        value={clock(plan.wakeAt, timeZone)}
+        bold
+        accessibilityLabel={`Typical wake, ${plan.weekdayWake ? "weekday" : "weekend"} wake time: ${clock(plan.wakeAt, timeZone)}`}
+      />
+    </ListGroup>
   );
 }

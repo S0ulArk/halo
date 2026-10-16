@@ -1,7 +1,8 @@
 // View-model → kit-prop mappers for the detail screens (Recovery, Strain, Sleep, Activity), ported from the web's
-// src/app/(app)/_lib/view.tsx. Icons need the theme's colour in RN, so they are built per render (`statIcon`).
+// src/app/(app)/_lib/view.tsx. Icons need the theme's colour in RN, so they are built per render (`statIcon`). A key
+// stat also renders as an inset grouped list row (`StatRow`): its value, its status word and how today compares with
+// the 30-day average in the sentence under its name, and a chevron to the section or screen it opens.
 import * as React from "react";
-import { View } from "react-native";
 import {
   Activity,
   Armchair,
@@ -35,11 +36,16 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react-native";
-import type { FormatKey } from "@/lib/format";
+import { deltaTone } from "@/lib/bands";
+import { formatValue, NBSP, type FormatKey } from "@/lib/format";
 import { dayHref } from "@/lib/day";
+import { reasonCopy } from "@/lib/reasons";
 import type { HrChart, KeyStat, Metric, Trend } from "@/queries";
-import { Card, RANGE_DAYS, Txt, type HrSeries, type KeyStatRowProps, type TrendPoint, type TrendRange } from "@/ui";
-import { useCalm } from "@/ui/calm";
+import { RANGE_DAYS, Txt, type HrSeries, type KeyStatRowProps, type TrendPoint, type TrendRange } from "@/ui";
+import { useCalm, type CalmPalette } from "@/ui/calm";
+import { tagLabel } from "@/ui/components/primitives";
+import { TABULAR } from "@/ui/fonts";
+import { ListRow } from "./ios";
 
 /** An activity's own screen (the web's `activityHref`). */
 export const activityHref = (id: string) => `/activity/${encodeURIComponent(id)}`;
@@ -152,53 +158,76 @@ export const hrSeries = (m: Metric<HrChart>, maxHr: number): Metric<HrSeries> =>
     now: h.now ?? undefined,
   }));
 
-/** Rows grouped in one list: a 1 px hairline in the Calm line colour between them. */
-export function Divided({ children }: { children: React.ReactNode }) {
-  const c = useCalm();
-  const items = React.Children.toArray(children).filter(Boolean);
-  return (
-    <View>
-      {items.map((child, i) => (
-        <React.Fragment key={i}>
-          {i > 0 && <View style={{ height: 1, backgroundColor: c.line }} />}
-          {child}
-        </React.Fragment>
-      ))}
-    </View>
-  );
-}
+/** Sleep's status words and their colours: optimal green, sufficient grey, poor orange. */
+const STATUS_WORD = { optimal: "Optimal", sufficient: "Sufficient", poor: "Poor" } as const;
+export const statusInk = (c: CalmPalette, s: keyof typeof STATUS_WORD) => (s === "optimal" ? c.tintInk.mint : s === "poor" ? c.system.orange : c.sub);
+
+/** |n| in a stat's format, without the sign a signed format adds. */
+const absText = (format: FormatKey, n: number) => formatValue(format, Math.abs(n)).replace(/^[+−-]/, "");
 
 /**
- * The summary card under a hero: one white card holding its rows as a grouped list, then the legend as a plain
- * sentence under them (no grey strip).
+ * A key stat as an inset grouped list row: its name, the value (grey as iOS sets a value, or a bold number with its
+ * unit), and under the name its status word (Sleep's rows) and today against the 30-day average in words, green when
+ * better and orange when worse ("4% above 30-day avg 78%"), or why it is missing; its tags after them. With `link` a
+ * row whose stat has an `href` opens it (a section of this page, or a screen for the day shown) behind a chevron.
  */
-export function SummaryCard({ children, legend }: { children: React.ReactNode; legend?: React.ReactNode }) {
-  return (
-    <Card padding={0} style={{ borderWidth: 0 }}>
-      <View style={{ paddingHorizontal: 18, paddingTop: 6, paddingBottom: legend ? 16 : 6 }}>
-        <Divided>{children}</Divided>
-        {legend && <View style={{ marginTop: 6 }}>{legend}</View>}
-      </View>
-    </Card>
-  );
-}
-
-/** A legend or footnote line: 13/18 in the secondary grey. */
-export function LegendText({ children }: { children: React.ReactNode }) {
+export function StatRow({
+  k,
+  link,
+  compare = true,
+  bold = false,
+  icon,
+  iconColor,
+}: {
+  k: KeyStat;
+  link?: { d: string; today: string; push: (href: string) => void; scrollTo?: (id: string) => boolean };
+  /** False: no comparison with the average (Sleep's summary rows show their status instead). */
+  compare?: boolean;
+  bold?: boolean;
+  icon?: LucideIcon;
+  iconColor?: string;
+}) {
   const c = useCalm();
-  return (
-    <Txt size={13} lineHeight={18} style={{ color: c.sub }}>
-      {children}
+  const p = statProps(k, { iconColor: c.sub, icons: false, link });
+  const v = k.metric.value;
+  const valueText = formatValue(p.format, v);
+  const parts: { text: string; color: string }[] = [];
+  if (v === null) parts.push({ text: reasonCopy(k.metric.reason, k.metric.nightsLeft).short, color: c.sub });
+  else {
+    if (k.status) parts.push({ text: STATUS_WORD[k.status], color: statusInk(c, k.status) });
+    if (compare && k.average !== null && k.direction !== "none") {
+      const t = deltaTone(k.direction, v, k.average, k.sd);
+      const diff = v - k.average;
+      const unitText = p.unit ? (p.unit === "%" ? "%" : `${NBSP}${p.unit}`) : "";
+      const avgText = `${formatValue(p.format, k.average)}${unitText}`;
+      const same = absText(p.format, diff) === absText(p.format, 0);
+      const text = same || t.dir === "flat" ? `In line with 30-day avg ${avgText}` : `${absText(p.format, diff)}${unitText} ${diff > 0 ? "above" : "below"} 30-day avg ${avgText}`;
+      parts.push({ text, color: t.tone === "good" ? c.tintInk.mint : t.tone === "bad" ? c.system.orange : c.sub });
+    }
+    const tags = [...(k.metric.provisional ? ["provisional" as const] : []), ...(k.metric.tags ?? [])];
+    if (tags.length) parts.push({ text: tags.map(tagLabel).join(", "), color: c.sub });
+  }
+  const detail = parts.length ? (
+    <Txt size={13} lineHeight={18} style={TABULAR}>
+      {parts.map((x, i) => (
+        <Txt key={i} size={13} lineHeight={18} weight={x.color === c.sub ? 400 : 500} style={{ color: x.color }}>
+          {`${i > 0 ? " · " : ""}${x.text}`}
+        </Txt>
+      ))}
     </Txt>
-  );
-}
-
-/** A small card-title aside ("vs. prior 30 days"). */
-export function Aside({ children }: { children: string }) {
-  const c = useCalm();
+  ) : undefined;
   return (
-    <Txt size={13} lineHeight={18} style={{ color: c.sub }}>
-      {children}
-    </Txt>
+    <ListRow
+      icon={icon}
+      iconColor={iconColor}
+      label={k.label}
+      detail={detail}
+      value={valueText}
+      unit={p.unit}
+      bold={bold}
+      valueColor={v === null ? c.faint : undefined}
+      onPress={p.onPress}
+      accessibilityLabel={[k.label, v === null ? null : `${valueText}${p.unit ? ` ${p.unit}` : ""}`, ...parts.map((x) => x.text)].filter(Boolean).join(", ")}
+    />
   );
 }

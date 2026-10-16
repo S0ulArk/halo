@@ -1,6 +1,8 @@
 // The DateSwitcher's month calendar (spec §4.3, CAL1-CAL6), ported from the web's CalendarPanel and src/lib/calendar.ts.
-// The web drops it from the top over a scrim; on the phone it is a bottom sheet. Days are coloured by the screen's score
-// (Recovery bands, Strain or Sleep, with a dot under strong days); a tap picks the day.
+// The web drops it from the top over a scrim; on the phone it is a bottom sheet, laid out as iOS's date picker: the
+// month on the left with blue chevrons on the right, weekday capitals, the chosen day on a blue disc and today in blue.
+// Days are coloured by the screen's score (Recovery bands, Strain or Sleep, with a dot under strong days); a tap picks
+// the day.
 import * as React from "react";
 import { Pressable, View } from "react-native";
 import { usePathname } from "expo-router";
@@ -18,7 +20,7 @@ import { font } from "@/ui/fonts";
 import { useTheme } from "@/ui/ThemeProvider";
 import type { ColorToken } from "@/ui/theme";
 import { BottomSheet } from "./BottomSheet";
-import { Caption, useSoftFill } from "./calmKit";
+import { Caption } from "./calmKit";
 import { Txt } from "./Text";
 
 export type CalendarContext = "recovery" | "strain" | "sleep";
@@ -29,11 +31,11 @@ export const STRAIN_DOT = 10;
 /** Inferred: no current Sleep calendar was found (CAL4). */
 export const SLEEP_DOT = 85;
 
-/** /strain and /activity show Strain, /sleep shows Sleep, everything else Recovery. */
+/** /strain, /activity and the Activity tab show Strain, /sleep and the Sleep tab Sleep, everything else Recovery. */
 export function calendarContext(pathname: string): CalendarContext {
   const first = pathname.split("/")[1] ?? "";
-  if (first === "strain" || first === "activity") return "strain";
-  if (first === "sleep") return "sleep";
+  if (first === "strain" || first === "activity" || first === "tab-activity") return "strain";
+  if (first === "sleep" || first === "tab-sleep") return "sleep";
   return "recovery";
 }
 
@@ -200,19 +202,18 @@ function MonthPanel({
 }) {
   const { c } = useTheme();
   const calm = useCalm();
-  const soft = useSoftFill();
   const nav = monthNav(month, today, firstDay);
   const label = monthLabel(month, today);
   return (
     <View style={{ paddingBottom: 4 }}>
-      {/* 44 | month | 44 */}
-      <View style={{ height: 56, flexDirection: "row", alignItems: "center" }}>
-        <MonthStep dir={-1} disabled={!nav.prev} onPress={() => onMonth(-1)} />
-        <View style={{ flex: 1, alignItems: "center" }}>
+      {/* iOS's picker: the month on the left, its two chevrons on the right. */}
+      <View style={{ height: 52, flexDirection: "row", alignItems: "center", paddingLeft: 12 }}>
+        <View style={{ flex: 1 }}>
           <Txt size={17} lineHeight={22} weight={600} color={calm.ink} accessibilityRole="header">
             {label}
           </Txt>
         </View>
+        <MonthStep dir={-1} disabled={!nav.prev} onPress={() => onMonth(-1)} />
         <MonthStep dir={1} disabled={!nav.next} onPress={() => onMonth(1)} />
       </View>
 
@@ -256,7 +257,7 @@ function MonthPanel({
             accessibilityRole="button"
             accessibilityLabel="Back to today"
             hitSlop={{ top: 6, bottom: 6 }}
-            style={({ pressed }) => ({ height: 36, borderRadius: 18, paddingHorizontal: 16, justifyContent: "center", backgroundColor: soft, opacity: pressed ? 0.7 : 1 })}
+            style={({ pressed }) => ({ height: 34, borderRadius: 17, paddingHorizontal: 16, justifyContent: "center", backgroundColor: alpha(calm.teal, 0.15), opacity: pressed ? 0.6 : 1 })}
           >
             <Txt size={14} lineHeight={18} weight={600} color={calm.teal}>
               Today
@@ -280,7 +281,6 @@ function MonthPanel({
 
 function MonthStep({ dir, disabled, onPress }: { dir: -1 | 1; disabled: boolean; onPress: () => void }) {
   const c = useCalm();
-  const soft = useSoftFill();
   const Icon = dir < 0 ? ChevronLeft : ChevronRight;
   return (
     <Pressable
@@ -289,9 +289,9 @@ function MonthStep({ dir, disabled, onPress }: { dir: -1 | 1; disabled: boolean;
       accessibilityRole="button"
       accessibilityLabel={dir < 0 ? "Previous month" : "Next month"}
       accessibilityState={{ disabled }}
-      style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: soft, opacity: pressed && !disabled ? 0.7 : 1 })}
+      style={({ pressed }) => ({ width: 44, height: 44, alignItems: "center", justifyContent: "center", opacity: pressed && !disabled ? 0.45 : 1 })}
     >
-      <Icon size={22} color={disabled ? c.faint : c.ink} strokeWidth={2} />
+      <Icon size={24} color={disabled ? c.tertiary : c.teal} strokeWidth={2.4} />
     </Pressable>
   );
 }
@@ -317,9 +317,8 @@ function Day({
   const { c } = useTheme();
   const calm = useCalm();
   const tone = disabled ? { text: null, dot: null } : dayTone(context, value);
-  // The chosen day: white numerals on the teal disc (the card colour, so dark mode's light teal takes dark numerals).
-  // Today (when not chosen): teal numerals. Else the score's colour.
-  const color = selected ? calm.card : today ? calm.teal : tone.text ? c[tone.text] : alpha(calm.ink, 0.4);
+  // The chosen day: white numerals on the blue disc. Today (when not chosen): blue numerals. Else the score's colour.
+  const color = selected ? "#ffffff" : today ? calm.teal : tone.text ? c[tone.text] : alpha(calm.ink, 0.4);
   const label = `${today ? "Today, " : ""}${formatDay(day, DAY.long)}${value !== null && !disabled ? `, ${VALUE_TEXT[context](value)}` : ""}`;
   return (
     <Pressable
@@ -332,12 +331,12 @@ function Day({
     >
       {({ pressed }) => (
         <>
-          {/* The selected day: a 36 px deep-teal disc (the active colour). */}
+          {/* The selected day: a 38 px disc in the action blue, as iOS's picker marks it. */}
           <View
             style={{
-              width: 36,
-              height: 36,
-              borderRadius: 18,
+              width: 38,
+              height: 38,
+              borderRadius: 19,
               alignItems: "center",
               justifyContent: "center",
               backgroundColor: selected ? calm.teal : pressed ? alpha(calm.ink, 0.06) : "transparent",

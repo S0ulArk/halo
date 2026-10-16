@@ -1,5 +1,10 @@
+// Ranked effects as Apple Health draws a diverging chart: one row per signal or behaviour, its name and signed effect
+// over a slim capsule track with a hairline at no effect, the effect a rounded fill growing out of that hairline, green
+// to the right (raised, helps) and orange to the left (lowered, hurts). The fills grow in once, staggered, on the UI
+// thread (a scale from the hairline, never a re-layout), after the screen has opened; still under Reduce motion.
 import * as React from "react";
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from "react-native-reanimated";
 import { ChevronRight } from "lucide-react-native";
 import { formatValue, NBSP } from "@/lib/format";
 import type { Metric } from "@/lib/reasons";
@@ -7,13 +12,15 @@ import { alpha } from "@/lib/utils";
 import { useCalm } from "@/ui/calm";
 import { font } from "@/ui/fonts";
 import { Card } from "./Card";
+import { useAfterTransition } from "./AfterTransition";
 import { Caption, useSoftFill } from "./calmKit";
 import { EmptyState } from "./EmptyState";
-import { TonePill } from "./Meter";
+import { DeltaGlyph } from "./Meter";
 import { MetricState } from "./MetricState";
 import { MetricTags } from "./primitives";
 import { SkeletonText } from "./Skeleton";
 import { Txt } from "./Text";
+import { reduceMotionNow } from "@/ui/motion/system";
 
 export type DriverItem = {
   key: string;
@@ -60,69 +67,91 @@ function sentence(i: DriverItem, variant: DriverListProps["variant"], unit: Driv
   return `${i.label} ${verb}${ci}${n}`;
 }
 
+/** The legend over the rows: "Lowered" left in orange with a down mark, the unit in the middle, "Raised" right in green. */
 function Header({ variant, unit, provisional }: { variant: DriverListProps["variant"]; unit: DriverListProps["unit"]; provisional: boolean }) {
+  const c = useCalm();
   const [left, mid, right] = variant === "recovery" ? ["Lowered", "Points", "Raised"] : ["Hurts", unit === "SD" ? "Impact (SD)" : "% Impact", "Helps"];
   return (
-    <View style={{ marginBottom: 4, flexDirection: "row", alignItems: "center", gap: 8 }}>
-      <View style={{ flex: 1, flexDirection: "row" }}>
-        <TonePill tone="bad" dir="down">
-          {left}
-        </TonePill>
+    <View style={{ marginBottom: 2, flexDirection: "row", alignItems: "center", gap: 8 }}>
+      <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 5 }}>
+        <DeltaGlyph dir="down" color={c.system.orange} size={8} />
+        <Caption color={c.system.orange}>{left}</Caption>
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
         <Caption>{mid}</Caption>
         {provisional && <MetricTags provisional />}
       </View>
-      <View style={{ flex: 1, flexDirection: "row", justifyContent: "flex-end" }}>
-        <TonePill tone="good" dir="up">
-          {right}
-        </TonePill>
+      <View style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 5 }}>
+        <Caption color={c.tintInk.mint}>{right}</Caption>
+        <DeltaGlyph dir="up" color={c.tintInk.mint} size={8} />
       </View>
     </View>
   );
 }
 
-/** The diverging capsule: a flat track, a tick at no effect, the effect filled left (lowered) or right (raised). */
-function Track({ i, max, fill, style }: { i: DriverItem | null; max: number; fill: string; style?: StyleProp<ViewStyle> }) {
+/** The track's height and the fill's grow-in. */
+const TRACK = 6;
+const GROW_MS = 650;
+
+/**
+ * The diverging capsule: a quiet track, a hairline at no effect, the effect a rounded fill growing out of the hairline
+ * (left for lowered, right for raised) by a scale on the UI thread, `index` steps after the list's first.
+ */
+function Track({ i, max, fill, index = 0, style }: { i: DriverItem | null; max: number; fill: string; index?: number; style?: StyleProp<ViewStyle> }) {
   const c = useCalm();
   const share = i && i.delta !== 0 ? Math.min(50, (Math.abs(i.delta) / (max || 1)) * 50) : 0;
+  const opened = useAfterTransition();
+  const [still] = React.useState(() => reduceMotionNow());
+  const grow = useSharedValue(still ? 1 : 0);
+  React.useEffect(() => {
+    if (!opened || still) return;
+    grow.set(withDelay(120 + index * 45, withTiming(1, { duration: GROW_MS, easing: Easing.bezier(0.16, 1, 0.3, 1) })));
+  }, [opened, still, index, grow]);
+  const right = !!i && i.delta > 0;
+  const anim = useAnimatedStyle(() => ({ transform: [{ scaleX: grow.value }] }));
   return (
-    <View style={[{ height: 8, borderRadius: 4, backgroundColor: c.line }, style]}>
+    <View style={[{ height: TRACK, borderRadius: TRACK / 2, backgroundColor: c.fill }, style]}>
       {i && share > 0 && (
-        <View style={{ position: "absolute", top: 0, bottom: 0, borderRadius: 4, backgroundColor: fill, ...(i.delta > 0 ? { left: "50%" } : { right: "50%" }), width: `${share}%` }} />
+        <Animated.View
+          style={[
+            { position: "absolute", top: 0, bottom: 0, borderRadius: TRACK / 2, backgroundColor: fill, width: `${share}%`, transformOrigin: right ? "left center" : "right center" },
+            right ? { left: "50%" } : { right: "50%" },
+            anim,
+          ]}
+        />
       )}
-      <View style={{ position: "absolute", top: -3, bottom: -3, left: "50%", width: 2, marginLeft: -1, borderRadius: 1, backgroundColor: c.faint }} />
+      <View style={{ position: "absolute", top: -4, bottom: -4, left: "50%", width: 1.5, marginLeft: -0.75, borderRadius: 0.75, backgroundColor: c.tertiary }} />
     </View>
   );
 }
 
-function Item({ i, max, p, first }: { i: DriverItem; max: number; p: DriverListProps; first: boolean }) {
+function Item({ i, max, p, index }: { i: DriverItem; max: number; p: DriverListProps; index: number }) {
   const c = useCalm();
   const soft = useSoftFill();
   const e = effectOf(i);
   const impact = p.variant === "impact";
-  // Raised in the mint ink, lowered in the sand (warning) ink, no clear effect grey.
-  const fill = e === "positive" ? c.tintInk.mint : e === "negative" ? c.tintInk.sand : c.faint;
+  // Raised in green, lowered in orange, no clear effect grey.
+  const fill = e === "positive" ? c.tintInk.mint : e === "negative" ? c.system.orange : c.faint;
   const value = (
-    <Txt size={17} lineHeight={22} color={e === "positive" ? c.tintInk.mint : e === "negative" ? c.tintInk.sand : c.sub} style={font.numeric(700)}>
+    <Txt size={17} lineHeight={22} color={e === "positive" ? c.tintInk.mint : e === "negative" ? c.system.orange : c.sub} style={font.numberAt(17)}>
       {fmt(i.delta, p.unit)}
     </Txt>
   );
-  const track = <Track i={i} max={max} fill={fill} style={impact ? { flex: 1 } : undefined} />;
+  const track = <Track i={i} max={max} fill={fill} index={index} style={impact ? { flex: 1 } : undefined} />;
   const content = (
     <View style={{ gap: 10 }}>
       {impact ? (
         // The behaviour rows: the name in sentence case with a chevron (on its first line if it wraps), the % at the
         // track's end (spec §11 F17).
         <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-          <Txt size={16} lineHeight={21} weight={600} color={c.ink} style={{ flexShrink: 1 }}>
+          <Txt size={16} lineHeight={21} color={c.ink} style={{ flexShrink: 1 }}>
             {i.label}
           </Txt>
-          {p.onSelect && <ChevronRight size={18} color={c.label} strokeWidth={1.5} style={{ marginRight: -4, marginTop: (21 - 18) / 2 }} />}
+          {p.onSelect && <ChevronRight size={18} color={c.tertiary} strokeWidth={2.4} style={{ marginRight: -4, marginTop: (21 - 18) / 2 }} />}
         </View>
       ) : (
         <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-          <Txt size={15} lineHeight={20} weight={600} color={c.ink} style={{ flexShrink: 1 }}>
+          <Txt size={16} lineHeight={21} color={c.ink} style={{ flexShrink: 1 }}>
             {i.label}
           </Txt>
           {value}
@@ -150,7 +179,7 @@ function Item({ i, max, p, first }: { i: DriverItem; max: number; p: DriverListP
   // One grouped list: rows split by hairlines. A row that opens a sheet presses in; the open one stays lit.
   return (
     <>
-      {!first && <Hairline inCard={p.inCard} />}
+      {index > 0 && <Hairline inCard={p.inCard} />}
       <Pressable
         onPress={p.onSelect ? () => p.onSelect?.(i.key) : undefined}
         disabled={!p.onSelect}
@@ -166,11 +195,11 @@ function Item({ i, max, p, first }: { i: DriverItem; max: number; p: DriverListP
 }
 
 /** Inside a card a row keeps the card's inset (its press tint overhangs 8 px); alone it pads itself in its card. */
-const rowBox = (inCard?: boolean): ViewStyle => (inCard ? { marginHorizontal: -8, paddingHorizontal: 8, paddingVertical: 14, borderRadius: 14 } : { paddingHorizontal: 20, paddingVertical: 14 });
+const rowBox = (inCard?: boolean): ViewStyle => (inCard ? { marginHorizontal: -8, paddingHorizontal: 8, paddingVertical: 12, borderRadius: 12 } : { paddingHorizontal: 16, paddingVertical: 12 });
 
 function Hairline({ inCard }: { inCard?: boolean }) {
   const c = useCalm();
-  return <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.line, marginHorizontal: inCard ? 0 : 20 }} />;
+  return <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.line, marginLeft: inCard ? 0 : 16 }} />;
 }
 
 /** The rows' container: inside a card they sit flush (the card's padding is theirs); alone, one card holds them all. */
@@ -203,7 +232,7 @@ export function DriverList(p: DriverListProps) {
             <Header variant={p.variant} unit={p.unit} provisional={meta.provisional} />
             <Group inCard={p.inCard}>
               {items.map((i, k) => (
-                <Item key={i.key} i={i} max={max} p={p} first={k === 0} />
+                <Item key={i.key} i={i} max={max} p={p} index={k} />
               ))}
             </Group>
           </View>

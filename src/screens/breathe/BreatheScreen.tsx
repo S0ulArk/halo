@@ -1,37 +1,42 @@
-// Breathe `/breathe`: paced breathing with a circle, a label and haptic cues, from the Stress screen and More. Pick a
-// pace (resonance 5.5, box, 4-7-8, physiological sigh) and 1, 3 or 5 minutes; the circle fills and empties on the UI
+// Breathe `/breathe`: paced breathing with a flower, a label and haptic cues, from the Stress screen and More. Pick a
+// pace (resonance 5.5, box, 4-7-8, physiological sigh) and 1, 3 or 5 minutes; the flower blooms and folds on the UI
 // thread (BreathCircle) while the JS side counts the stage down and buzzes at each switch, all off one start time.
 // With the band live over Bluetooth it shows the heart rate, and when the band sends RR intervals a spot HRV before
 // and after (src/live/spotHrv.ts); without the band it is a plain pacer. Sessions are kept on the phone
-// (src/live/storage.ts) and never reach the Store: scores keep using what Health Connect holds. Calm: the circle sits
-// on a lavender hero card (stress's family) with the count in the numeric face; the controls are white cards with teal
-// actions.
+// (src/live/storage.ts) and never reach the Store: scores keep using what Health Connect holds. In the look of Apple's
+// Mindfulness: the flower on the page's ground with the stage and its count over it, the pace as a selection list
+// (iOS's checkmark), the length a glass segmented control, and Start and End as large round glass buttons floating at
+// the foot of the screen.
 //
 // No keep-awake: expo-keep-awake is not a dependency of the app (only of expo itself), so the screen may dim on a
 // long session; the timers and the Bluetooth link pause with it and the session picks up on return.
 import * as React from "react";
-import { Pressable, View } from "react-native";
-import { Check, HeartPulse, TriangleAlert, Wind } from "lucide-react-native";
+import { View } from "react-native";
+import { Check, HeartPulse, Play, RotateCcw, Square, TriangleAlert, Wind } from "lucide-react-native";
 import { DURATIONS, phaseAt, planSession, protocolById, PROTOCOLS, scheduleCues, secondsLeft, stageLabel, type BreathMinutes, type BreathProtocol, type BreathProtocolId } from "@/live/breath";
 import { breathCue, sessionDone } from "@/live/haptics";
+import { haptic } from "@/ui/motion/haptics";
 import { breathRecord, clockDuration, pctChange, signedPct, type BreathRecord } from "@/live/sessions";
 import { BREATH_HAPTICS_KEY, saveBreath, useBreathLog, useStoredFlag } from "@/live/storage";
 import { useCapture } from "@/live/useCapture";
 import { clock, dayLabel, MISSING } from "@/lib/format";
 import { localDay } from "@/lib/time";
-import { mix } from "@/lib/utils";
 import { useApp } from "@/state/app";
 import { showsLive, useLiveBle, useLiveBleControl } from "@/state/liveBle";
-import { DetailShell, ToggleGroup, Txt, type InfoContent } from "@/ui";
+import { DetailShell, Txt, type InfoContent } from "@/ui";
+import { useBottomClearance } from "@/ui/components/PageShell";
 import { font } from "@/ui/fonts";
-import { CalmButton, CalmSwitch, Caption, Hairline, IconTile, Notice, Num, Sentence, Surface, Title, useCalm } from "@/screens/settings/calmKit";
+import { GlassTarget } from "@/ui/glass";
+import { CalmSwitch, Caption, Hairline, IconTile, Notice, Num, SectionLabel, Sentence, Surface, Title, useCalm } from "@/screens/settings/calmKit";
 import { useBack } from "@/screens/detail/nav";
+import { GlassSegmented, ListGroup, ListRow } from "@/screens/detail/ios";
 import { GoLiveButton, GoLiveSheet, LivePill, rmssdLine } from "@/screens/settings/liveHr";
+import { CONTROLS_CLEARANCE, FloatingControls, GlassRound } from "@/screens/workout/controls";
 import { BreathCircle } from "./BreathCircle";
 import { KeepAwake } from "@/live/KeepAwake";
 
-/** The circle's diameter at full. */
-const CIRCLE = 216;
+/** The flower's diameter at full bloom. */
+const CIRCLE = 248;
 /** A session stopped sooner than this is not kept. */
 const MIN_SAVE_MS = 30_000;
 /** A stage reached this late (the app was in the background) changes the label but does not buzz. */
@@ -105,6 +110,7 @@ export default function BreatheScreen() {
   const c = useCalm();
   const { timeZone, today } = useApp();
   const onBack = useBack();
+  const clearance = useBottomClearance("detail");
   const ctl = useLiveBleControl();
   const log = useBreathLog();
   const [haptics, setHaptics] = useStoredFlag(BREATH_HAPTICS_KEY);
@@ -156,20 +162,20 @@ export default function BreatheScreen() {
   const stage = running && clockState ? run.protocol.stages[clockState.stage] : null;
 
   const hero = (
-    <Surface tint="lavender" gap={16} style={{ alignSelf: "stretch", alignItems: "center" }}>
-      <BreathCircle stages={(run?.protocol ?? protocol).stages} startAt={run?.start ?? null} size={CIRCLE} color={c.tintInk.lavender}>
+    <View style={{ alignSelf: "stretch", alignItems: "center", gap: 14, paddingTop: 4 }}>
+      <BreathCircle stages={(run?.protocol ?? protocol).stages} startAt={run?.start ?? null} size={CIRCLE}>
         {stage && clockState ? (
           // Announced on each stage switch only: the label leaves out the per-second count.
-          <View accessible accessibilityLiveRegion="polite" accessibilityLabel={stageLabel(stage)} style={{ alignItems: "center", gap: 2 }}>
-            <Txt size={16} lineHeight={21} weight={600} align="center" style={{ color: c.ink }}>
+          <View accessible accessibilityLiveRegion="polite" accessibilityLabel={stageLabel(stage)} style={{ alignItems: "center", gap: 0 }}>
+            <Txt size={17} lineHeight={22} weight={600} align="center" style={{ color: c.ink }}>
               {stageLabel(stage)}
             </Txt>
-            <Txt size={48} lineHeight={54} align="center" style={[font.numberAt(48), { color: c.tintInk.lavender }]}>
+            <Txt size={52} lineHeight={58} align="center" style={[font.numberAt(52, 800), { color: c.ink }]}>
               {String(clockState.secs)}
             </Txt>
           </View>
         ) : (
-          <Wind size={36} color={c.tintInk.lavender} strokeWidth={1.75} />
+          <Wind size={34} color={c.ink} strokeWidth={1.75} />
         )}
       </BreathCircle>
       {running && clockState ? (
@@ -179,73 +185,69 @@ export default function BreatheScreen() {
         </View>
       ) : (
         <View style={{ alignSelf: "stretch", alignItems: "center", gap: 12 }}>
-          <Title style={{ textAlign: "center" }}>{protocol.title}</Title>
+          <Txt size={22} lineHeight={28} weight={700} align="center" style={{ color: c.ink }}>
+            {protocol.title}
+          </Txt>
           <View style={{ alignSelf: "stretch", flexDirection: "row", gap: 12 }}>
             <HeroStat value={clockDuration(plan.durationMs)} label="Length" />
             <HeroStat value={String(plan.cycles)} label="Breaths" />
           </View>
         </View>
       )}
-    </Surface>
+    </View>
   );
 
   const liveCard = <LiveCard running={running} onGoLive={() => setSheet(true)} />;
 
   let primary: React.ReactNode;
-  if (running)
-    primary = (
-      <View style={{ gap: 12 }}>
-        {liveCard}
-        <CalmButton variant="secondary" onPress={() => finish(Date.now())}>
-          End session
-        </CalmButton>
-      </View>
+  let controls: React.ReactNode;
+  if (running) {
+    primary = liveCard;
+    controls = <GlassRound icon={Square} label="End" color={c.system.red} onPress={() => finish(Date.now())} accessibilityLabel="End session" />;
+  } else if (result) {
+    primary = <Summary rec={result} />;
+    controls = (
+      <>
+        <GlassRound icon={RotateCcw} label="Go again" color={c.system.teal} onPress={start} />
+        <GlassRound icon={Check} label="Change pace" color={c.teal} onPress={() => setResult(null)} />
+      </>
     );
-  else if (result)
+  } else {
     primary = (
-      <View style={{ gap: 12 }}>
-        <Summary rec={result} />
-        <CalmButton onPress={start}>Go again</CalmButton>
-        <CalmButton variant="secondary" onPress={() => setResult(null)}>
-          Change pace
-        </CalmButton>
-      </View>
-    );
-  else
-    primary = (
-      <View style={{ gap: 12 }}>
-        <Surface gap={12}>
-          <Title header>Pace</Title>
-          <View accessibilityRole="radiogroup" accessibilityLabel="Pace" style={{ gap: 8 }}>
-            {PROTOCOLS.map((p) => (
-              <ProtocolRow key={p.id} p={p} selected={p.id === protocol.id} onPress={() => choose({ id: p.id })} />
-            ))}
-          </View>
-          <Txt size={15} lineHeight={20} weight={600} style={{ color: c.ink, marginTop: 8 }}>
-            Length
-          </Txt>
-          <ToggleGroup
-            fill
-            font="numeric"
+      <View style={{ gap: 22 }}>
+        <ListGroup title="Pace" inset={16}>
+          {PROTOCOLS.map((p) => (
+            <ListRow
+              key={p.id}
+              label={p.title}
+              detail={p.subtitle}
+              checked={p.id === protocol.id}
+              role="radio"
+              onPress={() => {
+                if (p.id !== protocol.id) haptic.select();
+                choose({ id: p.id });
+              }}
+              accessibilityLabel={`${p.title}, ${p.subtitle}`}
+            />
+          ))}
+        </ListGroup>
+        <View style={{ gap: 7 }}>
+          <SectionLabel>Length</SectionLabel>
+          <GlassSegmented
             value={String(pick.minutes)}
             onChange={(v) => choose({ minutes: Number(v) as BreathMinutes })}
             items={DURATIONS.map((m) => ({ value: String(m), label: `${m} min`, accessibilityLabel: `${m} minute${m === 1 ? "" : "s"}` }))}
             accessibilityLabel="Session length"
           />
-          <View style={{ minHeight: 56, flexDirection: "row", alignItems: "center", gap: 12, marginTop: 4 }}>
-            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-              <Txt size={15} lineHeight={20} weight={600} style={{ color: c.ink }}>
-                Haptic cues
-              </Txt>
-              <Sentence size={13}>One pulse to breathe in, two to breathe out</Sentence>
-            </View>
-            <CalmSwitch value={haptics} onChange={setHaptics} label="Haptic cues" />
-          </View>
-        </Surface>
+        </View>
+        <ListGroup inset={16} footer="One pulse to breathe in, two to breathe out, none on a hold.">
+          <ListRow label="Haptic cues" right={<CalmSwitch value={haptics} onChange={setHaptics} label="Haptic cues" />} />
+        </ListGroup>
         {liveCard}
-        <CalmButton onPress={start}>Start</CalmButton>
       </View>
     );
+    controls = <GlassRound icon={Play} label="Start" color={c.system.teal} onPress={start} accessibilityLabel="Start session" />;
+  }
 
   const secondary = [
     <Surface key="about" gap={10}>
@@ -278,7 +280,10 @@ export default function BreatheScreen() {
 
   return (
     <>
-      <DetailShell title="Breathe" info={INFO} onBack={onBack} hero={hero} heroGlow={null} primary={primary} secondary={running ? undefined : secondary} />
+      {/* The page is the controls' backdrop: the round glass buttons bend what scrolls under them. */}
+      <GlassTarget style={{ flex: 1 }} overlay={<FloatingControls>{controls}</FloatingControls>}>
+        <DetailShell title="Breathe" info={INFO} onBack={onBack} hero={hero} heroGlow={null} primary={primary} secondary={running ? undefined : secondary} bottomInset={clearance + CONTROLS_CLEARANCE} />
+      </GlassTarget>
       {running && <KeepAwake tag="breathe" />}
       <GoLiveSheet open={sheet} onClose={() => setSheet(false)} />
       <RecentRr onChange={onRecentRr} live={ctl.status === "live"} />
@@ -293,40 +298,6 @@ function RecentRr({ onChange, live }: { onChange: (rr: number[]) => void; live: 
   return null;
 }
 
-/** One pace in the picker: its name and timing in full, the chosen one teal-tinted with a check. */
-function ProtocolRow({ p, selected, onPress }: { p: BreathProtocol; selected: boolean; onPress: () => void }) {
-  const c = useCalm();
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="radio"
-      accessibilityState={{ selected }}
-      accessibilityLabel={`${p.title}, ${p.subtitle}`}
-      style={({ pressed }) => ({
-        minHeight: 60,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
-        borderRadius: 18,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        backgroundColor: selected ? mix(c.teal, c.card, 0.12) : c.ground,
-        opacity: pressed ? 0.85 : 1,
-      })}
-    >
-      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Txt size={16} lineHeight={21} weight={600} style={{ color: selected ? c.teal : c.ink }}>
-          {p.title}
-        </Txt>
-        <Txt size={13} lineHeight={18} style={{ color: c.sub }}>
-          {p.subtitle}
-        </Txt>
-      </View>
-      {selected && <Check size={20} color={c.teal} strokeWidth={2.5} />}
-    </Pressable>
-  );
-}
-
 /** The band's part: live bpm and the HRV line, or how to connect. Breathe works without it. */
 function LiveCard({ running, onGoLive }: { running: boolean; onGoLive: () => void }) {
   const c = useCalm();
@@ -334,7 +305,7 @@ function LiveCard({ running, onGoLive }: { running: boolean; onGoLive: () => voi
   const isLive = showsLive(live);
   const head = (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-      <IconTile icon={HeartPulse} tint="rose" size={40} />
+      <IconTile icon={HeartPulse} tint="rose" size={36} />
       <Title header style={{ flex: 1 }}>
         Heart rate
       </Title>
@@ -395,13 +366,13 @@ function Summary({ rec }: { rec: BreathRecord }) {
     ...(rec.rsa !== null ? [{ label: "Swing per breath", value: rec.rsa.toFixed(1), unit: "bpm", note: "How far your heart rate rose and fell with each breath" }] : []),
   ];
   return (
-    <Surface tint="lavender" gap={4}>
-      <Title header style={{ marginBottom: 4 }}>
+    <Surface gap={2}>
+      <Title header style={{ marginBottom: 6 }}>
         {rec.completed ? "Session complete" : "Session ended"}
       </Title>
       {rows.map((r, i) => (
         <React.Fragment key={r.label}>
-          {i > 0 && <Hairline color={c.chip} />}
+          {i > 0 && <Hairline />}
           <View accessible accessibilityLabel={`${r.label}: ${`${r.value}${r.unit ? ` ${r.unit}` : ""}`.replace("→", "to")}${r.note ? `. ${r.note}` : ""}`} style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 }}>
             <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
               <Txt size={15} lineHeight={20} weight={600} style={{ color: c.ink }}>
@@ -409,7 +380,7 @@ function Summary({ rec }: { rec: BreathRecord }) {
               </Txt>
               {!!r.note && <Sentence size={13}>{r.note}</Sentence>}
             </View>
-            <Num value={r.value} unit={r.unit} size={20} color={c.tintInk.lavender} />
+            <Num value={r.value} unit={r.unit} size={20} color={c.system.teal} />
           </View>
         </React.Fragment>
       ))}
@@ -435,7 +406,7 @@ function RecentRow({ rec, timeZone, today }: { rec: BreathRecord; timeZone: stri
       </View>
       {hrv !== null ? (
         <View style={{ alignItems: "flex-end" }}>
-          <Num value={signedPct(hrv)} size={18} color={c.tintInk.lavender} />
+          <Num value={signedPct(hrv)} size={18} color={c.system.teal} />
           <Caption>HRV</Caption>
         </View>
       ) : hr ? (

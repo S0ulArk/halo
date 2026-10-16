@@ -22,7 +22,7 @@ function P({ children }: { children: React.ReactNode }) {
 /** A swatch: a theme colour, a dashed outline (a day with no split), or none. */
 type Swatch = ColorToken | "dashed" | null;
 
-/** The web's `Rows`: a 10 px swatch before each line, on the first line's baseline. */
+/** The web's `Rows`: a 10 px dot (Apple Health's legend mark) before each line, on the first line's baseline. */
 function Rows({ rows }: { rows: [swatch: Swatch, text: string][] }) {
   const { c } = useTheme();
   return (
@@ -31,10 +31,10 @@ function Rows({ rows }: { rows: [swatch: Swatch, text: string][] }) {
         <View key={text} style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
           {swatch === "dashed" ? (
             <Svg width={10} height={10} style={{ marginTop: 6 }}>
-              <Rect x={0.5} y={0.5} width={9} height={9} rx={2} fill="none" stroke={c.mutedForeground} strokeWidth={1} strokeDasharray={[2, 2]} />
+              <Rect x={0.5} y={0.5} width={9} height={9} rx={4.5} fill="none" stroke={c.mutedForeground} strokeWidth={1} strokeDasharray={[2, 2]} />
             </Svg>
           ) : (
-            swatch && <View style={{ width: 10, height: 10, borderRadius: 2, marginTop: 6, backgroundColor: c[swatch] }} />
+            swatch && <View style={{ width: 10, height: 10, borderRadius: 5, marginTop: 6, backgroundColor: c[swatch] }} />
           )}
           <View style={{ flex: 1 }}>
             <P>{text}</P>
