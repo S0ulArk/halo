@@ -9,7 +9,8 @@ export async function startBackground(): Promise<void> {
   try {
     installNotificationHandler();
     const s = await readSettings();
-    await syncRegistration(s.backgroundSync);
+    // The task also runs the update check, so it stays registered while either is on.
+    await syncRegistration(s.backgroundSync || s.updates);
     await applyCheckIn(s);
   } catch (e) {
     console.warn("[background] start", e instanceof Error ? e.message : String(e));

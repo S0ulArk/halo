@@ -135,7 +135,8 @@ function BackgroundSyncCard({ s }: { s: ReturnType<typeof useNotificationSetting
 
   const toggle = async (on: boolean) => {
     await s.update({ backgroundSync: on });
-    await syncRegistration(on);
+    // The task also checks for updates: it stays scheduled while "App updates" is on.
+    await syncRegistration(on || s.settings.updates);
     await refresh();
     if (on && background === false) toast("Allow background access so Halo can read Health Connect while closed");
   };
@@ -194,7 +195,7 @@ function BackgroundSyncCard({ s }: { s: ReturnType<typeof useNotificationSetting
         </Callout>
       )}
       <Txt size={13} lineHeight={18} weight={600} style={{ color: registered ? c.tintInk.mint : c.sub }}>
-        {registered === null ? " " : registered ? "Scheduled with Android" : "Not scheduled"}
+        {registered === null ? " " : registered && s.settings.backgroundSync ? "Scheduled with Android" : "Not scheduled"}
       </Txt>
       <LastRuns log={log} timeZone={app.timeZone} />
       {__DEV__ && (
@@ -317,7 +318,8 @@ function NotificationsCard({ s }: { s: ReturnType<typeof useNotificationSettings
   // On without the permission still works: the update then shows inside Halo only.
   const setUpdates = async (on: boolean) => {
     if (on && s.permission !== "granted" && !denied) s.setPermission(await askNotificationPermission());
-    await s.update({ updates: on });
+    const next = await s.update({ updates: on });
+    await syncRegistration(next.backgroundSync || next.updates);
   };
   const windDownCaption = next
     ? `Next at ${clock(next.at * 1000, app.timeZone)}, for bed by ${clock(next.bedtime * 1000, app.timeZone)}; opens the sleep planner`
@@ -361,7 +363,7 @@ function NotificationsCard({ s }: { s: ReturnType<typeof useNotificationSettings
         <LeadField value={s.settings.bedtimeLeadMin} onChange={(m) => void setWindDown({ bedtimeLeadMin: m })} disabled={denied || !s.settings.bedtime} />
         <SwitchRow
           label="App updates"
-          caption="When a new version of Halo is out; Halo asks GitHub a few times a day, sending no health data"
+          caption="When a new version of Halo is out; Halo asks GitHub each time it opens and in the background, sending no health data"
           value={s.settings.updates}
           onChange={(v) => void setUpdates(v)}
         />

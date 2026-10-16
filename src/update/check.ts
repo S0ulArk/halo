@@ -1,9 +1,9 @@
-// The update check: Halo's latest GitHub release against the installed version. Asked at most every 6 hours, when Halo
-// comes to the front (UpdatePrompt) and in the background task, and only while Settings › Notifications › "App
-// updates" is on; About's "Check for updates" asks at once. The request carries nothing but the app's user agent: no
-// health data, no account. A new version shows a notification once (when notifications are allowed) and the in-app
-// dialog once; "Later" keeps quiet about that version, and About still offers it. No React in here, so the background
-// task can import it.
+// The update check: Halo's latest GitHub release against the installed version. Asked every time Halo comes to the
+// front (UpdatePrompt) and in the background task, while Settings › Notifications › "App updates" is on; About's
+// "Check for updates" asks at once. Every request bypasses caches (GitHub's CDN keeps an answer for 60 s), so a release
+// is seen as soon as it is published. The request carries nothing but the app's user agent: no health data, no
+// account. A newer version shows the in-app dialog every time Halo is opened, and a notification once (when
+// notifications are allowed). No React in here, so the background task can import it.
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DEEP_LINK } from "@/background/decide";
 import { notificationPermission, sendNow } from "@/background/notify";
@@ -14,8 +14,11 @@ import { compareVersions, plainNotes } from "./version";
 export const REPO = "S0ulArk/halo";
 const LATEST_API = `https://api.github.com/repos/${REPO}/releases/latest`;
 const STATE_KEY = "pulse.update";
-/** Between automatic checks. GitHub allows 60 unauthenticated requests an hour per address; this uses at most 4 a day. */
-const EVERY_MS = 6 * 60 * 60 * 1000;
+/**
+ * An automatic check this soon after the last one uses that answer: GitHub allows 60 unauthenticated requests an hour
+ * per internet address, and switching apps back and forth should not use them up.
+ */
+const MIN_GAP_MS = 2 * 60 * 1000;
 
 export const INSTALLED_VERSION: string = app.expo.version;
 
@@ -31,15 +34,13 @@ export type Release = {
   pageUrl: string;
 };
 
-type State = { checkedAt: number; latest: Release | null; notified?: string; dismissed?: string };
+type State = { checkedAt: number; latest: Release | null; notified?: string };
 
 export type UpdateStatus = {
   /** The newer release, or null when Halo is up to date (or the check never succeeded). */
   available: Release | null;
   /** Unix ms of the last successful check; 0 if never. */
   checkedAt: number;
-  /** The newer release was dismissed with "Later". */
-  dismissed: boolean;
 };
 
 async function readState(): Promise<State> {
@@ -59,7 +60,7 @@ async function writeState(patch: Partial<State>): Promise<State> {
 }
 
 const listeners = new Set<() => void>();
-/** Called whenever the saved state changes (a check, "Later"), so About and the dialog agree. */
+/** Called whenever the saved state changes (a check), so About and the dialog agree. */
 export function onUpdateState(l: () => void): () => void {
   listeners.add(l);
   return () => listeners.delete(l);
@@ -80,8 +81,9 @@ export async function fetchLatest(): Promise<Release> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 15_000);
   try {
-    const res = await fetch(LATEST_API, {
-      headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": `Halo/${INSTALLED_VERSION}` },
+    // A new URL each time, so neither GitHub's CDN nor the phone's HTTP cache can answer with an older release.
+    const res = await fetch(`${LATEST_API}?_=${Date.now()}`, {
+      headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": `Halo/${INSTALLED_VERSION}`, "Cache-Control": "no-cache" },
       signal: ctrl.signal,
     });
     if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
@@ -102,33 +104,41 @@ export async function fetchLatest(): Promise<Release> {
 
 const newer = (r: Release | null) => (r && compareVersions(r.version, INSTALLED_VERSION) > 0 ? r : null);
 
-function statusOf(s: State): UpdateStatus {
-  const available = newer(s.latest);
-  return { available, checkedAt: s.checkedAt, dismissed: !!available && s.dismissed === available.tag };
-}
+const statusOf = (s: State): UpdateStatus => ({ available: newer(s.latest), checkedAt: s.checkedAt });
 
 /** What the last check found, without asking GitHub. */
 export async function updateStatus(): Promise<UpdateStatus> {
   return statusOf(await readState());
 }
 
+let inflight: Promise<UpdateStatus> | null = null;
+
 /**
- * Asks GitHub when `force` (About's button), or when the setting is on and the last check is 6 hours old; otherwise
- * returns what the last check found. `force` throws when GitHub can't be reached; the automatic check never throws.
+ * Asks GitHub: always when `force` (About's button); otherwise when the setting is on and the last check is over 2
+ * minutes old, else returns what that check found. `force` throws when GitHub can't be reached; the automatic check
+ * never throws. Calls made while one is under way share it.
  */
-export async function checkForUpdate({ force = false } = {}): Promise<UpdateStatus> {
-  const s = await readState();
-  if (!force) {
-    if (Date.now() - s.checkedAt < EVERY_MS) return statusOf(s);
-    if (!(await readSettings()).updates) return statusOf(s);
-  }
-  try {
-    return statusOf(await writeState({ checkedAt: Date.now(), latest: await fetchLatest() }));
-  } catch (e) {
-    if (force) throw e;
-    console.warn("[update]", e instanceof Error ? e.message : String(e));
-    return statusOf(s);
-  }
+export function checkForUpdate({ force = false } = {}): Promise<UpdateStatus> {
+  if (inflight && !force) return inflight;
+  const run = (async () => {
+    const s = await readState();
+    if (!force) {
+      if (Date.now() - s.checkedAt < MIN_GAP_MS) return statusOf(s);
+      if (!(await readSettings()).updates) return statusOf(s);
+    }
+    try {
+      return statusOf(await writeState({ checkedAt: Date.now(), latest: await fetchLatest() }));
+    } catch (e) {
+      if (force) throw e;
+      console.warn("[update]", e instanceof Error ? e.message : String(e));
+      return statusOf(s);
+    }
+  })();
+  inflight = run;
+  void run.catch(() => {}).finally(() => {
+    if (inflight === run) inflight = null;
+  });
+  return run;
 }
 
 /** The automatic check plus, once per version, the notification (when notifications are allowed). Never throws. */
@@ -145,9 +155,3 @@ export async function checkAndNotify(): Promise<UpdateStatus> {
   }
   return status;
 }
-
-/** "Later": no dialog for this version again (About still shows it, and a newer one asks again). */
-export function dismissUpdate(tag: string): Promise<State> {
-  return writeState({ dismissed: tag });
-}
-

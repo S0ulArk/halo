@@ -25,7 +25,7 @@ export type BackgroundSettings = {
   healthMonitor: boolean;
   /** "Weekly report ready", Monday morning once last week's report is complete. */
   weeklyReport: boolean;
-  /** "Halo x.y.z is available": a few times a day Halo asks GitHub for its latest release (no health data is sent). */
+  /** "Halo x.y.z is available": Halo asks GitHub for its latest release each time it opens and in the background (no health data is sent). */
   updates: boolean;
 };
 

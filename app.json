@@ -2,7 +2,7 @@
   "expo": {
     "name": "Halo",
     "slug": "pulse",
-    "version": "1.23.1",
+    "version": "1.23.2",
     "scheme": "pulse",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -45,7 +45,7 @@
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.REQUEST_INSTALL_PACKAGES"
       ],
-      "versionCode": 65
+      "versionCode": 66
     },
     "plugins": [
       "expo-router",
