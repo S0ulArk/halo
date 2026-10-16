@@ -9,7 +9,7 @@ import type { Profile } from "@/data/types";
 import type { QueryCtx } from "@/queries/ctx";
 import { modelFor, PROVIDERS, providerOf, type Fetch } from "./providers";
 import { coachTools } from "./tools";
-import { checkProvider, testKey, TEST_FAILED } from "./validate";
+import { checkProvider, testKey } from "./validate";
 
 const TZ = "Asia/Kolkata";
 const PROFILE: Profile = { birthDate: "1990-01-01", sex: "male", maxHr: 183, heightCm: 178, timeZone: TZ };
@@ -159,7 +159,25 @@ describe("key test", () => {
     expect(okJson.calls[0].body).toMatchObject({ model: "claude-opus-5-5", max_tokens: 16 });
     expect(okJson.calls[0].body.stream).toBeFalsy();
     const refused = fakeFetch([{ status: 401, json: { type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } } }]);
-    expect(await testKey({ provider: "anthropic", model: "claude-opus-5-5", apiKey: KEY }, refused.fetch)).toEqual({ ok: false, error: TEST_FAILED });
+    expect(await testKey({ provider: "anthropic", model: "claude-opus-5-5", apiKey: KEY }, refused.fetch)).toEqual({
+      ok: false,
+      error: "Anthropic didn’t accept this key. Copy it again from Anthropic, with nothing before or after it. Anthropic said: “invalid x-api-key”",
+    });
     expect(refused.calls).toHaveLength(1);
+  });
+
+  it("says why a test failed: wrong model, no quota, a phone-side error", async () => {
+    const input = { provider: "google", model: "gemini-9-flash", apiKey: "AIzaTESTKEY000" };
+    const missing = fakeFetch([{ status: 404, json: { error: { code: 404, message: "models/gemini-9-flash is not found for API version v1beta", status: "NOT_FOUND" } } }]);
+    const r1 = await testKey(input, missing.fetch);
+    expect(r1.ok ? "" : r1.error).toMatch(/^Google Gemini has no model “gemini-9-flash” for this key\. Check the model id\. Google Gemini said: “models\/gemini-9-flash is not found/);
+    const quota = fakeFetch([{ status: 429, json: { error: { code: 429, message: "You exceeded your current quota.", status: "RESOURCE_EXHAUSTED" } } }]);
+    const r2 = await testKey(input, quota.fetch);
+    expect(r2.ok ? "" : r2.error).toMatch(/^Google Gemini is limiting this key right now/);
+    const broken: Fetch = async () => {
+      throw new TypeError("Network request failed");
+    };
+    const r3 = await testKey(input, broken);
+    expect(r3.ok ? "" : r3.error).toMatch(/Couldn’t reach Google Gemini|didn’t get to Google Gemini/);
   });
 });
