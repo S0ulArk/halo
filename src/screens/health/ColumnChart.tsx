@@ -169,9 +169,12 @@ export function ColumnChart({ summary, data, format, unit, tickEvery = 1, refere
             <Grid ys={ticks.map(y)} x1={X0} x2={x1} />
             <RightAxis x={x1} ys={ticks.map(y)} texts={tickText} font={axis} />
             {ds.map((col, i) => (col ? <Path key={i} path={sp(col)} color={ink} opacity={!any || data[i].highlight ? 1 : k.dim} /> : null))}
-            {data.map((d, i) =>
-              i % tickEvery === 0 ? <SText key={`t${i}`} x={cx(i)} y={plotBottom + AXIS.tickMargin + AXIS.fontSize} text={d.label} font={axis} color={k.axis} anchor="middle" /> : null,
-            )}
+            {data.map((d, i) => {
+              if (i % tickEvery !== 0) return null;
+              // Centred under its column, kept on the canvas at both ends.
+              const half = measure(axis, d.label) / 2;
+              return <SText key={`t${i}`} x={Math.min(width - half - 1, Math.max(half + 1, cx(i)))} y={plotBottom + AXIS.tickMargin + AXIS.fontSize} text={d.label} font={axis} color={k.axis} anchor="middle" />;
+            })}
             {reference && (
               <Group>
                 <GuideLine x1={X0} x2={x1} y1={y(reference.y)} y2={y(reference.y)} />

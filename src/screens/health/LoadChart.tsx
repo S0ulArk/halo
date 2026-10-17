@@ -12,7 +12,7 @@ import { DAY, formatDay, formatValue } from "@/lib/format";
 import type { FitnessVM } from "@/queries";
 import { Txt, useTheme } from "@/ui";
 import { useCalm, type CalmPalette } from "@/ui/calm";
-import { AXIS, barPath, ChartFigure, FadeShader, Grid, GuideLine, LINE, PointMark, RightAxis, ScrubCursor, sp, SText, useBandScrub, useChartInk, useScrubArmed, type ChartFonts } from "@/ui/components/ChartFrame";
+import { AXIS, barPath, ChartFigure, FadeShader, Grid, GuideLine, LINE, measure, PointMark, RightAxis, ScrubCursor, sp, SText, useBandScrub, useChartInk, useScrubArmed, type ChartFonts } from "@/ui/components/ChartFrame";
 
 const H = 220;
 /** The plot's left edge, and the room on its right for the value axis (three digits and a sign, the gap and air). */
@@ -156,9 +156,12 @@ export function LoadChart({ load }: { load: Load }) {
             <Group>
               <Grid ys={yTicks.map(y)} x1={x0} x2={x1} />
               <RightAxis x={x1} ys={yTicks.map(y)} texts={yTicks.map((v) => formatValue("int", v))} font={axis} />
-              {ticks.map((i) => (
-                <SText key={i} x={cx(i)} y={plotBottom + AXIS.tickMargin + AXIS.fontSize} text={formatDay(load[i].day, { month: "short" })} font={axis} color={k.axis} anchor="middle" />
-              ))}
+              {ticks.map((i) => {
+                // Centred on the month's first day, kept on the canvas at both ends.
+                const text = formatDay(load[i].day, { month: "short" });
+                const half = measure(axis, text) / 2;
+                return <SText key={i} x={Math.min(width - half - 1, Math.max(half + 1, cx(i)))} y={plotBottom + AXIS.tickMargin + AXIS.fontSize} text={text} font={axis} color={k.axis} anchor="middle" />;
+              })}
               <GuideLine x1={x0} x2={x1} y1={y(0)} y2={y(0)} />
               <Group>
                 {/* Form: thin capsules, sand below zero (fatigue above fitness), else mint; past days dimmed, today at full ink. */}

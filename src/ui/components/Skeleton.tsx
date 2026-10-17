@@ -6,27 +6,41 @@ import * as React from "react";
 import { View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { cancelAnimation, Easing, makeMutable, useAnimatedStyle, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import { useCalm } from "@/ui/calm";
-import { reduceMotionNow } from "@/ui/motion/system";
+import { reduceMotionNow, useReduceMotion } from "@/ui/motion/system";
 import { ROLES, type TextRole } from "./Text";
 
-/** The bars' shared opacity: 1 → 0.5 → 1 every two seconds while any bar is mounted. */
+/** The bars' shared opacity: 1 → 0.5 → 1 every two seconds while any bar is mounted and motion is allowed. */
 const pulse = makeMutable(1);
 let mounted = 0;
+let running = false;
 const BREATH = { duration: 1000, easing: Easing.inOut(Easing.ease) };
 
+/** Starts the loop when a bar is on screen and motion is allowed, and stops it (bars at full) otherwise. */
+function sync() {
+  const want = mounted > 0 && !reduceMotionNow();
+  if (want === running) return;
+  running = want;
+  if (want) {
+    pulse.set(1);
+    pulse.set(withRepeat(withSequence(withTiming(0.5, BREATH), withTiming(1, BREATH)), -1, false));
+  } else {
+    cancelAnimation(pulse);
+    pulse.set(1);
+  }
+}
+
 function usePulse() {
+  const reduce = useReduceMotion();
   React.useEffect(() => {
-    if (mounted++ === 0 && !reduceMotionNow()) {
-      pulse.set(1);
-      pulse.set(withRepeat(withSequence(withTiming(0.5, BREATH), withTiming(1, BREATH)), -1, false));
-    }
+    mounted++;
+    sync();
     return () => {
-      if (--mounted === 0) {
-        cancelAnimation(pulse);
-        pulse.set(1);
-      }
+      mounted--;
+      sync();
     };
   }, []);
+  // Reduce motion turned on or off while bars are showing.
+  React.useEffect(sync, [reduce]);
 }
 
 /** A breathing bar in the separator grey (`calm.line`). Give it a size; the default radius is 8. */

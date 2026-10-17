@@ -13,13 +13,13 @@ import { alpha } from "@/lib/utils";
 import { getHealthHub, getHome, getHrvStatus, TREND_GROUPS, TREND_METRICS, type HealthHubVM } from "@/queries";
 import { useApp, useQuery } from "@/state/app";
 import { Txt } from "@/ui";
-import { useCalm, type CalmPalette } from "@/ui/calm";
+import { useCalm } from "@/ui/calm";
 import { ActivityRings } from "@/ui/components/Halo";
 import { Grow, HealthCard } from "./kit";
 import { toneInk } from "@/screens/detail/calmKit";
 import { categoryInk, categoryWord, ordinal } from "./format";
 import { LastReading } from "./LastReading";
-import { HaloAgeHero, HaloAgeHeroSkeleton, type AgePill } from "./PulseAge";
+import { HaloAgeHero, HaloAgeHeroSkeleton, pacePill, type AgePill } from "./PulseAge";
 import { ErrorState, TabShell, usePush } from "./shells";
 import { AvatarButton } from "@/ui/components/AvatarButton";
 import { homeKey, useDashboardKeys } from "@/screens/home/dashboard";
@@ -40,9 +40,6 @@ function paceChip(delta: number | null) {
   if (Math.abs(delta) < 0.05) return { tone: "neutral" as const, word: "No change", text: "No change vs. last week" };
   return delta < 0 ? { tone: "optimal" as const, word: "Slower", text: "Slower vs. last week" } : { tone: "warning" as const, word: "Faster", text: "Faster vs. last week" };
 }
-
-/** A pace's colour: under 1.0x (aging slower) green, over it orange, level in ink. */
-const paceInk = (c: CalmPalette, pace: number) => (pace < 1 ? c.tintInk.mint : pace > 1 ? c.tintInk.peach : c.ink);
 
 /** A note under the hero: 13/18 grey. */
 function Note({ children }: { children: string }) {
@@ -67,17 +64,7 @@ function HaloAge({ m, onPress }: { m: HealthHubVM["healthspan"] | undefined; onP
     );
   const v = m.value;
   const chip = v ? paceChip(v.paceDelta) : null;
-  const pills: AgePill[] = v
-    ? [
-        {
-          label: "Pace of aging",
-          value: v.pace == null ? MISSING : `${formatValue("decimal1", v.pace)}×`,
-          color: v.pace == null ? c.faint : paceInk(c, v.pace),
-          spoken: v.pace == null ? "not yet" : `${formatValue("decimal1", v.pace)} x`,
-        },
-        ...(chip ? [{ label: "vs. last week", value: chip.word, color: toneInk(c, chip.tone), spoken: chip.text }] : []),
-      ]
-    : [];
+  const pills: AgePill[] = v ? [pacePill(c, v.pace), ...(chip ? [{ label: "vs. last week", value: chip.word, color: toneInk(c, chip.tone), spoken: chip.text }] : [])] : [];
   return (
     <HaloAgeHero
       age={v?.pulseAge ?? null}
@@ -301,7 +288,7 @@ function HeartCard({ hr, loading, onPress }: { hr: HealthHubVM["heartRate"]; loa
       tint="rose"
       icon={HeartPulse}
       title="Heart Rate"
-      when={hr ? <LastReading t={hr.t} /> : undefined}
+      when={hr ? <LastReading t={hr.t} spoken={false} /> : undefined}
       loading={loading}
       value={loading ? undefined : hr ? String(hr.bpm) : null}
       unit="bpm"
@@ -359,6 +346,8 @@ function NutritionCard({ onPress }: { onPress: () => void }) {
   const version = useJournalVersion();
   const q = useQuery((ctx) => nutritionOn(ctx.store, ctx.today, ctx.timeZone), [version]);
   const t = q.data;
+  // Loading only while the query runs: a failed read shows the dashes under "Today so far", as before.
+  const loading = !t && !q.error;
   const n = (v: number | null | undefined) => (v === null || v === undefined ? MISSING : formatValue("grouped", Math.round(v)));
   const label = !t || t.kcal === null ? "Nutrition: no food logged today. Open Nutrition" : `Nutrition today: ${n(t.kcal)} kcal, ${n(t.protein)} g protein, ${n(t.carbs)} g carbs, ${n(t.fat)} g fat. Open Nutrition`;
   return (
@@ -367,10 +356,10 @@ function NutritionCard({ onPress }: { onPress: () => void }) {
       icon={Utensils}
       title="Nutrition"
       when="Today"
-      loading={!t}
-      value={t ? (t.kcal === null ? null : n(t.kcal)) : undefined}
+      loading={loading}
+      value={loading ? undefined : t && t.kcal !== null ? n(t.kcal) : null}
       unit="kcal"
-      context={t ? (t.kcal === null ? "No food logged today" : "Today so far") : undefined}
+      context={loading ? undefined : t && t.kcal === null ? "No food logged today" : "Today so far"}
       onPress={onPress}
       accessibilityLabel={label}
     >
@@ -418,7 +407,8 @@ export default function HealthHub() {
       {!failed && (slot ? <RecoveryCard {...slot} /> : homeQ.error ? null : <RecoveryCardSkeleton />)}
       {!failed && <MonitorCard m={vm?.monitor} onPress={() => push("/health/monitor")} />}
       {!failed && <StressCard m={vm?.stress} timeZone={timeZone} onPress={() => push("/health/stress")} />}
-      {!failed && <HrvStatusCard m={hrvQ.data} onOpen={() => push(chartHref({ metric: "hrv", r: "m" }))} />}
+      {/* HRV Status holds its place while it loads; a failed read leaves it out, as before. */}
+      {!failed && !hrvQ.error && <HrvStatusCard m={hrvQ.data} onOpen={() => push(chartHref({ metric: "hrv", r: "m" }))} />}
       {!failed && <FitnessCard m={vm?.fitness} onPress={() => push("/health/fitness")} />}
       {!failed && <HeartCard hr={vm?.heartRate ?? null} loading={!vm} onPress={() => push("/health/heart-rate")} />}
       {!failed && <NutritionCard onPress={() => push("/nutrition")} />}

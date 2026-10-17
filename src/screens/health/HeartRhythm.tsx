@@ -59,10 +59,10 @@ function Row({ icon, title, line, right, below, onPress, label }: { icon: Lucide
       {below ? <View style={{ paddingLeft: ICON + 12, gap: 8, alignItems: "flex-start" }}>{below}</View> : null}
     </View>
   );
-  const box = { minHeight: 52, paddingHorizontal: 16, paddingVertical: 11 };
+  const box = { minHeight: 48, paddingHorizontal: 16, paddingVertical: 10 };
   if (!onPress)
     return (
-      <View accessible accessibilityLabel={[title, line].filter(Boolean).join(", ")} style={box}>
+      <View accessible accessibilityLabel={label ?? [title, line].filter(Boolean).join(", ")} style={box}>
         {body}
       </View>
     );
@@ -120,6 +120,7 @@ export function HeartRhythm({ rhythm }: { rhythm: HeartRhythmVM }) {
           title="Irregular rhythm notifications"
           line={irn.latestDay ? `Latest ${formatDay(irn.latestDay, DAY.short)}` : "None. The check runs from time to time while you’re still, so no alert doesn’t rule out AFib."}
           right={<Num value={String(irn.count)} size={17} color={c.sub} />}
+          label={`Irregular rhythm notifications: ${irn.count}. ${irn.latestDay ? `Latest ${formatDay(irn.latestDay, DAY.short)}` : "None. The check runs from time to time while you’re still, so no alert doesn’t rule out AFib."}`}
         />,
       ];
 

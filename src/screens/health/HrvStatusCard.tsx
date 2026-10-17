@@ -13,7 +13,6 @@ import type { Metric } from "@/lib/reasons";
 import { alpha } from "@/lib/utils";
 import { InfoButton, ReasonPlaceholder, Txt, type InfoContent } from "@/ui";
 import { useCalm } from "@/ui/calm";
-import { TonePill } from "@/ui/components/Meter";
 import { GUIDE_DASH } from "@/ui/components/ChartFrame";
 import { Caption, Num, Sentence, toneInk } from "@/screens/detail/calmKit";
 import { SOURCE_NOTE } from "@/screens/detail/info";
@@ -43,7 +42,10 @@ export const HRV_STATUS_INFO: InfoContent = {
 
 const H = 72;
 
-/** The last 28 nights as capsule bars against the usual range (a soft band) and the Low line (dashed). */
+/**
+ * The last 28 nights as capsule bars against the usual range (a soft band) and the Low line (dashed). Inside the card's
+ * one button, whose label says what it shows, so it is not a stop of its own for a screen reader.
+ */
 function Nights({ vm }: { vm: HrvStatusVM }) {
   const c = useCalm();
   const values = vm.nights.map((p) => p.v).filter((v): v is number => v != null);
@@ -53,11 +55,7 @@ function Nights({ vm }: { vm: HrvStatusVM }) {
   const ink = toneInk(c, vm.tone);
   const fill = vm.tone === "neutral" ? c.system.blue : ink;
   return (
-    <View
-      accessible
-      accessibilityLabel={`Last 4 weeks of nightly HRV against your usual range of ${Math.round(vm.band.low)} to ${Math.round(vm.band.high)} milliseconds`}
-      style={{ height: H, justifyContent: "flex-end" }}
-    >
+    <View importantForAccessibility="no-hide-descendants" style={{ height: H, justifyContent: "flex-end" }}>
       <View style={{ position: "absolute", left: 0, right: 0, bottom: y(vm.band.low), height: Math.max(2, y(vm.band.high) - y(vm.band.low)), borderRadius: 6, backgroundColor: alpha(c.system.green, 0.14) }} />
       <Svg width="100%" height={2} style={{ position: "absolute", left: 0, right: 0, bottom: y(vm.lowLine) - 1 }}>
         <Line x1="0" y1="1" x2="100%" y2="1" stroke={alpha(c.ink, 0.3)} strokeWidth={1} strokeDasharray={GUIDE_DASH} />
@@ -86,7 +84,7 @@ export function HrvStatusCard({ m, onOpen }: { m: Metric<HrvStatusVM> | undefine
       </HealthCard>
     );
   const ink = toneInk(c, v.tone);
-  const label = `HRV Status ${v.status}: 7-day average ${Math.round(v.weekAverage)} milliseconds, ${v.lastNight == null ? "no HRV last night" : `last night ${Math.round(v.lastNight)}`}, usual range ${Math.round(v.band.low)} to ${Math.round(v.band.high)}. Open HRV in the chart explorer`;
+  const label = `HRV Status ${v.status}: 7-day average ${Math.round(v.weekAverage)} milliseconds, ${v.lastNight == null ? "no HRV last night" : `last night ${Math.round(v.lastNight)}`}, usual range ${Math.round(v.band.low)} to ${Math.round(v.band.high)}, with the last 4 weeks of nightly HRV drawn against it. Open HRV in the chart explorer`;
   return (
     <HealthCard
       tint="sky"
@@ -109,10 +107,7 @@ export function HrvStatusCard({ m, onOpen }: { m: Metric<HrvStatusVM> | undefine
       accessibilityLabel={label}
     >
       <View style={{ gap: 14 }}>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
-          <TonePill tone={v.tone}>{v.status}</TonePill>
-          <Sentence size={13}>{v.line}</Sentence>
-        </View>
+        <Sentence size={13}>{v.line}</Sentence>
         {/* Two columns: each number with its label under it. */}
         <View style={{ flexDirection: "row", gap: 12 }}>
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>

@@ -134,7 +134,13 @@ function Chart({ s, variant, tz, onPress }: { s: StressSeries; variant: "full" |
           <Group>
             {full && <Grid ys={[0, 1, 2, 3].map(y)} x1={x0} x2={x1} />}
             {full && spanAreas(s.spans, x, x0, x1, plotTop, plotBottom, calm)}
-            {full && hourTicks(first, last, 4, tz).map((t) => <SText key={t} x={x(t)} y={plotBottom + AXIS.tickMargin + AXIS.fontSize} text={clock(t, tz)} font={axis} color={k.axis} anchor="middle" />)}
+            {full &&
+              hourTicks(first, last, 4, tz).map((t) => {
+                // Centred on its tick, kept on the canvas at both ends.
+                const text = clock(t, tz);
+                const half = measure(axis, text) / 2;
+                return <SText key={t} x={Math.min(width - half - 1, Math.max(half + 1, x(t)))} y={plotBottom + AXIS.tickMargin + AXIS.fontSize} text={text} font={axis} color={k.axis} anchor="middle" />;
+              })}
             {full && <RightAxis x={x1} ys={[0, 1, 2, 3].map(y)} texts={["0", "1", "2", "3"]} font={axis} />}
             <Group>
               {lineRuns.map((run, j) => {

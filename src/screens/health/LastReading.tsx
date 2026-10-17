@@ -14,8 +14,11 @@ import { useNow } from "./shells";
 /** A reading this recent counts as live: the band, the phone and Health Connect take a minute or three between them. */
 const LIVE_MS = 5 * 60_000;
 
-/** "● 2 minutes ago": the dot pings while the reading is under 5 minutes old. */
-export function LastReading({ t }: { t: number }) {
+/**
+ * "● 2 minutes ago": the dot pings while the reading is under 5 minutes old. `spoken` false inside a button that already
+ * says it (the Health tab's Heart Rate card), so it is not a second stop for a screen reader.
+ */
+export function LastReading({ t, spoken = true }: { t: number; spoken?: boolean }) {
   const c = useCalm();
   const now = useNow();
   const fresh = now - t < LIVE_MS;
@@ -36,7 +39,12 @@ export function LastReading({ t }: { t: number }) {
   }, [running, ping]);
   const ring = useAnimatedStyle(() => ({ opacity: 0.4 * (1 - ping.value), transform: [{ scale: 1 + ping.value }] }));
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }} accessible accessibilityLabel={`${fresh ? "Live, " : ""}${ago(t, now)}`}>
+    <View
+      style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+      accessible={spoken}
+      importantForAccessibility={spoken ? "auto" : "no-hide-descendants"}
+      accessibilityLabel={`${fresh ? "Live, " : ""}${ago(t, now)}`}
+    >
       {fresh && (
         <View style={{ width: 8, height: 8 }}>
           <Animated.View style={[{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, borderRadius: 4, backgroundColor: c.tintInk.rose }, ring]} />

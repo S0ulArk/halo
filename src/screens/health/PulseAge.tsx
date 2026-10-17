@@ -33,6 +33,13 @@ function heroInk(c: CalmPalette, tint: CalmTint) {
 /** One of the hero's two pills: a grey label over a value in its colour. */
 export type AgePill = { label: string; value: string; color?: string; spoken?: string };
 
+/** The Pace of Aging pill: "0.7×", green under 1.0x (aging slower), orange over it, ink level; a dash before it shows. */
+export function pacePill(c: CalmPalette, pace: number | null): AgePill {
+  if (pace === null) return { label: "Pace of aging", value: MISSING, color: c.faint, spoken: "not yet" };
+  const text = formatValue("decimal1", pace);
+  return { label: "Pace of aging", value: `${text}×`, color: pace < 1 ? c.tintInk.mint : pace > 1 ? c.tintInk.peach : c.ink, spoken: `${text} x` };
+}
+
 /** The pills under the scale, side by side (one fills the row): the card's quiet fill, 14 px corners. */
 function Pills({ pills, spoken }: { pills: AgePill[]; spoken: boolean }) {
   const c = useCalm();

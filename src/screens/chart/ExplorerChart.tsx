@@ -490,7 +490,8 @@ export function ExplorerChart(p: ExplorerChartProps) {
           for (let i = firstTickAtOrAfter(ticks, s); i < ticks.length && ticks[i].x <= s + sp; i++) {
             const x = px(ticks[i].x);
             const w = axisFont.getTextWidth(ticks[i].text);
-            const left = Math.min(width - w - 2, Math.max(LEFT - w / 2, x - w / 2));
+            // Centred on its tick, kept on the canvas at both ends.
+            const left = Math.min(width - w - 2, Math.max(2, x - w / 2));
             canvas.drawText(ticks[i].text, left, height - 9, paints.text, axisFont);
           }
         }

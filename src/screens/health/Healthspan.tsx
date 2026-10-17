@@ -7,7 +7,7 @@ import * as React from "react";
 import { View } from "react-native";
 import { useRouter } from "expo-router";
 import { useDay } from "@/lib/day";
-import { AGE_LABEL, formatValue, MISSING } from "@/lib/format";
+import { AGE_LABEL, formatValue } from "@/lib/format";
 import { getHealthspan, type HealthspanVM } from "@/queries";
 import { useApp, useQuery } from "@/state/app";
 import { EmptyState, InsightCard, SectionShell, SkeletonText, TickScaleSkeleton, TrendChart, TrendChartSkeleton, Txt, type DateSwitcherProps } from "@/ui";
@@ -18,12 +18,9 @@ import { Sentence } from "@/screens/detail/calmKit";
 import { useOpenChart } from "@/screens/chart/href";
 import { ContributorList, ContributorListSkeleton } from "./ContributorCard";
 import { HEALTHSPAN_INFO } from "./detailInfo";
-import { HaloAgeHero, HaloAgeHeroSkeleton, PaceScale, type AgePill } from "./PulseAge";
+import { HaloAgeHero, HaloAgeHeroSkeleton, pacePill, PaceScale, type AgePill } from "./PulseAge";
 import { DetailScreen, ErrorState } from "./shells";
 import { weekBefore } from "./format";
-
-/** A pace's colour: under 1.0x (aging slower) green, over it orange, level in ink. */
-const paceInk = (c: CalmPalette, pace: number) => (pace < 1 ? c.tintInk.mint : pace > 1 ? c.tintInk.peach : c.ink);
 
 /** The hero's pills: Pace of Aging, and how far the Halo Age moved since the week before. */
 function pillsOf(vm: HealthspanVM, c: CalmPalette): AgePill[] {
@@ -33,7 +30,7 @@ function pillsOf(vm: HealthspanVM, c: CalmPalette): AgePill[] {
   const delta = prev === null ? null : r.pulseAge - prev;
   const moved = delta === null ? null : formatValue("decimal1", Math.abs(delta)) === "0.0" ? 0 : delta;
   return [
-    { label: "Pace of aging", value: r.pace == null ? MISSING : `${formatValue("decimal1", r.pace)}×`, color: r.pace == null ? c.faint : paceInk(c, r.pace), spoken: r.pace == null ? "not yet" : `${formatValue("decimal1", r.pace)} x` },
+    pacePill(c, r.pace),
     ...(moved === null
       ? []
       : [
