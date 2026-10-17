@@ -10,17 +10,17 @@ Taken with Halo's built-in demo data (a generated person, not real health data),
 
 <table>
   <tr>
-    <td><img src="docs/screenshots/light/today.png" width="250" alt="Today: Recovery, Sleep and Strain with the live heart-rate tile"></td>
-    <td><img src="docs/screenshots/light/sleep.png" width="250" alt="Sleep: Sleep Performance and its parts"></td>
-    <td><img src="docs/screenshots/light/activity.png" width="250" alt="Activity: Day Strain, target and heart-rate zones"></td>
+    <td><img src="docs/screenshots/light/today.png" width="250" alt="Today: Recovery, Sleep and Strain rings, the day's insight and the day in review, with Liquid Glass bars"></td>
+    <td><img src="docs/screenshots/light/sleep.png" width="250" alt="Sleep: time asleep, last night's sleep stages chart and the time in each stage"></td>
+    <td><img src="docs/screenshots/light/activity.png" width="250" alt="Activity: Day Strain against today's target, heart-rate zones, strength time and steps"></td>
   </tr>
   <tr>
     <td align="center">Today</td><td align="center">Sleep</td><td align="center">Activity</td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/dark/health.png" width="250" alt="Health: Halo Age and Pace of Aging, dark theme"></td>
-    <td><img src="docs/screenshots/dark/recovery.png" width="250" alt="Recovery: HRV, resting heart rate and respiratory rate against baseline, dark theme"></td>
-    <td><img src="docs/screenshots/dark/monitor.png" width="250" alt="Health Monitor: last night's vitals, dark theme"></td>
+    <td><img src="docs/screenshots/dark/health.png" width="250" alt="Halo Age: 2.8 years younger than actual age, and the Pace of Aging, dark theme"></td>
+    <td><img src="docs/screenshots/dark/recovery.png" width="250" alt="Recovery: 74% and what shaped it, HRV and resting heart rate against normal, dark theme"></td>
+    <td><img src="docs/screenshots/dark/monitor.png" width="250" alt="Health Monitor: last night's vitals, five of five within range, dark theme"></td>
   </tr>
   <tr>
     <td align="center">Halo Age (dark)</td><td align="center">Recovery (dark)</td><td align="center">Health Monitor (dark)</td>
