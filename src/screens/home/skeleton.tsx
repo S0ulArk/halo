@@ -12,7 +12,7 @@ import { accentFamily, InfoButton, SectionShell, Skeleton, SkeletonText, Timelin
 import { useCalm, type CalmTint } from "@/ui/calm";
 import { Caption, FAMILY_TINT } from "@/ui/components/calmKit";
 import { CalmSurface, PillAction } from "@/ui/components/CalmSurface";
-import { RowRule } from "./controls";
+import { RowRule, useTitleInk } from "./controls";
 import { STRAIN_RECOVERY_INFO } from "./info";
 import { MINI_H, MINI_W } from "./miniCharts";
 import { CARD_GAP, SectionTitle } from "./sections";
@@ -20,8 +20,7 @@ import { STAT_ICON } from "./view";
 
 /** A card's head: the glyph and the title in the family's colour (or a bar for the title), then its body. */
 function SkelCard({ icon: Icon, tint, title, sentence = false, right, children }: { icon: LucideIcon; tint: CalmTint; title?: string; sentence?: boolean; right?: React.ReactNode; children?: React.ReactNode }) {
-  const c = useCalm();
-  const ink = c.tintInk[tint];
+  const ink = useTitleInk(tint);
   return (
     <CalmSurface padding={16} gap={14}>
       <View style={{ gap: 4 }}>
@@ -46,7 +45,8 @@ function SkelCard({ icon: Icon, tint, title, sentence = false, right, children }
 /** A Health card's loading shape: its real glyph and name when known, bars for the value and context, the chart's box. */
 function HealthSkeleton({ icon: Icon, tint, title, filled }: { icon: LucideIcon; tint: CalmTint | null; title?: string; filled?: boolean }) {
   const c = useCalm();
-  const ink = tint ? c.tintInk[tint] : c.sub;
+  const titleInk = useTitleInk(tint ?? "sky");
+  const ink = tint ? titleInk : c.sub;
   return (
     <CalmSurface padding={16}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 7, minHeight: 22 }}>

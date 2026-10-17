@@ -546,7 +546,7 @@ export function FoodSheet({ request, open, onClose, today, overviewLink }: FoodS
   // The bar's filled action, once there is something to save.
   let barAction: { label: string; onPress: () => void; disabled?: boolean } | undefined;
   const errorLine = error ? <ErrorAlert>{error}</ErrorAlert> : null;
-  const fullWidth = { alignSelf: "stretch", minHeight: 56, borderRadius: 28 } as const;
+  const fullWidth = { alignSelf: "stretch" } as const;
 
   if (step === "estimating") {
     body = (

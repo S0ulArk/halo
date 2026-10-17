@@ -8,7 +8,7 @@
 // Every scroll-driven change (the title folding, the inline title, the bar's edge) is an animated style off the page's
 // scroll offset on the UI thread; nothing here runs JS per frame.
 import * as React from "react";
-import { ActivityIndicator, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, Pressable, useWindowDimensions, View } from "react-native";
 import Animated, { Extrapolation, interpolate, useAnimatedStyle, type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Line } from "react-native-svg";
@@ -99,7 +99,8 @@ export function TodayBar({ y, title, streak, sync, onAvatar }: { y: SharedValue<
           {title}
         </Txt>
       </Animated.View>
-      <View pointerEvents="box-none" style={{ marginTop: insets.top, height: BAR_ROW, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16 }}>
+      {/* The bar's row takes the touches over its whole width, as iOS's bar does: what has scrolled under it can't be tapped. */}
+      <View style={{ marginTop: insets.top, height: BAR_ROW, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16 }}>
         {streak && streak.days > 0 ? <StreakCapsule days={streak.days} /> : null}
         <View style={{ flex: 1 }} />
         <SyncStatus status={sync.status} now={sync.now} onPress={sync.onPress} hideText />
@@ -313,6 +314,8 @@ export function TodayHero({ vm, at, go, asleepMin }: { vm: HomeVM; asleepMin: nu
 
 /** The right-hand axis's width: its labels ("8h", "100") sit in it, Apple Health's way. */
 const AXIS_W = 30;
+/** Recovery's grid lines, in percent. */
+const GRID = [100, 66, 33];
 
 /**
  * The week of nights as Apple Health's sleep bars: a rounded bar per night (the night shown in indigo, the others its
@@ -472,13 +475,18 @@ function RecoveryWeek({ week, shown }: { week: { day: string; recovery: number |
         ))}
       </View>
       <View style={{ height: H }}>
-        {[100, 66, 33].map((g) => (
-          <React.Fragment key={g}>
-            <View pointerEvents="none" style={{ position: "absolute", left: 0, right: AXIS_W, top: H - (g / 100) * H, height: StyleSheet.hairlineWidth, backgroundColor: c.line }} />
-            <Txt size={10} lineHeight={12} style={[font.numeric(500), { position: "absolute", right: 0, width: AXIS_W - 4, top: H - (g / 100) * H - 6, color: c.sub, textAlign: "right" }]}>
-              {String(g)}
-            </Txt>
-          </React.Fragment>
+        {/* The faint dashed grid at 33, 66 and 100, Apple Health's, its values on the right-hand axis. */}
+        <View pointerEvents="none" style={{ position: "absolute", left: 0, right: AXIS_W, top: 0, height: H }}>
+          <Svg width="100%" height={H}>
+            {GRID.map((g) => (
+              <Line key={g} x1="0" y1={Math.max(0.5, H - (g / 100) * H)} x2="100%" y2={Math.max(0.5, H - (g / 100) * H)} stroke={c.line} strokeWidth={1} strokeDasharray={[2.5, 3]} />
+            ))}
+          </Svg>
+        </View>
+        {GRID.map((g) => (
+          <Txt key={g} size={10} lineHeight={12} style={[font.numeric(500), { position: "absolute", right: 0, width: AXIS_W - 4, top: H - (g / 100) * H - 6, color: c.sub, textAlign: "right" }]}>
+            {String(g)}
+          </Txt>
         ))}
         <Grow mode="rise" height={H} style={{ position: "absolute", left: 0, right: AXIS_W, top: 0 }}>
           <View style={{ height: H, flexDirection: "row", alignItems: "flex-end" }}>

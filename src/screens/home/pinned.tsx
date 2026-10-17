@@ -7,7 +7,8 @@
 // Light: every card is memoised (a re-render of Today redraws none of them unless its own numbers change), its chart is
 // Views or one small Svg, and its number rolls into place on the UI thread (RollingNumber).
 import * as React from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { Activity, type LucideIcon } from "lucide-react-native";
 import { deltaTone } from "@/lib/bands";
 import { dayLabel, formatValue, MISSING, NBSP, statSentence, type FormatKey } from "@/lib/format";
@@ -15,11 +16,13 @@ import { reasonCopy } from "@/lib/reasons";
 import type { KeyStat } from "@/queries";
 import { accentFamily, MetricTags, Txt } from "@/ui";
 import { useCalm, type CalmTint } from "@/ui/calm";
-import { Card } from "@/ui/components/Card";
-import { ChevronSlot, familyTint } from "@/ui/components/calmKit";
+import { CalmSurface } from "@/ui/components/CalmSurface";
+import { ChevronSlot, familyTint, OnCard } from "@/ui/components/calmKit";
 import { RollingNumber } from "@/ui/components/Halo";
 import { DeltaGlyph } from "@/ui/components/Meter";
+import { usePress, usePressStyle } from "@/ui/components/press";
 import { font } from "@/ui/fonts";
+import { useTitleInk } from "./controls";
 import { MiniBars, MiniDots } from "./miniCharts";
 import { STAT_ICON, statProps } from "./view";
 
@@ -45,14 +48,24 @@ export type HealthCardProps = {
   chart?: React.ReactNode;
   /** The glyph drawn filled (the heart). */
   filled?: boolean;
+  /** Under the value, inside the card's one target (tags, a note). */
   children?: React.ReactNode;
+  /** At the card's foot, a target of its own beside the card's (a button), so a screen reader reaches it. */
+  footer?: React.ReactNode;
 };
 
-/** The card's shell, Apple Health's highlight card. */
-export function HealthCard({ icon: Icon, color, title, when, onPress, accessibilityLabel, value, context, chart, filled, children }: HealthCardProps) {
+const PressableView = Animated.createAnimatedComponent(Pressable);
+
+/**
+ * The card's shell, Apple Health's highlight card. The head, value, chart and children are one target (it settles and
+ * dims while pressed, or one spoken block when it opens nothing); the footer sits under them, its own target.
+ */
+export function HealthCard({ icon: Icon, color, title, when, onPress, accessibilityLabel, value, context, chart, filled, children, footer }: HealthCardProps) {
   const c = useCalm();
-  return (
-    <Card padding={16} onPress={onPress} accessibilityLabel={accessibilityLabel}>
+  const press = usePress(footer ? 0.985 : 0.97);
+  const pressed = usePressStyle(press, { dim: 0.88 });
+  const body = (
+    <>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 7, minHeight: 22 }}>
         <Icon size={18} color={color} fill={filled ? color : "none"} strokeWidth={2.2} />
         {/* A long name wraps under itself rather than being cut. */}
@@ -74,7 +87,24 @@ export function HealthCard({ icon: Icon, color, title, when, onPress, accessibil
         {chart ? <View style={{ marginBottom: 3 }}>{chart}</View> : null}
       </View>
       {children}
-    </Card>
+    </>
+  );
+  const box = { padding: 16, paddingBottom: footer ? 12 : 16 };
+  return (
+    <CalmSurface padding={0}>
+      <OnCard>
+        {onPress ? (
+          <PressableView onPress={onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut} accessibilityRole="button" accessibilityLabel={accessibilityLabel} style={[box, pressed]}>
+            {body}
+          </PressableView>
+        ) : (
+          <View accessible accessibilityLabel={accessibilityLabel} style={box}>
+            {body}
+          </View>
+        )}
+        {footer ? <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>{footer}</View> : null}
+      </OnCard>
+    </CalmSurface>
   );
 }
 
@@ -190,7 +220,7 @@ export const StatCard = React.memo(function StatCard({ s, series, day, today, op
   const value = v !== null && Number.isFinite(v) ? v : null;
   const tint: CalmTint = familyTint(family, value) ?? "sky";
   // The category line keeps its family's colour; Recovery's number takes its band's.
-  const head = c.tintInk[familyTint(family) ?? "sky"];
+  const head = useTitleInk(familyTint(family) ?? "sky");
   const color = c.tintInk[tint];
   const reason = value === null ? reasonCopy(s.metric.reason, s.metric.nightsLeft).short : null;
   const avg = p.average ?? null;

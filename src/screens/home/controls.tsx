@@ -42,6 +42,16 @@ export function HeadTile({ icon: Icon, color, bg, size = 44 }: { icon: LucideIco
   );
 }
 
+/**
+ * A family's colour as a title's: the system colour itself, except yellow on the light ground, which is deepened toward
+ * ink so a 16 px title stays readable (iOS never sets text in its pale yellow).
+ */
+export function useTitleInk(tint: CalmTint): string {
+  const c = useCalm();
+  const dark = useTheme().scheme === "dark";
+  return tint === "sand" && !dark ? mix(c.tintInk.sand, c.ink, 0.8) : c.tintInk[tint];
+}
+
 /** A list row's icon square, iOS Settings' 29 px: the family's system colour with a white glyph. */
 export function RowIcon({ icon, tint, size = 29 }: { icon: LucideIcon; tint: CalmTint; size?: number }) {
   const c = useCalm();
@@ -106,8 +116,7 @@ function CardHead({ icon: Icon, ink, title, subtitle, subtitleColor, right, chev
  * then the body. A tinted card has its family's soft wash behind it. Everything inside knows it sits on a card.
  */
 export function HomeCard({ tint, icon, iconTint, title, subtitle, subtitleColor, right, onPress, accessibilityLabel, gap = 14, style, children, footer }: HomeCardProps) {
-  const c = useCalm();
-  const ink = c.tintInk[tint ?? iconTint ?? "sky"];
+  const ink = useTitleInk(tint ?? iconTint ?? "sky");
   const head = <CardHead icon={icon} ink={ink} title={title} subtitle={subtitle} subtitleColor={subtitleColor} right={right} chevron={!!onPress} />;
   const wash = tint ? <TintWash tint={tint} /> : null;
   if (footer === undefined)

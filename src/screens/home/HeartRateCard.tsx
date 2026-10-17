@@ -14,8 +14,6 @@
 import * as React from "react";
 import { View } from "react-native";
 import { Heart } from "lucide-react-native";
-import { ago, clock } from "@/lib/format";
-import { localDay } from "@/lib/time";
 import { RECENT_MINUTES } from "@/health/live";
 import { useApp, useLiveHr } from "@/state/app";
 import { showsLive, useLiveBle } from "@/state/liveBle";
@@ -23,7 +21,8 @@ import { useCalm } from "@/ui/calm";
 import { HeartTrace } from "@/ui/components/BandHero";
 import { SkeletonText } from "@/ui";
 import { GoLiveButton, GoLiveSheet, rmssdLine, StopLiveButton } from "../settings/liveHr";
-import { MINI_H, MINI_W, MiniCapsules, type MiniRange } from "./miniCharts";
+import { rangeSlots, readingAge, type BpmRange } from "./heartRange";
+import { MINI_H, MINI_W, MiniCapsules } from "./miniCharts";
 import { HealthCard, HealthContext, HealthValue } from "./pinned";
 import { useNow } from "./status";
 
@@ -31,28 +30,6 @@ import { useNow } from "./status";
 const STALE_MS = 10 * 60_000;
 /** The capsules: the last 30 minutes in stretches of 5. */
 const SLOTS = 6;
-
-/** "2 min ago" under an hour; "Updated 14:32" later the same day; "14 hours ago" / "2 days ago" beyond. */
-export function readingAge(ts: number, now: number, timeZone: string) {
-  const ms = ts * 1000;
-  if (now - ms < 60 * 60_000) return ago(ms, now);
-  if (localDay(ts, timeZone) === localDay(Math.floor(now / 1000), timeZone)) return `Updated ${clock(ms, timeZone)}`;
-  return ago(ms, now);
-}
-
-/** The recent readings (unix seconds) as SLOTS equal stretches ending at the newest one, each its low and high. */
-export function rangeSlots(samples: readonly { ts: number; bpm: number }[], latestTs: number, slots = SLOTS, minutes = RECENT_MINUTES): (MiniRange | null)[] {
-  const span = (minutes * 60) / slots;
-  const start = latestTs - minutes * 60;
-  const out: (MiniRange | null)[] = Array.from({ length: slots }, () => null);
-  for (const s of samples) {
-    if (s.ts <= start || s.ts > latestTs || !(s.bpm > 0)) continue;
-    const k = Math.min(slots - 1, Math.floor((s.ts - start) / span));
-    const r = out[k];
-    out[k] = r ? { min: Math.min(r.min, s.bpm), max: Math.max(r.max, s.bpm) } : { min: s.bpm, max: s.bpm };
-  }
-  return out;
-}
 
 export function HeartRateCard({ today, onOpen }: { today: boolean; onOpen: () => void }) {
   const c = useCalm();
@@ -65,9 +42,9 @@ export function HeartRateCard({ today, onOpen }: { today: boolean; onOpen: () =>
   const { latest, recent, updatedAt, error } = liveHr;
   const color = c.tintInk.rose;
 
-  const ranges = React.useMemo(() => (latest ? rangeSlots(recent, latest.ts) : []), [recent, latest]);
+  const ranges = React.useMemo(() => (latest ? rangeSlots(recent, latest.ts, SLOTS, RECENT_MINUTES) : []), [recent, latest]);
   const trace = React.useMemo(() => (streaming ? live.history.map((h) => ({ t: h.t / 1000, bpm: h.bpm })) : []), [streaming, live.history]);
-  const lows = ranges.filter((r): r is MiniRange => r !== null);
+  const lows = ranges.filter((r): r is BpmRange => r !== null);
   const lo = lows.length ? Math.min(...lows.map((r) => r.min)) : null;
   const hi = lows.length ? Math.max(...lows.map((r) => r.max)) : null;
 
@@ -120,13 +97,13 @@ export function HeartRateCard({ today, onOpen }: { today: boolean; onOpen: () =>
         value={<HealthValue text={bpm ? String(bpm) : null} unit="BPM" color={lost ? c.sub : undefined} />}
         context={context}
         chart={chart}
+        footer={today ? <View style={{ flexDirection: "row" }}>{streaming ? <StopLiveButton /> : <GoLiveButton onPress={() => setSheet(true)} />}</View> : undefined}
       >
         {stale && (
           <View style={{ marginTop: 8 }}>
             <HealthContext>{source}</HealthContext>
           </View>
         )}
-        {today && <View style={{ marginTop: 12, flexDirection: "row" }}>{streaming ? <StopLiveButton /> : <GoLiveButton onPress={() => setSheet(true)} />}</View>}
       </HealthCard>
       {today && <GoLiveSheet open={sheet} onClose={() => setSheet(false)} />}
     </>

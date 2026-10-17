@@ -11,7 +11,9 @@ import { formatValue, MISSING, statSentence, type FormatKey } from "@/lib/format
 import { reasonCopy, type Metric, type ReasonCode } from "@/lib/reasons";
 import { NBSP } from "@/lib/format";
 import { accentFamily, type AccentFamily } from "@/ui/accents";
+import { mix } from "@/lib/utils";
 import { useCalm, type CalmPalette } from "@/ui/calm";
+import { useTheme } from "@/ui/ThemeProvider";
 import type { ColorToken } from "@/ui/theme";
 import { Card } from "./Card";
 import { ChevronSlot, familyTint, iconRadius, onBand, recolorIcon } from "./calmKit";
@@ -289,6 +291,9 @@ function Tile({ p, c }: { p: KeyStatRowProps; c: Computed }) {
   const tint = familyTint(family, c.value);
   // The category line keeps its family's colour whatever the value.
   const head = familyTint(family);
+  const dark = useTheme().scheme === "dark";
+  // Yellow is deepened toward ink on the light ground, so the name stays readable.
+  const headInk = head === "sand" && !dark ? mix(calm.tintInk.sand, calm.ink, 0.8) : head ? calm.tintInk[head] : calm.ink;
   const flagged = !c.reason && !c.loading && (p.chip?.tone === "warning" || p.chip?.tone === "alert");
   const sentence = c.loading
     ? ""
@@ -322,7 +327,7 @@ function Tile({ p, c }: { p: KeyStatRowProps; c: Computed }) {
                 </View>
               )}
               {p.label ? (
-                <Txt size={15} lineHeight={20} weight={600} style={{ color: head ? calm.tintInk[head] : calm.ink, flex: 1, minWidth: 0 }}>
+                <Txt size={15} lineHeight={20} weight={600} style={{ color: headInk, flex: 1, minWidth: 0 }}>
                   {p.label}
                 </Txt>
               ) : (

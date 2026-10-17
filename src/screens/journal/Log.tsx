@@ -347,7 +347,7 @@ export function Log({ vm }: LogProps) {
             <Section title="Add" first>
               <View style={{ flexDirection: "row", gap: 8 }}>
                 {steps.map(({ ml, label }) => (
-                  <CalmButton key={ml} variant="secondary" on="card" grow disabled={saving} style={{ minHeight: 56, borderRadius: 28 }} onPress={() => void send({ kind: "water", ml, at: at.trim().replace(/\s+/, "T") }, false)} accessibilityLabel={`+${label} ${waterUnit}`}>
+                  <CalmButton key={ml} variant="secondary" on="card" grow disabled={saving} style={{ minHeight: 52, borderRadius: 16 }} onPress={() => void send({ kind: "water", ml, at: at.trim().replace(/\s+/, "T") }, false)} accessibilityLabel={`+${label} ${waterUnit}`}>
                     <Droplet size={20} color={c.tintInk.sky} strokeWidth={1.75} />
                     <Num value={`+${label}`} unit={waterUnit} size={18} />
                   </CalmButton>

@@ -91,7 +91,7 @@ function TodayCard({ vm }: { vm: NutritionVM }) {
     <HomeCard icon={Utensils} iconTint="sand" title={t.kcal === null ? "Nothing logged today" : "Today so far"} gap={16} style={{ alignSelf: "stretch" }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
         <View accessible accessibilityLabel={`${show(t.kcal, grouped)} of ${grouped(kcal)} kcal`}>
-          <HaloRing size={RING} stroke={14} progress={progressOf(t.kcal, kcal)} track={c.tint.sand} color={c.tintInk.sand} colors={c.vivid.sand} delay={120} celebrateKey={t.kcal !== null && t.kcal >= kcal ? `${vm.today}:kcal` : null}>
+          <HaloRing size={RING} stroke={14} progress={progressOf(t.kcal, kcal)} track={c.tint.sand} color={c.tintInk.sand} colors={c.vivid.sand} delay={120}>
             <View style={{ alignItems: "center" }}>
               {t.kcal === null ? (
                 <Txt size={26} lineHeight={30} style={[font.numberAt(26), { color: c.faint }]}>
@@ -533,7 +533,7 @@ export default function NutritionScreen() {
         primary={
           vm ? (
             <View style={{ gap: 28 }}>
-              <CalmButton icon={Plus} onPress={() => openFood()} style={{ alignSelf: "stretch", minHeight: 56, borderRadius: 28 }}>
+              <CalmButton icon={Plus} onPress={() => openFood()} style={{ alignSelf: "stretch" }}>
                 Add food
               </CalmButton>
               <MealList vm={vm} google={app.source === "google"} onEdit={(f) => openFood(f)} onDelete={setRemove} onSeparate={(f, on) => void separate(f, on)} onAdd={() => openFood()} />
