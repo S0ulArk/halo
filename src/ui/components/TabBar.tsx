@@ -15,7 +15,6 @@ import { useCalm } from "@/ui/calm";
 import { LiquidGlass } from "@/ui/glass";
 import { reduceMotionNow } from "@/ui/motion/system";
 import { Mark } from "./Mark";
-import { ScrollEdgeFade } from "./ScrollEdgeFade";
 import { useTheme } from "@/ui/ThemeProvider";
 import { TAB_BAR_HEIGHT } from "./PageShell";
 import { Txt } from "./Text";
@@ -153,7 +152,7 @@ function TabCapsule({ tabs, current, onPress, dark }: { tabs: TabItem[]; current
   const blue = BLUE[dark ? "dark" : "light"];
   const idle = alpha(calm.ink, dark ? 0.82 : 0.74);
   return (
-    <LiquidGlass essential style={{ flex: 1, height: BAR_H }} cornerRadius={BAR_H / 2}>
+    <LiquidGlass essential style={{ flex: 1, height: BAR_H }} cornerRadius={BAR_H / 2} frost={dark ? 0.6 : 0.42}>
       <View accessibilityRole="tablist" onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ flex: 1, flexDirection: "row", paddingHorizontal: PAD }}>
         {slotW > 0 && current >= 0 && <Drop slot={current} slotW={slotW} dark={dark} />}
         {tabs.map((t, i) => (
@@ -187,7 +186,7 @@ function ActionButton({ icon: Icon, accessibilityLabel, onPress, dark }: { icon:
       hitSlop={4}
     >
       <Animated.View style={[{ width: BAR_H, height: BAR_H }, body]}>
-        <LiquidGlass essential style={StyleSheet.absoluteFill} cornerRadius={BAR_H / 2}>
+        <LiquidGlass essential style={StyleSheet.absoluteFill} cornerRadius={BAR_H / 2} frost={dark ? 0.6 : 0.42}>
           {/* Lit from inside while pressed. */}
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: BAR_H / 2, backgroundColor: dark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.45)" }, glow]} />
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center" }]}>
@@ -243,12 +242,6 @@ function actionItem(label: string | undefined): { label: string; icon: LucideIco
 const haptic = () => {
   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 };
-
-/** The scroll edge under the bar: the page fades into the ground toward the foot (see ScrollEdgeFade). */
-export function TabBarFade() {
-  const insets = useSafeAreaInsets();
-  return <ScrollEdgeFade height={insets.bottom + LIFT + BAR_H + 44} />;
-}
 
 /**
  * Phone navigation bar: a glass capsule of four tabs and a round glass action button, floating 16 dp from the sides

@@ -10,7 +10,6 @@ import { Tabs, useRouter, type Href } from "expo-router";
 import { useHasCoachKey } from "@/coach/session";
 import { CheckInSheetHost, useCheckInAction } from "@/screens/journal/CheckInSheet";
 import { GlassTarget } from "@/ui/glass";
-import { TabBarFade } from "@/ui/components/TabBar";
 import { FloatingTabBar, TabBarBridge } from "@/ui/components/TabBarHost";
 
 /**
@@ -66,8 +65,6 @@ export default function TabsLayout() {
           <Tabs.Screen name="journal" options={{ title: "Journal", href: null }} />
           <Tabs.Screen name="more" options={{ title: "More", href: null }} />
         </Tabs>
-        {/* The page fades into the ground toward the bar; inside the target, so the glass bends the faded page. */}
-        <TabBarFade />
       </GlassTarget>
       <CheckInSheetHost />
       <TabPreloader />
