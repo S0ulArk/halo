@@ -164,7 +164,13 @@ function RecoveryRow({ p, value, meta }: { p: Extract<ContributorRowProps, { var
             <RangeTrack value={frac(value, lo, hi)} color={dot} range={[frac(mean - sd, lo, hi), frac(mean + sd, lo, hi)]} rangeColor={alpha(c.ink, 0.13)} height={4} />
             <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
               <Txt size={12} lineHeight={16} style={{ color: c.sub, fontVariant: ["tabular-nums"] }}>
-                {`${normal}${moved}`}
+                {normal}
+                {/* What it did to the score is the point of the row: bold, green when it added, orange when it took off. */}
+                {moved ? (
+                  <Txt size={13} lineHeight={16} weight={700} style={{ color: pts === null || pts === 0 ? c.sub : pts > 0 ? c.tintInk.mint : c.system.orange }}>
+                    {moved}
+                  </Txt>
+                ) : null}
               </Txt>
               {meta && <MetricTags provisional={meta.provisional} tags={meta.tags} />}
             </View>

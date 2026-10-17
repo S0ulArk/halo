@@ -179,6 +179,7 @@ export function VitalTile({
   loading,
   onPress,
   accessibilityLabel,
+  alert = false,
 }: {
   tint: CalmTint;
   icon: LucideIcon;
@@ -190,13 +191,15 @@ export function VitalTile({
   loading?: boolean;
   onPress?: () => void;
   accessibilityLabel: string;
+  /** Outside its normal range: the reading in orange and the tile ringed, so it stands out from the ones that are fine. */
+  alert?: boolean;
 }) {
   const c = useCalm();
   const Icon = icon;
   const ink = c.tintInk[tint];
-  const reading = loading ? <SkeletonText role="valueLg" size={28} lineHeight={32} chars={3} /> : <RollingValue value={value} unit={unit} size={28} />;
+  const reading = loading ? <SkeletonText role="valueLg" size={28} lineHeight={32} chars={3} /> : <RollingValue value={value} unit={unit} size={28} color={alert ? c.system.orange : undefined} />;
   return (
-    <Card onPress={onPress} accessibilityLabel={accessibilityLabel} padding={14} style={{ flexGrow: 1 }}>
+    <Card onPress={onPress} accessibilityLabel={accessibilityLabel} padding={14} style={[{ flexGrow: 1 }, alert ? { borderWidth: 1.5, borderColor: c.system.orange } : null]}>
       <View style={{ flexGrow: 1, gap: 8 }}>
         <TileLabel>
           <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 6 }}>

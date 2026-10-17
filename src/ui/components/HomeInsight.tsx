@@ -70,10 +70,11 @@ function Words({ k, item, shown, swap }: { k: number; item: HomeInsightItem; sho
       pointerEvents={shown ? "auto" : "none"}
       style={[{ gap: 3 }, !shown && { position: "absolute", left: 0, top: 0, right: 0 }, share]}
     >
-      <Txt size={16} lineHeight={21} weight={600} style={{ color: c.ink }}>
+      <Txt size={17} lineHeight={22} weight={600} style={{ color: c.ink }}>
         {item.title}
       </Txt>
-      <Txt size={14} lineHeight={19} style={{ color: c.sub }}>
+      {/* The advice is what the card is for: full-strength text, not the grey of a footnote. */}
+      <Txt size={15} lineHeight={21} style={{ color: c.ink, opacity: 0.86 }}>
         {item.body}
       </Txt>
     </Animated.View>

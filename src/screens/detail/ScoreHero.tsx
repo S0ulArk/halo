@@ -128,7 +128,9 @@ export function ScoreHero({ variant, value, reason, nightsLeft, provisional, tag
         </View>
       )}
       {!loading && !empty && sentence ? (
-        <Txt size={15} lineHeight={20} align="center" style={{ color: calm.sub, paddingHorizontal: 8 }}>
+        // The day's verdict is the point of the card: full-strength text a size up, so it never reads like the small
+        // grey notes (Provisional, So far) around it.
+        <Txt size={17} lineHeight={23} weight={500} align="center" style={{ color: calm.ink, paddingHorizontal: 8 }}>
           {sentence}
         </Txt>
       ) : null}

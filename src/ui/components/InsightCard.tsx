@@ -48,11 +48,12 @@ export function InsightCard({ title, body, action, accent }: InsightCardProps) {
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: 4, minHeight: 36, justifyContent: "center" }}>
           {title && (
-            <Txt size={16} lineHeight={21} weight={600} style={{ color: c.ink }}>
+            <Txt size={17} lineHeight={22} weight={600} style={{ color: c.ink }}>
               {title}
             </Txt>
           )}
-          <Txt size={15} lineHeight={21} style={{ color: title ? c.sub : c.ink }}>
+          {/* The insight itself in full-strength text (a grey body read like a footnote and was skipped). */}
+          <Txt size={15} lineHeight={21} style={{ color: c.ink, opacity: title ? 0.86 : 1 }}>
             {body}
           </Txt>
           {action && (

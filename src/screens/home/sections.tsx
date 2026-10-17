@@ -150,6 +150,7 @@ function PhoneActivity({ stats, day, today, open }: { stats: KeyStat[]; day: str
 
 /** Vitals outside the normal range: a card with the yellow wash (pink when they point to illness) and the way to Health Monitor. */
 function MonitorAlert({ alert, onOpen }: { alert: NonNullable<HomeVM["monitorAlert"]>; onOpen: () => void }) {
+  const calm = useCalm();
   const illness = alert.kind === "illness";
   const names = alert.names.length > 1 ? `${alert.names.slice(0, -1).join(", ")} and ${alert.names.at(-1)}` : (alert.names[0] ?? "Some vitals");
   return (
@@ -163,6 +164,8 @@ function MonitorAlert({ alert, onOpen }: { alert: NonNullable<HomeVM["monitorAle
             ? "Several vitals moved away from your normal range together, a pattern that often comes before feeling unwell. Consider an easier day."
             : `${names} are outside your usual range. This can be an early sign of illness or heavy strain.`
         }
+        // A warning's explanation is what to read: full-strength text, not the grey of a card's caption.
+        subtitleColor={calm.ink}
         gap={10}
       >
         <View style={{ alignSelf: "flex-start" }}>

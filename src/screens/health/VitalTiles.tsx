@@ -84,6 +84,7 @@ export function VitalTiles({ vitals }: { vitals: Vital[] }) {
               value={value}
               unit={x.unit}
               chip={x.chip && value !== null ? <TonePill tone={x.chip.tone}>{x.chip.text}</TonePill> : null}
+              alert={value !== null && (x.status === "high" || x.status === "low")}
               onPress={() => {
                 setOpen(x.key);
                 setLast(x);
