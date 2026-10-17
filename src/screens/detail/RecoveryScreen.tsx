@@ -7,7 +7,7 @@ import * as React from "react";
 import { Pressable, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import Svg, { Line } from "react-native-svg";
-import { Activity, BedDouble, Heart, Thermometer, Wind, type LucideIcon } from "lucide-react-native";
+import { Activity, ArrowDown, BedDouble, Heart, Thermometer, Wind, type LucideIcon } from "lucide-react-native";
 import { DATA_COLORS, recoveryBand, recoveryColor } from "@/lib/bands";
 import { formatDay, formatValue, type FormatKey } from "@/lib/format";
 import { reasonCopy } from "@/lib/reasons";
@@ -61,21 +61,36 @@ export default function RecoveryScreen() {
   return (
     <DetailScreen
       {...common}
-      hero={<ScoreHero variant="recovery" value={r.value} reason={r.reason} nightsLeft={r.nightsLeft} provisional={r.provisional} tags={r.tags} sentence={vm.insight} />}
-      summary={
-        <Anchor anchors={anchors} id="drivers">
-          <WhatShapedIt vm={vm} nightsLeft={r.nightsLeft} onOpen={openContributor} />
-        </Anchor>
+      hero={
+        <ScoreHero variant="recovery" value={r.value} reason={r.reason} nightsLeft={r.nightsLeft} provisional={r.provisional} tags={r.tags} sentence={vm.insight}>
+          {vm.insight ? <SeeLink label="See what shaped it" onPress={() => anchors.scrollTo("drivers")} /> : null}
+        </ScoreHero>
       }
+      summary={<WhatShapedIt vm={vm} nightsLeft={r.nightsLeft} onOpen={openContributor} />}
       primary={<RecoveryWeek points={vm.trend.points} day={d} onPress={() => openChart({ metric: "recovery", r: "w", d: dParam })} />}
       secondary={[
-        <SectionShell key="effect" variant="card" title="Effect on Recovery" accent="recovery">
-          <Effect vm={vm} />
-        </SectionShell>,
+        <Anchor key="effect" anchors={anchors} id="drivers">
+          <SectionShell variant="card" title="Effect on Recovery" accent="recovery">
+            <Effect vm={vm} />
+          </SectionShell>
+        </Anchor>,
         <RecoveryTrend key="trend" vm={vm} today={today} dParam={dParam} />,
         <Forecast key="forecast" vm={vm} />,
       ]}
     />
+  );
+}
+
+/** A blue text link with its arrow, iOS's (the hero's "See what shaped it"); it dims under the finger. */
+function SeeLink({ label, onPress }: { label: string; onPress: () => void }) {
+  const c = useCalm();
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }} style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 4, opacity: pressed ? 0.5 : 1 })}>
+      <Txt size={15} lineHeight={20} weight={600} style={{ color: c.teal }}>
+        {label}
+      </Txt>
+      <ArrowDown size={15} color={c.teal} strokeWidth={2.4} />
+    </Pressable>
   );
 }
 

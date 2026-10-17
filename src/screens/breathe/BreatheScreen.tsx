@@ -215,7 +215,7 @@ export default function BreatheScreen() {
   } else {
     primary = (
       <View style={{ gap: 22 }}>
-        <ListGroup title="Pace" inset={16}>
+        <ListGroup title="Pace" inset={16} radioGroup="Pace">
           {PROTOCOLS.map((p) => (
             <ListRow
               key={p.id}

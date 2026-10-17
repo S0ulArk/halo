@@ -110,7 +110,7 @@ function SportFilter({ kinds, kind, onChange }: { kinds: ActivityKind[]; kind: A
 function Stat({ value, label, color }: { value: string; label: string; color: string }) {
   return (
     <View accessible accessibilityLabel={`${label}: ${value}`} style={{ flex: 1, minWidth: 0, gap: 2 }}>
-      <Txt size={28} lineHeight={32} numberOfLines={1} style={[font.numberAt(28, 700), { color }]}>
+      <Txt size={28} lineHeight={32} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.55} style={[font.numberAt(28, 700), { color }]}>
         {value}
       </Txt>
       <Caption>{label}</Caption>

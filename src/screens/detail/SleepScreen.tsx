@@ -29,6 +29,7 @@ import { NightHeart, StagesCards, TimeAsleep } from "./SleepNight";
 import { sleepSkeleton } from "./skeletons";
 import { StatRow, statusInk, trendProps } from "./view";
 import { tagLabel } from "@/ui/components/primitives";
+import { reasonCopy } from "@/lib/reasons";
 
 type Mode = "d" | "w" | "m" | "6m";
 const MODES = [
@@ -145,17 +146,27 @@ function Performance({ vm, link }: { vm: SleepVM; link: { d: string; today: stri
   const c = useCalm();
   const p = vm.performance;
   const status = p.value === null ? null : performanceStatus(p.value);
-  // Under the list: the status words in their colours (each part's own cut-offs), and the score's tags.
+  // Without a score, why (and how many nights are left) leads the footer; with one, the score's tags close it.
+  const why = p.value === null ? reasonCopy(p.reason, p.nightsLeft).long : null;
+  const tags = p.value === null ? [] : [p.provisional ? "Provisional" : null, ...(p.tags ?? []).map(tagLabel)].filter(Boolean);
+  // Under the list: the status words in their colours (each part's own cut-offs).
   const footer = (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 12, rowGap: 4, paddingHorizontal: 16 }}>
-      {(["optimal", "sufficient", "poor"] as const).map((s) => (
-        <StatusWord key={s} status={s} />
-      ))}
-      {p.provisional || p.tags?.length ? (
+    <View style={{ gap: 6, paddingHorizontal: 16 }}>
+      {why ? (
         <Txt size={13} lineHeight={18} style={{ color: c.sub }}>
-          {[p.provisional ? "Provisional" : null, ...(p.tags ?? []).map(tagLabel)].filter(Boolean).join(" · ")}
+          {why}
         </Txt>
       ) : null}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 12, rowGap: 4 }}>
+        {(["optimal", "sufficient", "poor"] as const).map((s) => (
+          <StatusWord key={s} status={s} />
+        ))}
+        {tags.length ? (
+          <Txt size={13} lineHeight={18} style={{ color: c.sub }}>
+            {tags.join(" · ")}
+          </Txt>
+        ) : null}
+      </View>
     </View>
   );
   return (

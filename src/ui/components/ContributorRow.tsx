@@ -125,7 +125,10 @@ function RecoveryRow({ p, value, meta }: { p: Extract<ContributorRowProps, { var
   const diff = value === null ? 0 : value - mean;
   const away = value === null ? "" : `${formatValue(p.format, Math.abs(diff)).replace(/^[+−-]/, "")}${unit} ${diff > 0 ? "above" : "below"} your normal`;
   const said = value === null ? (p.reasonCopy ?? "Not measured: left out of today’s score") : t?.dir === "flat" ? "In your normal range" : away;
-  const tone = value === null ? c.sub : t?.tone === "bad" ? c.system.orange : t?.tone === "good" || t?.dir === "flat" ? c.tintInk.mint : c.system.orange;
+  // Green when it helps or sits in range, orange when it costs; outside the range of a signal with no good direction
+  // (breathing rate), the plain grey (the dot in ink).
+  const tone = value === null ? c.sub : t?.tone === "bad" ? c.system.orange : t?.tone === "good" || t?.dir === "flat" ? c.tintInk.mint : c.sub;
+  const dot = tone === c.sub ? c.ink : tone;
   const normal = `Normal ${span(mean - sd)}–${span(mean + sd)}${unit}`;
   const moved = pts === null ? "" : pts === 0 ? " · no change" : ` · ${formatValue("signedInt", pts)}${NBSP}pts`;
   const sentence =
@@ -158,7 +161,7 @@ function RecoveryRow({ p, value, meta }: { p: Extract<ContributorRowProps, { var
         </View>
         {value !== null && (
           <View style={{ marginTop: 9, marginRight: CHEVRON + 6, gap: 7 }}>
-            <RangeTrack value={frac(value, lo, hi)} color={tone} range={[frac(mean - sd, lo, hi), frac(mean + sd, lo, hi)]} rangeColor={alpha(c.ink, 0.13)} height={4} />
+            <RangeTrack value={frac(value, lo, hi)} color={dot} range={[frac(mean - sd, lo, hi), frac(mean + sd, lo, hi)]} rangeColor={alpha(c.ink, 0.13)} height={4} />
             <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
               <Txt size={12} lineHeight={16} style={{ color: c.sub, fontVariant: ["tabular-nums"] }}>
                 {`${normal}${moved}`}

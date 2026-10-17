@@ -259,6 +259,7 @@ export const NightHeart = React.memo(function NightHeart({ hr, stages, timeZone,
             </Txt>
           }
           inset={16 + 12 + 12}
+          radioGroup="Highlight a sleep stage"
           footer="Choose a stage to light its stretches on the heart rate above. The band behind each bar is the typical range."
         >
           {rows.map((r, i) => {

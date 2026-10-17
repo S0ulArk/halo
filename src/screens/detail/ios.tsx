@@ -118,13 +118,30 @@ export const ICON_INSET = 16 + ROW_ICON + 12;
  * A grouped list, iOS's: a small capitals header (with anything on its right), one card of rows with half-point
  * hairlines inset to the rows' text (`inset`: past the icon squares, or 16 for rows without), and a grey footer.
  */
-export function ListGroup({ title, right, footer, inset = ICON_INSET, style, children }: { title?: string; right?: React.ReactNode; footer?: React.ReactNode; inset?: number; style?: StyleProp<ViewStyle>; children: React.ReactNode }) {
+export function ListGroup({
+  title,
+  right,
+  footer,
+  inset = ICON_INSET,
+  radioGroup,
+  style,
+  children,
+}: {
+  title?: string;
+  right?: React.ReactNode;
+  footer?: React.ReactNode;
+  inset?: number;
+  /** A selection list's spoken name: its rows are announced as one radio group. */
+  radioGroup?: string;
+  style?: StyleProp<ViewStyle>;
+  children: React.ReactNode;
+}) {
   const c = useCalm();
   return (
     // A titled list keeps a little more air above its header, as iOS spaces grouped sections.
     <View style={[{ gap: 7, minWidth: 0, paddingTop: title ? 6 : 0 }, style]}>
       {title ? <SectionLabel right={right}>{title}</SectionLabel> : null}
-      <View style={{ borderRadius: 16, backgroundColor: c.card, overflow: "hidden" }}>
+      <View accessibilityRole={radioGroup ? "radiogroup" : undefined} accessibilityLabel={radioGroup} style={{ borderRadius: 16, backgroundColor: c.card, overflow: "hidden" }}>
         <Rows inset={inset}>{children}</Rows>
       </View>
       {typeof footer === "string" ? <SectionFooter>{footer}</SectionFooter> : footer}
@@ -181,7 +198,7 @@ export function ListRow({ icon: Icon, iconColor, lead, label, detail, detailColo
     right ??
     (value === undefined ? null : bold ? (
       <View style={{ flexDirection: "row", alignItems: "baseline", flexShrink: 0, maxWidth: "48%" }}>
-        <Txt size={20} lineHeight={24} numberOfLines={1} style={[font.numberAt(20), { color: valueColor ?? c.ink }]}>
+        <Txt size={20} lineHeight={24} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[font.numberAt(20), { color: valueColor ?? c.ink }]}>
           {value}
         </Txt>
         {unit ? (
