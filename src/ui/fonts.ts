@@ -1,11 +1,8 @@
 // Type faces, in the iOS look: Inter for every word and every number (numbers with tabular figures, so a changing value
 // never shifts), tracked the way Apple tracks San Francisco: a hair tighter as the size grows (see `iosTracking`). Doto,
-// a dot-matrix display face, stays for the few hero numbers of the Signal design. One Barlow and one Figtree weight stay
-// loaded only because a chart sets them by family name (TickScale), until it moves to Inter.
+// a dot-matrix display face, stays for the few hero numbers of the Signal design.
 import { useFonts } from "expo-font";
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold } from "@expo-google-fonts/inter";
-import { Figtree_500Medium } from "@expo-google-fonts/figtree";
-import { Barlow_700Bold } from "@expo-google-fonts/barlow";
 import { Doto_800ExtraBold } from "@expo-google-fonts/doto";
 import type { TextStyle } from "react-native";
 
@@ -28,8 +25,6 @@ export function useAppFonts(): readonly [loaded: boolean, error: Error | null] {
     Inter_600SemiBold,
     Inter_700Bold,
     Inter_800ExtraBold,
-    Figtree_500Medium,
-    Barlow_700Bold,
     Doto_800ExtraBold,
   });
   return [loaded, error ?? null] as const;

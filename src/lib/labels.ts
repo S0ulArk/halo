@@ -35,10 +35,10 @@ export type LabelOptions = {
   obstacles?: Box[];
 };
 
-/** Advance widths of Barlow bold, in em, rounded up: digits, the decimal point, the percent sign. */
-const EM: Record<string, number> = { ".": 0.28, ",": 0.28, "%": 0.86, "-": 0.42, "−": 0.6 };
+/** Advance widths of Inter bold, the chart face, in em, rounded up: digits, the decimal point, the percent sign. */
+const EM: Record<string, number> = { ".": 0.3, ",": 0.3, "%": 0.92, "-": 0.46, "−": 0.62 };
 /** A label's width at `fontSize`, a little generous so near misses count as overlaps. */
-export const labelWidth = (text: string, fontSize: number) => [...text].reduce((w, ch) => w + (EM[ch] ?? 0.58), 0) * fontSize;
+export const labelWidth = (text: string, fontSize: number) => [...text].reduce((w, ch) => w + (EM[ch] ?? 0.64), 0) * fontSize;
 
 export const overlaps = (p: Box, q: Box) => p.x1 < q.x2 && q.x1 < p.x2 && p.y1 < q.y2 && q.y1 < p.y2;
 

@@ -5,8 +5,7 @@
 // thin dashed guides with a small label pill, and a solid hairline scrub cursor with a dot and a readout.
 import * as React from "react";
 import { Dimensions, Pressable, View, type StyleProp, type ViewStyle } from "react-native";
-import { Barlow_500Medium, Barlow_600SemiBold, Barlow_700Bold } from "@expo-google-fonts/barlow";
-import { Figtree_500Medium, Figtree_600SemiBold, Figtree_700Bold } from "@expo-google-fonts/figtree";
+import { Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from "@expo-google-fonts/inter";
 import {
   Canvas,
   Circle,
@@ -144,10 +143,10 @@ export function pastel(color: string, k: ChartInk, p = 0.55): string {
 // --- Typefaces ---
 
 export type FaceWeight = 500 | 600 | 700;
-/** Barlow (numerals) and Figtree (words) as Skia fonts, created once per weight and size. */
+/** Inter, the app's face, as Skia fonts for numerals and words, created once per weight and size. */
 export type ChartFonts = { num: (weight: FaceWeight, size: number) => SkFont; sans: (weight: FaceWeight, size: number) => SkFont };
 
-const SOURCES = { n500: Barlow_500Medium, n600: Barlow_600SemiBold, n700: Barlow_700Bold, s500: Figtree_500Medium, s600: Figtree_600SemiBold, s700: Figtree_700Bold } as const;
+const SOURCES = { n500: Inter_500Medium, n600: Inter_600SemiBold, n700: Inter_700Bold, s500: Inter_500Medium, s600: Inter_600SemiBold, s700: Inter_700Bold } as const;
 type FaceKey = keyof typeof SOURCES;
 const FACE_KEYS = Object.keys(SOURCES) as FaceKey[];
 
@@ -674,7 +673,7 @@ export function CapsText({ x, y, text, font, color, anchor = "start", tracking =
 }
 
 /**
- * Text in the chart face (Barlow, or Figtree with `numeric={false}`). `baseline` "middle" centres on y; "hanging" hangs
+ * Text in the chart face (Inter; `numeric={false}` for words). `baseline` "middle" centres on y; "hanging" hangs
  * under y (the web's dy 0.71em).
  */
 export function AxisText({
