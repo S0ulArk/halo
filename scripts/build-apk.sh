@@ -41,10 +41,16 @@ else
 fi
 
 cd android
-JAVA_TOOL_OPTIONS="-Djava.net.preferIPv4Stack=true" ./gradlew assembleRelease -q 2>&1 \
+# The JS bundle is always rebuilt: React Native's bundle task watches only .js/.ts sources, so after a version-only bump
+# it kept the previous bundle, whose app.json version the update check reads (1.26.0 shipped saying 1.25.9).
+JAVA_TOOL_OPTIONS="-Djava.net.preferIPv4Stack=true" ./gradlew :app:createBundleReleaseJsAndAssets --rerun assembleRelease -q 2>&1 \
   | grep -vE '^\s*$|^warning:|^Note:|^w: |^Picked up|Expo Max Sdk|maxSdkVersion|-------|sourcemap|bundle output|asset files|NODE_ENV|Metro|Bundled|BLUETOOTH|SDK processing|combine-js-to-schema' || true
 cd ..
 apk=android/app/build/outputs/apk/release/app-release.apk
 [ -f "$apk" ] || { echo "build failed: no APK"; exit 1; }
+# The bundle must come from this build (Hermes packs its strings, so the version text can't simply be searched for).
+bundle=android/app/build/generated/assets/react/release/index.android.bundle
+{ [ "$(stat -f %m "$bundle")" -ge "$start" ] && unzip -p "$apk" assets/index.android.bundle | cmp -s - "$bundle"; } \
+  || { echo "build failed: the APK's JS bundle wasn't rebuilt"; exit 1; }
 cp "$apk" ~/Documents/Pulse.apk
 echo "built $(node -p 'require("./app.json").expo.version') (build $(node -p 'require("./app.json").expo.android.versionCode')) in $(( $(date +%s) - start ))s → ~/Documents/Pulse.apk"

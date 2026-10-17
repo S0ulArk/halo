@@ -202,14 +202,15 @@ const loggedParams = (r: LoggedEntryRow, source: EntrySource): Param[] => [r.id,
 class SqliteStore implements Store {
   constructor(private db: SQLiteDatabase) {}
 
-  /** Swaps in a freshly opened connection (see `healing` below); the write queue carries on. */
-  replaceDb(db: SQLiteDatabase): void {
+  /**
+   * Swaps in a freshly opened connection (see `healing` below) and hands back the old one, for `healing` to close once
+   * no call is using it; the write queue carries on.
+   */
+  replaceDb(db: SQLiteDatabase): SQLiteDatabase {
     const old = this.db;
     this.db = db;
     this.queue = Promise.resolve();
-    // Close the dead connection now rather than leave it to the garbage collector (its connection is its own:
-    // openDb uses useNewConnection, so this can't close the new one).
-    if (old !== db) void old.closeAsync().catch(() => {});
+    return old;
   }
 
   /** Tail of the write queue: every write runs after the previous one settles. */
@@ -674,28 +675,43 @@ export async function openStore(name = "pulse.db"): Promise<Store> {
  * been rejected → NullPointerException", or an access-closed error): seen on a phone after Android tore down and
  * recreated Pulse's native modules around a background sync while the JS kept its old handle. Every later call then
  * failed until Pulse was restarted, so syncs silently stopped. This reopens the database once and retries the call.
+ *
+ * The old connection is closed only once no call is running. Closing finalizes every statement on it, and expo-sqlite
+ * runs queries on a pool of threads: a query still stepping one of them read freed memory and took the app down
+ * (SIGSEGV in sqlite3_step, seconds after launch).
  */
-
 function healing(store: SqliteStore, name: string): Store {
   let reopening: Promise<void> | null = null;
+  let running = 0;
+  const retired: SQLiteDatabase[] = [];
   const reopen = () =>
     (reopening ??= openDb(name)
-      .then((db) => store.replaceDb(db))
+      .then((db) => {
+        const old = store.replaceDb(db);
+        if (old !== db) retired.push(old);
+      })
       .finally(() => {
         reopening = null;
       }));
+  const settle = () => {
+    if (--running > 0) return;
+    for (const old of retired.splice(0)) void old.closeAsync().catch(() => {});
+  };
   return new Proxy(store, {
     get(target, prop, receiver) {
       const v = Reflect.get(target, prop, receiver);
       if (typeof v !== "function" || prop === "replaceDb" || prop === "constructor") return v;
       return async (...args: unknown[]) => {
+        running++;
         try {
           return await (v as (...a: unknown[]) => Promise<unknown>).apply(target, args);
         } catch (e) {
           if (!isDeadConnection(e)) throw e;
           console.warn("[db] connection lost, reopening:", e instanceof Error ? e.message : String(e));
           await reopen();
-          return (Reflect.get(target, prop, receiver) as (...a: unknown[]) => Promise<unknown>).apply(target, args);
+          return await (Reflect.get(target, prop, receiver) as (...a: unknown[]) => Promise<unknown>).apply(target, args);
+        } finally {
+          settle();
         }
       };
     },
