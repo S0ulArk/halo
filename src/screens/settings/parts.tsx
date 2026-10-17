@@ -1,14 +1,14 @@
 // The small pieces Settings, More and Your data share, in the iOS Settings look: grey body sentences, the label/value
 // row (the label in ink, the value in grey), half-point hairlines between rows, the two-up button grid, iOS's button
-// styles, the icon square beside a row's name, the segmented control (theme, sex), a tinted callout, the alert-style
-// confirmation dialog and the progress bar. Every colour comes from useCalm(); the exported names and props are the
+// styles, the icon square beside a row's name, the segmented control (theme, sex), a tinted callout, the confirmation
+// dialog (iOS's alert, src/ui/components/Alert.tsx) and the progress bar. Every colour comes from useCalm(); the exported names and props are the
 // ones the screens have always used.
 import * as React from "react";
-import { Animated, Easing, Pressable, StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from "react-native";
+import { View, type StyleProp, type ViewStyle } from "react-native";
 import type { LucideIcon } from "lucide-react-native";
-import { OverlayModal } from "@/ui/components/Overlay";
+import { AlertDialog, fitsRow } from "@/ui/components/Alert";
 import { iconRadius } from "@/ui/components/calmKit";
-import { MOTION, Txt, useTheme, type ButtonProps, type ColorToken } from "@/ui";
+import { Txt, type ButtonProps, type ColorToken } from "@/ui";
 import { TABULAR } from "@/ui/fonts";
 import { haptic } from "@/ui/motion/haptics";
 import { CalmButton, CalmProgress, CalmSegmented, Sentence, useCalm, type CalmTint, type On } from "./calmKit";
@@ -205,29 +205,12 @@ export type ConfirmProps = {
 };
 
 /**
- * The confirmation dialog, an iOS alert: a card with 28 px corners that settles in from a touch larger over the dim,
- * the centred title and a grey sentence, then the action (filled blue, or red when it removes data) above Cancel.
- * Closing is blocked while the action runs.
+ * The confirmation dialog: iOS's alert (AlertDialog), the title and a grey sentence over the action (filled blue, or
+ * red when it removes data) and Cancel, popping in on a spring. While the action runs its label turns to `pending` with
+ * a spinner and the dialog cannot be closed.
  */
 export function ConfirmDialog({ open, onClose, title, description, confirm, pending, onConfirm, danger = false, error }: ConfirmProps) {
-  const { c: t0 } = useTheme();
-  const c = useCalm();
-  const { width } = useWindowDimensions();
-  const [t] = React.useState(() => new Animated.Value(0));
   const [busy, setBusy] = React.useState(false);
-  // Stays mounted after `open` turns false until the fade-out ends.
-  const [closing, setClosing] = React.useState(false);
-  const [wasOpen, setWasOpen] = React.useState(open);
-  if (open !== wasOpen) {
-    setWasOpen(open);
-    setClosing(!open);
-  }
-  React.useEffect(() => {
-    if (open) Animated.timing(t, { toValue: 1, duration: MOTION.fast, easing: Easing.bezier(0.2, 0, 0, 1), useNativeDriver: true }).start();
-    else Animated.timing(t, { toValue: 0, duration: MOTION.fast, easing: Easing.bezier(0.4, 0, 1, 1), useNativeDriver: true }).start(() => setClosing(false));
-  }, [open, t]);
-  if (!open && !closing) return null;
-  const close = () => !busy && onClose();
   const run = async () => {
     haptic.confirm();
     setBusy(true);
@@ -238,46 +221,20 @@ export function ConfirmDialog({ open, onClose, title, description, confirm, pend
     }
   };
   return (
-    <OverlayModal onRequestClose={close}>
-      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: t0.dimStrong, opacity: t }]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Close" />
-      </Animated.View>
-      <View pointerEvents="box-none" style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 16 }}>
-        <Animated.View
-          accessibilityViewIsModal
-          style={{
-            width: Math.min(340, width - 48),
-            borderRadius: 28,
-            backgroundColor: c.card,
-            overflow: "hidden",
-            padding: 20,
-            gap: 18,
-            opacity: t,
-            transform: [{ scale: t.interpolate({ inputRange: [0, 1], outputRange: [1.08, 1] }) }],
-          }}
-        >
-          <View style={{ gap: 6 }}>
-            <Txt size={17} lineHeight={22} weight={600} align="center" accessibilityRole="header" style={{ color: c.ink }}>
-              {title}
-            </Txt>
-            <Sentence align="center">{description}</Sentence>
-            {!!error && (
-              <Sentence align="center" color={c.system.red} accessibilityRole="alert">
-                {error}
-              </Sentence>
-            )}
-          </View>
-          <View style={{ gap: 10 }}>
-            <CalmButton variant={danger ? "danger" : "primary"} onPress={() => void run()} disabled={busy}>
-              {busy && pending ? pending : confirm}
-            </CalmButton>
-            <CalmButton variant="quiet" onPress={close} disabled={busy}>
-              Cancel
-            </CalmButton>
-          </View>
-        </Animated.View>
-      </View>
-    </OverlayModal>
+    <AlertDialog
+      open={open}
+      onClose={onClose}
+      locked={busy}
+      title={title}
+      message={description}
+      error={error}
+      // Decided from the resting labels, so the buttons keep their places while the pending label runs.
+      layout={fitsRow(["Cancel", confirm]) ? "row" : "stack"}
+      actions={[
+        { label: "Cancel", style: "cancel", onPress: () => !busy && onClose(), disabled: busy },
+        { label: busy && pending ? pending : confirm, style: danger ? "destructive" : "default", onPress: () => void run(), disabled: busy, busy: busy && !!pending },
+      ]}
+    />
   );
 }
 

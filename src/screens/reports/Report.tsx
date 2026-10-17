@@ -1,11 +1,13 @@
 // Reports `/reports/[period]` (spec §7.13, journey 8), ported from Pulse's src/app/(app)/reports/[period]/page.tsx and
 // its loading.tsx. `period` is `YYYY-Www` or `YYYY-MM`. Phone additions: the Performance Assessment (focus points, the
 // biggest changes, sleep against need and activity against the Weekly Plan's targets) and a Share button that sends
-// the report as text (./share.ts).
+// the report as text (./share.ts). In the look of Apple's weekly summary: the period switcher and the Week / Month
+// control, the period's three averages as Activity rings that sweep in beside their numbers and changes, then cards
+// and grouped lists, the biggest changes with green and orange trend squares.
 import * as React from "react";
-import { Pressable, Share, View } from "react-native";
+import { Pressable, Share as RNShare, View } from "react-native";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
-import { ChevronLeft, ChevronRight, Crosshair, Share2, TrendingDown, TrendingUp } from "lucide-react-native";
+import { ChevronLeft, ChevronRight, Crosshair, Share, TrendingDown, TrendingUp } from "lucide-react-native";
 import { recoveryBand, type DataColor } from "@/lib/bands";
 import { dayHref } from "@/lib/day";
 import { DAY, formatDay, formatValue, MISSING, rangeLabel } from "@/lib/format";
@@ -16,8 +18,8 @@ import { getReport, MONTH_PERIOD, WEEK_PERIOD, type PerformanceVM, type ReportCh
 import { useApp, useQuery } from "@/state/app";
 import { useWeeklyPlan } from "@/state/weeklyPlan";
 import {
-  Button,
   DriverList,
+  GlassButton,
   DriverListSkeleton,
   EmptyState,
   InsightCard,
@@ -33,22 +35,27 @@ import {
   ZoneBars,
 } from "@/ui";
 import { InsightCardSkeleton } from "@/ui/components/InsightCard";
+import { ScoreRings } from "@/ui/components/Halo";
+import { ChevronSlot } from "@/ui/components/calmKit";
 import { ZoneBarsSkeleton } from "@/ui/components/ZoneBars";
 import { font } from "@/ui/fonts";
 import { DetailScreen, LoadError } from "@/screens/detail/DetailScreen";
 import { useBack, usePush, useRefresh } from "@/screens/detail/nav";
 import { Rows } from "@/screens/health/view";
-import { Caption, Num, Sentence, Surface, useCalm, type CalmTint } from "@/screens/settings/calmKit";
+import { Caption, IconTile, Num, Sentence, Surface, useCalm, type CalmTint } from "@/screens/settings/calmKit";
+import { useTheme } from "@/ui/ThemeProvider";
 import { reportShareText, STAT_FORMAT } from "./share";
 const DIAL_FORMAT = { sleep: "int", recovery: "int", strain: "decimal1" } as const;
 /** Each dial's family pastel ink; Recovery's follows its band. */
 const DIAL_TINT: Record<"sleep" | "strain", CalmTint> = { sleep: "lavender", strain: "peach" };
 const BALANCE_TINT: Record<"balanced" | "overreaching" | "undertrained", CalmTint | null> = { balanced: "mint", overreaching: "peach", undertrained: null };
+/** The averages in the rings' order, outermost first: Recovery, Sleep, Strain. */
 const DIALS = [
-  ["sleep", "Avg sleep"],
   ["recovery", "Avg recovery"],
+  ["sleep", "Avg sleep"],
   ["strain", "Avg strain"],
 ] as const;
+const ringOrder = (key: string) => DIALS.findIndex(([k]) => k === key);
 const AVERAGES = ["Recovery", "Day strain", "Sleep performance", "Heart rate variability", "Resting heart rate"];
 /** The Averages card's rows: hours of sleep and consistency move to the Sleep card. */
 const AVERAGE_KEYS = new Set(["recovery", "strain", "sleepPerf", "hrv", "rhr"]);
@@ -57,7 +64,7 @@ const ACTIVITY_ROWS = ["Moderate activity", "Vigorous activity", "Strength sessi
 
 const periodLabel = (kind: "week" | "month", start: string, end: string) => (kind === "week" ? rangeLabel(start, end) : formatDay(start, DAY.monthYear));
 
-/** A 36 px round step in the period pill; the next arrow is disabled at the latest period. */
+/** A 40 px round step in the period capsule; the next arrow is disabled at the latest period. */
 function Step({ dir, label, onPress }: { dir: "prev" | "next"; label: string; onPress: (() => void) | null }) {
   const c = useCalm();
   const Icon = dir === "prev" ? ChevronLeft : ChevronRight;
@@ -81,7 +88,7 @@ function PeriodSwitcher({ vm, go }: { vm: ReportVM; go: (period: string) => void
   const c = useCalm();
   const unit = vm.kind;
   return (
-    <View style={{ height: 48, flexDirection: "row", alignItems: "center", borderRadius: 24, paddingHorizontal: 4, backgroundColor: c.card }}>
+    <View style={{ height: 44, flexDirection: "row", alignItems: "center", borderRadius: 22, paddingHorizontal: 2, backgroundColor: c.card }}>
       <Step dir="prev" label={`Previous ${unit}`} onPress={vm.prev ? () => go(vm.prev!) : null} />
       <Txt size={15} lineHeight={20} weight={600} align="center" style={{ color: c.ink, minWidth: 112, paddingHorizontal: 8 }}>
         {periodLabel(vm.kind, vm.start, vm.end)}
@@ -91,9 +98,13 @@ function PeriodSwitcher({ vm, go }: { vm: ReportVM; go: (period: string) => void
   );
 }
 
-/** Week / Month: the latest report of each kind; a kind with none is greyed out. */
+/**
+ * Week / Month, in the iOS segmented control's look (a grey track, the chosen kind on the raised thumb): each opens the
+ * latest report of its kind; a kind with none is greyed out.
+ */
 function KindToggle({ kind, week, month, open }: { kind?: "week" | "month"; week: string | null; month: string | null; open?: (period: string) => void }) {
   const c = useCalm();
+  const dark = useTheme().scheme === "dark";
   const item = (k: "week" | "month", label: string, to: string | null) => {
     const on = kind === k;
     return (
@@ -103,16 +114,19 @@ function KindToggle({ kind, week, month, open }: { kind?: "week" | "month"; week
         disabled={!to || !open}
         accessibilityRole="link"
         accessibilityState={{ selected: on, disabled: !to }}
-        style={({ pressed }) => ({ height: 40, minWidth: 80, paddingHorizontal: 16, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: on ? c.teal : "transparent", opacity: to || !open ? (pressed ? 0.8 : 1) : 0.4 })}
+        style={({ pressed }) => [
+          { minHeight: 28, minWidth: 96, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 7, alignItems: "center", justifyContent: "center", backgroundColor: on ? c.thumb : "transparent", opacity: to || !open ? (pressed && !on ? 0.55 : 1) : 0.4 },
+          on && !dark ? { boxShadow: "0 3px 8px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.04)" } : null,
+        ]}
       >
-        <Txt size={14} lineHeight={18} weight={600} style={{ color: on ? c.card : c.ink }}>
+        <Txt size={13} lineHeight={18} weight={on ? 600 : 500} style={{ color: c.ink }}>
           {label}
         </Txt>
       </Pressable>
     );
   };
   return (
-    <View accessibilityLabel="Report period" style={{ flexDirection: "row", gap: 4, borderRadius: 18, backgroundColor: c.card, padding: 4 }}>
+    <View accessibilityLabel="Report period" style={{ flexDirection: "row", borderRadius: 9, backgroundColor: c.fill, padding: 2 }}>
       {item("week", "Week", week)}
       {item("month", "Month", month)}
     </View>
@@ -120,45 +134,50 @@ function KindToggle({ kind, week, month, open }: { kind?: "week" | "month"; week
 }
 
 /**
- * The period's three averages as big numbers on one white card (Sleep, Recovery, Strain), each in its family's ink with
- * its label in small capitals under it and the change against the period before under that. A missing average says why.
+ * The period's three averages as Apple's weekly summary draws them: Recovery, Sleep and Strain as concentric Activity
+ * rings that sweep in on the left, and beside them each average in its family's colour with its label over it and the
+ * change against the period before under it. A missing average says why.
  */
 function Dials({ vm }: { vm: ReportVM }) {
   const c = useCalm();
   const word = vm.kind === "week" ? "last week" : "last month";
+  const avg = (key: "sleep" | "recovery" | "strain") => vm.dials.find((d) => d.key === key)?.metric.value ?? null;
   return (
     <Surface style={{ width: "100%" }}>
-      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
-        {vm.dials.map((dl) => {
-          const f = DIAL_FORMAT[dl.key];
-          const v = dl.metric.value;
-          const band = dl.key === "recovery" && v !== null ? recoveryBand(v) : null;
-          const ink = dl.key === "recovery" ? (band === "green" ? c.tintInk.mint : band === "yellow" ? c.tintInk.sand : band === "red" ? c.tintInk.rose : c.ink) : c.tintInk[DIAL_TINT[dl.key]];
-          const tone = dl.delta === null || dl.key === "strain" || Math.round(dl.delta * 10) === 0 ? c.sub : dl.delta > 0 ? c.tintInk.mint : c.tintInk.peach;
-          const unit = f === "int" ? "%" : undefined;
-          const why = v === null ? reasonCopy(dl.metric.reason).short : null;
-          const delta = dl.delta === null ? null : formatValue(f === "int" ? "signedInt" : "signed1", dl.delta);
-          return (
-            <View
-              key={dl.key}
-              accessible
-              accessibilityLabel={`${dl.label}: ${v === null ? why : `${formatValue(f, v)}${unit ? " percent" : ""}`}${delta ? `, ${delta} vs. ${word}` : ""}`}
-              style={{ flex: 1, flexBasis: 0, minWidth: 0, gap: 4 }}
-            >
-              {v === null ? <Num value={MISSING} size={30} color={c.faint} /> : <Num value={formatValue(f, v)} unit={unit} size={30} color={ink} />}
-              <Caption>{dl.label}</Caption>
-              {why && <Sentence size={12}>{why}</Sentence>}
-              {delta !== null && (
-                <Txt size={12} lineHeight={16} style={{ color: c.sub, marginTop: 2 }}>
-                  <Txt size={13} lineHeight={16} style={[font.numeric(700), { color: tone }]}>
-                    {delta}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
+        <ScoreRings recovery={avg("recovery")} sleep={avg("sleep")} strain={avg("strain")} size={128} delay={120} />
+        <View style={{ flex: 1, minWidth: 0, gap: 10 }}>
+          {[...vm.dials].sort((a, b) => ringOrder(a.key) - ringOrder(b.key)).map((dl) => {
+            const f = DIAL_FORMAT[dl.key];
+            const v = dl.metric.value;
+            const band = dl.key === "recovery" && v !== null ? recoveryBand(v) : null;
+            const ink = dl.key === "recovery" ? (band === "green" ? c.tintInk.mint : band === "yellow" ? c.tintInk.sand : band === "red" ? c.tintInk.rose : c.ink) : c.tintInk[DIAL_TINT[dl.key]];
+            const tone = dl.delta === null || dl.key === "strain" || Math.round(dl.delta * 10) === 0 ? c.sub : dl.delta > 0 ? c.tintInk.mint : c.tintInk.peach;
+            const unit = f === "int" ? "%" : undefined;
+            const why = v === null ? reasonCopy(dl.metric.reason).short : null;
+            const delta = dl.delta === null ? null : formatValue(f === "int" ? "signedInt" : "signed1", dl.delta);
+            return (
+              <View
+                key={dl.key}
+                accessible
+                accessibilityLabel={`${dl.label}: ${v === null ? why : `${formatValue(f, v)}${unit ? " percent" : ""}`}${delta ? `, ${delta} vs. ${word}` : ""}`}
+                style={{ minWidth: 0 }}
+              >
+                <Caption>{dl.label}</Caption>
+                {v === null ? <Num value={MISSING} size={24} color={c.faint} /> : <Num value={formatValue(f, v)} unit={unit} size={24} color={ink} />}
+                {why && <Sentence size={12}>{why}</Sentence>}
+                {delta !== null && (
+                  <Txt size={12} lineHeight={16} style={{ color: c.sub, marginTop: 2 }}>
+                    <Txt size={13} lineHeight={16} style={[font.numeric(700), { color: tone }]}>
+                      {delta}
+                    </Txt>
+                    {` vs. ${word}`}
                   </Txt>
-                  {` vs. ${word}`}
-                </Txt>
-              )}
-            </View>
-          );
-        })}
+                )}
+              </View>
+            );
+          })}
+        </View>
       </View>
     </Surface>
   );
@@ -236,7 +255,7 @@ function BestWorst({ items, open }: { items: NonNullable<ReportVM["bestWorst"]>;
           onPress={() => open(b.day)}
           accessibilityRole="link"
           accessibilityLabel={`${b.label}: ${formatDay(b.day, DAY.long)}, Recovery ${Math.round(b.recovery)} percent${b.strain === null ? "" : `, strain ${formatValue("decimal1", b.strain)}`}`}
-          style={({ pressed }) => ({ marginHorizontal: -10, minHeight: 72, flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 18, paddingHorizontal: 10, paddingVertical: 10, backgroundColor: pressed ? c.ground : "transparent" })}
+          style={({ pressed }) => ({ marginHorizontal: -10, minHeight: 72, flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 10, opacity: pressed ? 0.55 : 1 })}
         >
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
             <Txt size={16} lineHeight={21} weight={600} style={{ color: c.ink }}>
@@ -253,28 +272,28 @@ function BestWorst({ items, open }: { items: NonNullable<ReportVM["bestWorst"]>;
               <Caption>Strain</Caption>
             </View>
           </View>
-          <ChevronRight size={18} color={c.label} strokeWidth={1.5} />
+          <ChevronSlot shown />
         </Pressable>
       ))}
     </Rows>
   );
 }
 
-/** The header's share action: the report as text through Android's share sheet. */
+/** The header's share action, a round glass bar button: the report as text through Android's share sheet. */
 function ShareButton({ vm }: { vm: ReportPageVM }) {
   const c = useCalm();
   const share = () => {
     // The sheet's own cancel resolves; a failure to open it leaves nothing to undo.
-    Share.share({ message: reportShareText(vm) }, { dialogTitle: `Share ${vm.kind === "week" ? "weekly" : "monthly"} report` }).catch(() => {});
+    RNShare.share({ message: reportShareText(vm) }, { dialogTitle: `Share ${vm.kind === "week" ? "weekly" : "monthly"} report` }).catch(() => {});
   };
   return (
-    <Button variant="ghost" size="icon-touch" onPress={share} accessibilityLabel={`Share this ${vm.kind}'s report`}>
-      <Share2 size={22} color={c.teal} strokeWidth={2} />
-    </Button>
+    <GlassButton onPress={share} accessibilityLabel={`Share this ${vm.kind}'s report`}>
+      <Share size={19} color={c.teal} strokeWidth={2.2} />
+    </GlassButton>
   );
 }
 
-/** The assessment's 1–2 focus points, each after a crosshair, in the plain words the coach uses. */
+/** The assessment's 1–2 focus points, each after a green crosshair square, in the plain words the coach uses. */
 function FocusCard({ lines, title }: { lines: string[]; title: string }) {
   const c = useCalm();
   return (
@@ -282,10 +301,8 @@ function FocusCard({ lines, title }: { lines: string[]; title: string }) {
       <View style={{ gap: 14 }}>
         {lines.map((line) => (
           <View key={line} style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
-            <View style={{ width: 32, height: 32, borderRadius: 11, backgroundColor: c.tint.mint, alignItems: "center", justifyContent: "center" }}>
-              <Crosshair size={18} color={c.tintInk.mint} strokeWidth={2} />
-            </View>
-            <Txt size={15} lineHeight={21} style={{ color: c.ink, flex: 1, minWidth: 0, paddingTop: 5 }}>
+            <IconTile icon={Crosshair} tint="mint" size={29} />
+            <Txt size={15} lineHeight={21} style={{ color: c.ink, flex: 1, minWidth: 0, paddingTop: 4 }}>
               {line}
             </Txt>
           </View>
@@ -300,11 +317,9 @@ function ChangeRow({ ch }: { ch: ReportChange }) {
   const Icon = ch.better ? TrendingUp : TrendingDown;
   const tint: CalmTint = ch.better ? "mint" : "peach";
   return (
-    <View accessible accessibilityLabel={`${ch.label}: ${ch.text}, ${ch.better ? "better" : "worse"}`} style={{ minHeight: 56, flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 }}>
-      <View style={{ width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: c.tint[tint] }}>
-        <Icon size={18} color={c.tintInk[tint]} strokeWidth={2} />
-      </View>
-      <Txt size={15} lineHeight={20} weight={500} style={{ color: c.ink, flex: 1, minWidth: 0 }}>
+    <View accessible accessibilityLabel={`${ch.label}: ${ch.text}, ${ch.better ? "better" : "worse"}`} style={{ minHeight: 52, flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 }}>
+      <IconTile icon={Icon} tint={tint} size={29} />
+      <Txt size={16} lineHeight={21} style={{ color: c.ink, flex: 1, minWidth: 0 }}>
         {ch.label}
       </Txt>
       <Txt size={17} lineHeight={22} style={[font.numeric(700), { color: c.tintInk[tint], flexShrink: 0 }]}>
@@ -327,8 +342,7 @@ function Changes({ p, lastWord }: { p: PerformanceVM; lastWord: string }) {
 }
 
 function MutedChevron() {
-  const c = useCalm();
-  return <ChevronRight size={18} color={c.label} strokeWidth={1.5} />;
+  return <ChevronSlot shown />;
 }
 
 /** A row's name while the report loads. */
@@ -368,14 +382,17 @@ function reportSkeleton(onViewAll: () => void) {
           <KindToggle week={null} month={null} />
         </View>
         <Surface style={{ width: "100%" }}>
-          <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
-            {DIALS.map(([k, l]) => (
-              <View key={k} style={{ flex: 1, flexBasis: 0, minWidth: 0, gap: 6 }}>
-                <SkeletonText role="valueXl" chars={2.4} />
-                <Caption>{l}</Caption>
-                <SkeletonText role="caption" width={72} />
-              </View>
-            ))}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
+            <ScoreRings recovery={null} sleep={null} strain={null} size={128} still />
+            <View style={{ flex: 1, minWidth: 0, gap: 10 }}>
+              {DIALS.map(([k, l]) => (
+                <View key={k} style={{ minWidth: 0 }}>
+                  <Caption>{l}</Caption>
+                  <SkeletonText role="value" size={24} lineHeight={28} chars={2.4} />
+                  <SkeletonText role="caption" width={72} />
+                </View>
+              ))}
+            </View>
           </View>
         </Surface>
       </View>

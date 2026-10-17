@@ -1,9 +1,9 @@
-// Activity › Goals › "Weekly plan" (a phone addition, after WHOOP's Weekly Plan): a row at the Goals
-// card's foot with how many of the week's targets are on track and the plan's streak of weeks. It opens the plan's
-// sheet: every target's full row (its value against the target, an 8 px bar with a tick where an even pace would be by
-// now, its status and what is left, the days of the week as rounded columns, the last 8 weeks and the streak, and what
-// the habit is worth on Pulse Age), each a link to its screen, and ways to Pulse Age and Settings › Goals. With no
-// target switched on, the row goes straight to Settings › Goals.
+// Activity › Goals › "Weekly plan" (a phone addition, after WHOOP's Weekly Plan): an iOS row at the Goals card's foot
+// with how many of the week's targets are on track and the plan's streak of weeks. It opens the plan's sheet: every
+// target's full row (its icon square, its value against the target, an 8 px capsule with a tick where an even pace
+// would be by now, its status and what is left, the days of the week as Apple Health's rounded bars, the last 8 weeks
+// as dots and the streak, and what the habit is worth on Halo Age), each a link to its screen, and ways to Halo Age and
+// Settings › Goals. With no target switched on, the row goes straight to Settings › Goals.
 import * as React from "react";
 import { Pressable, View } from "react-native";
 import { CalendarCheck, Dumbbell, Flame, Footprints, HeartPulse, Moon, type LucideIcon } from "lucide-react-native";
@@ -17,7 +17,7 @@ import { useCalm, type CalmPalette, type CalmTint } from "@/ui/calm";
 import { onBand, useSoftFill } from "@/ui/components/calmKit";
 import { Capsule } from "@/ui/components/Meter";
 import { font } from "@/ui/fonts";
-import { CheckBadge, FootRow, HeadTile, LINE_BAND, LINE_INSET, LINE_TILE, NumSpan, RowRule, Sentence, WeekColumns, type WeekColumn } from "./controls";
+import { CheckBadge, FootRow, LINE_BAND, LINE_INSET, LINE_TILE, NumSpan, RowIcon, RowRule, Sentence, WeekColumns, type WeekColumn } from "./controls";
 import type { SlotProps } from "./sections";
 import { ageText, PLAN_STATUS, planCaption, planTargetText, planValueText } from "./weeklyPlanView";
 
@@ -63,8 +63,8 @@ export function WeeklyPlanRow({ vm, go }: Pick<SlotProps, "vm" | "go">) {
   if (ready && keys.length === 0)
     return (
       <FootRow icon={CalendarCheck} tint="mint" title="Weekly plan" onPress={() => go(PLAN_HREF)} accessibilityLabel="Weekly plan: no weekly targets switched on. Set weekly targets">
-        <Sentence>No weekly targets switched on</Sentence>
-        <Txt size={14} lineHeight={19} weight={600} style={{ color: c.teal }}>
+        <Sentence size={14}>No weekly targets switched on</Sentence>
+        <Txt size={14} lineHeight={19} weight={500} style={{ color: c.teal }}>
           Set weekly targets
         </Txt>
       </FootRow>
@@ -86,16 +86,16 @@ export function WeeklyPlanRow({ vm, go }: Pick<SlotProps, "vm" | "go">) {
         }
       >
         {data ? (
-          <Sentence>
+          <Sentence size={14}>
             {data.isCurrentWeek ? "" : `${titleOf(data)} · `}
-            <NumSpan color={all ? c.tintInk.mint : undefined}>{String(data.onTrack)}</NumSpan>
+            <NumSpan size={14} color={all ? c.tintInk.mint : undefined}>{String(data.onTrack)}</NumSpan>
             {" of "}
-            <NumSpan color={all ? c.tintInk.mint : undefined}>{String(data.items.length)}</NumSpan>
+            <NumSpan size={14} color={all ? c.tintInk.mint : undefined}>{String(data.items.length)}</NumSpan>
             {" on track"}
             {streak === 1 ? " · every target met last week" : streak > 1 ? (
               <>
                 {" · "}
-                <NumSpan>{String(streak)}</NumSpan>
+                <NumSpan size={14}>{String(streak)}</NumSpan>
                 {"-week streak"}
               </>
             ) : null}
@@ -138,10 +138,9 @@ function PaceBar({ it }: { it: PlanRow }) {
 
 /** "Every target met 3 weeks running", leading the sheet while the plan's streak runs. */
 function PlanStreak({ weeks }: { weeks: number }) {
-  const c = useCalm();
   return (
     <View style={{ paddingBottom: 16, flexDirection: "row", alignItems: "center", gap: 12 }}>
-      <HeadTile icon={Flame} color={c.orange} bg={c.tint.peach} size={36} />
+      <RowIcon icon={Flame} tint="peach" size={LINE_TILE} />
       <View style={{ flex: 1, minWidth: 0 }}>
         {weeks === 1 ? (
           <Sentence>Every target met last week</Sentence>
@@ -210,7 +209,7 @@ function PlanLine({ it, day, onOpen }: { it: PlanRow; day: string; onOpen: () =>
       >
         {/* The tile on the name and the caption's first line, the value on the name's line, whatever wraps. */}
         <View style={{ marginTop: onBand(LINE_BAND, LINE_TILE) }}>
-          <HeadTile icon={PLAN_ICON[it.key]} color={ink} bg={c.tint[tint]} size={LINE_TILE} />
+          <RowIcon icon={PLAN_ICON[it.key]} tint={tint} size={LINE_TILE} />
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Txt size={16} lineHeight={21} weight={600} style={{ color: c.ink }}>

@@ -3,14 +3,15 @@
 // low and high, its normal range and goal, and a second metric on its own axis to compare against. Every chart card
 // opens it on its own metric and range. A day shows the metric's own picture of it beside the day's heart rate: Day
 // Strain building up, stress or the Energy Bank with heart rate on the right axis; resting and average heart rate as a
-// labelled line on the heart rate; workouts lit on it; the night's heart rate over its stage lanes. Calm chrome: the
-// window's numbers on a white card, the chart on its own white card, white pills for the metric and compare pickers,
-// the range as the kit's teal segmented control.
+// labelled line on the heart rate; workouts lit on it; the night's heart rate over its stage lanes. Apple Health chrome:
+// round glass buttons in the bar (back, and the Metric capsule), the range as the iOS segmented control whose thumb
+// slides on a spring, the window's numbers as Apple's headline (a caps label over each value, the dates under them),
+// the chart on its own card, the legend under it with Compare as a tinted button.
 import * as React from "react";
 import { Pressable, View } from "react-native";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ChevronLeft, ChevronsUpDown, Plus, X } from "lucide-react-native";
+import { ChevronsUpDown, Plus, X } from "lucide-react-native";
 import { DATA_COLORS, recoveryColor, STRESS_COLOR, stressLevel } from "@/lib/bands";
 import { bandColor, type Band } from "@/lib/charts";
 import { formatValue, MISSING, type FormatKey } from "@/lib/format";
@@ -18,10 +19,11 @@ import { CHART_GROUPS, CHART_METRICS, chartDef, DAY_VIEW, getChartDay, getChartS
 import { useApp, useQuery } from "@/state/app";
 import { trendGoal, useGoals } from "@/state/goals";
 import { useUnits } from "@/state/units";
-import { accentFamily, Button, DateSwitcher, EmptyState, Ground, HeaderFrame, Skeleton, ToggleGroup, Txt, useTheme, type Tokens } from "@/ui";
+import { accentFamily, BackButton, DateSwitcher, EmptyState, GlassButton, Ground, HeaderFrame, Skeleton, ToggleGroup, Txt, useTheme, type Tokens } from "@/ui";
 import type { CalmPalette } from "@/ui/calm";
 import { FAMILY_TINT } from "@/ui/components/calmKit";
-import { CALM_RADIUS, Caption, Num, Sentence, useCalm } from "@/screens/settings/calmKit";
+import { CALM_RADIUS, CalmButton, Caption, Sentence, useCalm } from "@/screens/settings/calmKit";
+import { font } from "@/ui/fonts";
 import { useChartFonts, wholeTick } from "@/ui/components/ChartFrame";
 import { zoneBands } from "@/ui/components/IntradayHrChart";
 import { ExplorerChart } from "./ExplorerChart";
@@ -68,7 +70,7 @@ import {
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const HINT = "Pinch to zoom · drag to pan · hold to inspect · double-tap to reset";
 /** The header's side slots: the back button and the Metric pill, equal so the title stays centred. */
-const SIDE = 92;
+const SIDE = 98;
 /** A day view with nothing to draw. */
 const EMPTY_DAY: Record<DayView, string> = {
   hr: "No heart rate recorded on this day.",
@@ -111,14 +113,28 @@ function compareColorOf(primary: SeriesColor, compare: SeriesColor, c: Tokens, k
 
 const tickText = (format: FormatKey) => (format === "duration" ? (v: number) => formatValue(format, v) : wholeTick((v) => formatValue(format, v)));
 
-/** One of the window's numbers: the value in the numeric face with its unit small beside it, the label under it. */
+/**
+ * One of the window's numbers, Apple Health's headline: the label in small grey capitals over the value (Inter bold,
+ * tabular), its unit small and grey beside it, wrapping under the value rather than squeezing it.
+ */
 function Stat({ label, value, format, unit, text }: { label: string; value: number | null | undefined; format: FormatKey; unit?: string; text?: string }) {
+  const k = useCalm();
   const s = value === undefined ? MISSING : (text ?? formatValue(format, value));
   const has = s !== MISSING && s !== "--" && value !== null;
+  const u = has && unit ? unitText(unit).trim() : null;
   return (
     <View accessible accessibilityLabel={`${label}: ${has ? (text ?? valueText(value, format, unit)) : "no data"}`} style={{ flex: 1, minWidth: 0, gap: 2 }}>
-      <Num value={has ? s : "--"} unit={has && unit ? unitText(unit).trim() : undefined} size={22} />
       <Caption>{label}</Caption>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", columnGap: 3 }}>
+        <Txt size={22} lineHeight={26} numberOfLines={1} style={[font.numberAt(22), { color: has ? k.ink : k.faint }]}>
+          {has ? s : "--"}
+        </Txt>
+        {u ? (
+          <Txt size={12} lineHeight={16} weight={600} style={{ color: k.sub }}>
+            {u}
+          </Txt>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -146,21 +162,19 @@ function LegendKey({ color, label, mark = "line" }: { color: string; label: stri
 }
 
 /**
- * The explorer's header: back and the Metric pill in equal side slots, the metric's name centred between them (two lines
- * when long), and under it, across the full width, what the chart draws.
+ * The explorer's header: back and the Metric capsule in equal side slots (round glass bar buttons), the metric's name
+ * centred between them (two lines when long), and under it, across the full width, what the chart draws.
  */
 function ExplorerHeader({ title, subtitle, onBack, action }: { title: string; subtitle?: string; onBack: () => void; action: React.ReactNode }) {
   const k = useCalm();
   return (
     <HeaderFrame>
-      <View style={{ minHeight: 56, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 6 }}>
+      <View style={{ minHeight: 52, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 7 }}>
         <View style={{ width: SIDE, alignItems: "flex-start" }}>
-          <Button variant="ghost" size="icon-touch" onPress={onBack} accessibilityLabel="Back" style={{ backgroundColor: k.card }}>
-            <ChevronLeft size={24} color={k.ink} strokeWidth={2} style={{ marginLeft: -2 }} />
-          </Button>
+          <BackButton onPress={onBack} />
         </View>
         <View style={{ flex: 1, minWidth: 0, alignItems: "center" }}>
-          <Txt size={18} lineHeight={24} weight={600} align="center" accessibilityRole="header" style={{ color: k.ink }}>
+          <Txt size={17} lineHeight={22} weight={600} align="center" accessibilityRole="header" style={{ color: k.ink }}>
             {title}
           </Txt>
         </View>
@@ -420,18 +434,12 @@ export default function ChartExplorer() {
         subtitle={subtitle}
         onBack={back}
         action={
-          <Pressable
-            onPress={() => setSheet("metric")}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={`Metric: ${def.label}. Change metric`}
-            style={({ pressed }) => ({ height: 40, paddingHorizontal: 12, borderRadius: 20, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: k.card, opacity: pressed ? 0.8 : 1 })}
-          >
-            <Txt size={14} lineHeight={18} weight={600} style={{ color: k.ink }}>
+          <GlassButton wide onPress={() => setSheet("metric")} accessibilityLabel={`Metric: ${def.label}. Change metric`}>
+            <Txt size={14} lineHeight={19} weight={600} style={{ color: k.ink }}>
               Metric
             </Txt>
-            <ChevronsUpDown size={16} color={k.teal} strokeWidth={2} />
-          </Pressable>
+            <ChevronsUpDown size={15} color={k.teal} strokeWidth={2.2} />
+          </GlassButton>
         }
       />
       <View style={{ flex: 1, paddingTop: 4, paddingBottom: Math.max(insets.bottom, 12), gap: 12 }}>
@@ -450,12 +458,12 @@ export default function ChartExplorer() {
               <DateSwitcher mode="day" date={d} today={today} firstDay={sync.firstDay} calendar={false} onChange={(next) => setParams({ d: next })} loading={!dayVm && !day.error} />
             </View>
           )}
-          {/* The visible window's numbers (refreshed when a gesture settles), on a white card. */}
-          <View style={{ borderRadius: CALM_RADIUS, backgroundColor: k.card, paddingHorizontal: 18, paddingVertical: 14, gap: 10 }}>
-            <Sentence size={13} weight={500} style={{ fontVariant: ["tabular-nums"] }}>
+          {/* The visible window's numbers (refreshed when a gesture settles), Apple's headline: the values, then their dates. */}
+          <View style={{ borderRadius: CALM_RADIUS, backgroundColor: k.card, paddingHorizontal: 16, paddingVertical: 14, gap: 8 }}>
+            <View style={{ flexDirection: "row", gap: 12 }}>{stats}</View>
+            <Sentence size={15} style={{ fontVariant: ["tabular-nums"] }}>
               {windowLabel || " "}
             </Sentence>
-            <View style={{ flexDirection: "row", gap: 12 }}>{stats}</View>
           </View>
         </View>
 
@@ -548,17 +556,9 @@ export default function ChartExplorer() {
                   <X size={15} color={k.sub} strokeWidth={2} />
                 </Pressable>
               ) : (
-                <Pressable
-                  onPress={() => setSheet("compare")}
-                  accessibilityRole="button"
-                  accessibilityLabel="Compare with another metric"
-                  style={({ pressed }) => ({ height: 36, paddingHorizontal: 14, borderRadius: 18, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: k.card, opacity: pressed ? 0.8 : 1 })}
-                >
-                  <Plus size={15} color={k.teal} strokeWidth={2.25} />
-                  <Txt size={13} lineHeight={18} weight={600} style={{ color: k.teal }}>
-                    Compare
-                  </Txt>
-                </Pressable>
+                <CalmButton variant="secondary" size="sm" icon={Plus} onPress={() => setSheet("compare")} accessibilityLabel="Compare with another metric">
+                  Compare
+                </CalmButton>
               ))}
           </View>
           {model?.shade && <Sentence size={13}>{model.shade.label}</Sentence>}

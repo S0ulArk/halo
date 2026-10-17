@@ -114,7 +114,7 @@ export function statProps(s: KeyStat, icons = true, onPress?: () => void): Omit<
   };
 }
 
-/** Rows grouped inside a card's list, a 1 px line in the Calm line colour between them. */
+/** Rows grouped inside a card's list, iOS's half-point separator between them. */
 export function Rows({ children }: { children: React.ReactNode }) {
   const calm = useCalm();
   const items = React.Children.toArray(children).filter(Boolean);
@@ -122,7 +122,7 @@ export function Rows({ children }: { children: React.ReactNode }) {
     <>
       {items.map((it, i) => (
         <React.Fragment key={i}>
-          {i > 0 && <View style={{ height: 1, backgroundColor: calm.line }} />}
+          {i > 0 && <View style={{ height: 0.5, backgroundColor: calm.line }} />}
           {it}
         </React.Fragment>
       ))}

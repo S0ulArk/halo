@@ -1,16 +1,23 @@
-// Health Monitor's Heart rhythm section, ported from Pulse's health/monitor/HeartRhythm.tsx. ECG readings and irregular
-// rhythm notifications come only from a Google account (the Google Health API); Health Connect carries neither, so with
-// it `rhythm` is empty and the one quiet row shows.
+// Health Monitor's Heart rhythm section, ported from Pulse's health/monitor/HeartRhythm.tsx, as an iOS grouped list: a
+// caps header, one card of rows (a pink icon square, the name with its line under it, the value and a thin chevron,
+// hairlines inset to the text between rows) and the disclaimer as the list's footer. ECG readings and irregular rhythm
+// notifications come only from a Google account (the Google Health API); Health Connect carries neither, so with it
+// `rhythm` is empty and the one quiet row shows. Each reading opens its sheet.
 import * as React from "react";
 import { Pressable, View } from "react-native";
-import { Activity, HeartPulse } from "lucide-react-native";
+import Reanimated from "react-native-reanimated";
+import { Activity, HeartPulse, type LucideIcon } from "lucide-react-native";
 import { DAY, formatDay, formatValue } from "@/lib/format";
 import type { EcgReading, HeartRhythm as HeartRhythmVM } from "@/queries";
-import { BottomSheet } from "@/ui";
+import { BottomSheet, Txt } from "@/ui";
 import { useCalm } from "@/ui/calm";
-import { ChevronSlot, onBand } from "@/ui/components/calmKit";
+import { ChevronSlot } from "@/ui/components/calmKit";
 import { TonePill } from "@/ui/components/Meter";
-import { Grouped, IconTile, Num, Sentence, Title } from "@/screens/detail/calmKit";
+import { usePress, usePressStyle } from "@/ui/components/press";
+import { Num, Sentence } from "@/screens/detail/calmKit";
+import { Hairline, IconTile, LIST_RADIUS, SectionFooter, SectionLabel } from "@/screens/settings/calmKit";
+
+const PressableView = Reanimated.createAnimatedComponent(Pressable);
 
 /** Fitbit's and the reference app's notes both say "not a diagnosis" and name what ECG can't detect. */
 export const RHYTHM_DISCLAIMER =
@@ -19,35 +26,57 @@ export const RHYTHM_DISCLAIMER =
 const when = (e: EcgReading) => `${formatDay(e.day, DAY.short)}, ${e.time}`;
 const bpm = (e: EcgReading) => (e.avgBpm === null ? "--" : formatValue("int", e.avgBpm));
 
-/** A row's band: the 36 px tile; its title is centred on it, and the value and the chevron sit on the title's line. */
-const BAND = 36;
+/** The row's icon square, iOS Settings' 29 px, and where the hairline under a row starts (the text). */
+const ICON = 29;
+const INSET = 16 + ICON + 12;
 
 /**
- * One row of the list: the tile, the title with its line under it, then on the title's line the value (`right`) and
- * the chevron's column (kept on every row, so the values share one right edge). A sentence that wraps grows the row
- * downward; the tile, the value and the chevron stay on the first line.
+ * One row: the icon square, the name with its line under it, the value and the chevron's column (kept on every row, so
+ * the values share one right edge); `below` hangs under the name (the latest ECG's reading). A tappable row settles and
+ * dims under the finger.
  */
-function Row({ icon, children, right, onPress, label }: { icon?: React.ReactNode; children: React.ReactNode; right?: React.ReactNode; onPress?: () => void; label?: string }) {
+function Row({ icon, title, line, right, below, onPress, label }: { icon: LucideIcon; title: string; line?: string; right?: React.ReactNode; below?: React.ReactNode; onPress?: () => void; label?: string }) {
+  const c = useCalm();
+  const press = usePress(0.985);
+  const pressed = usePressStyle(press, { dim: 0.55 });
   const body = (
-    <View style={{ minHeight: 56, flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 10 }}>
-      {icon}
-      <View style={{ flex: 1, minWidth: 0, paddingTop: onBand(BAND, 20) }}>{children}</View>
-      {right && <View style={{ marginTop: onBand(BAND, 22) }}>{right}</View>}
-      <ChevronSlot shown={!!onPress} style={{ marginTop: onBand(BAND, 18) }} />
+    <View style={{ gap: 10 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+        <IconTile icon={icon} tint="rose" size={ICON} />
+        <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+          <Txt size={16} lineHeight={21} style={{ color: c.ink }}>
+            {title}
+          </Txt>
+          {line ? (
+            <Txt size={13} lineHeight={18} style={{ color: c.sub }}>
+              {line}
+            </Txt>
+          ) : null}
+        </View>
+        {right}
+        <ChevronSlot shown={!!onPress} />
+      </View>
+      {below ? <View style={{ paddingLeft: ICON + 12, gap: 8, alignItems: "flex-start" }}>{below}</View> : null}
     </View>
   );
-  if (!onPress) return body;
+  const box = { minHeight: 48, paddingHorizontal: 16, paddingVertical: 10 };
+  if (!onPress)
+    return (
+      <View accessible accessibilityLabel={label ?? [title, line].filter(Boolean).join(", ")} style={box}>
+        {body}
+      </View>
+    );
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
+    <PressableView onPress={onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut} accessibilityRole="button" accessibilityLabel={label} style={[box, pressed]}>
       {body}
-    </Pressable>
+    </PressableView>
   );
 }
 
 /**
  * The latest ECG (result, average heart rate, date), older readings as rows, and the irregular rhythm notification
- * count, as one grouped list. Each reading opens its sheet. With nothing recorded it is one quiet row, so a screen most
- * owners see empty never looks broken.
+ * count, as one grouped list under its header. Each reading opens its sheet. With nothing recorded it is one quiet row,
+ * so a screen most owners see empty never looks broken.
  */
 export function HeartRhythm({ rhythm }: { rhythm: HeartRhythmVM }) {
   const c = useCalm();
@@ -60,68 +89,53 @@ export function HeartRhythm({ rhythm }: { rhythm: HeartRhythmVM }) {
     setLast(e);
   };
   const { ecg, irn } = rhythm;
-  const icon = (I: typeof Activity) => <IconTile icon={I} color={c.tintInk.rose} bg={c.tint.rose} size={36} />;
-
-  if (!ecg.length && !irn.count)
-    return (
-      <Row icon={icon(HeartPulse)}>
-        <Title size={15}>No heart rhythm readings yet</Title>
-        <View style={{ marginTop: 2 }}>
-          <Sentence size={13}>ECG readings and irregular rhythm notifications from the Google Health app show up here after they sync.</Sentence>
-        </View>
-      </Row>
-    );
-
   const [latest, ...older] = ecg;
-  return (
-    <View style={{ gap: 12 }}>
-      <Grouped inset={48}>
-        {latest ? (
-          <Pressable
-            onPress={() => select(latest)}
-            accessibilityRole="button"
-            accessibilityLabel={`Latest ECG, ${when(latest)}: ${latest.label}, average ${bpm(latest)} bpm`}
-            style={({ pressed }) => ({ paddingVertical: 12, gap: 12, opacity: pressed ? 0.6 : 1 })}
-          >
-            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
-              {icon(Activity)}
-              <View style={{ flex: 1, minWidth: 0, paddingTop: onBand(BAND, 20) }}>
-                <Title size={15}>Latest ECG</Title>
-              </View>
-              <View style={{ marginTop: onBand(BAND, 18) }}>
-                <Sentence size={13}>{when(latest)}</Sentence>
-              </View>
-              <ChevronSlot shown style={{ marginTop: onBand(BAND, 18) }} />
-            </View>
-            <View style={{ alignItems: "flex-start", gap: 8, paddingLeft: 48 }}>
-              <Num value={bpm(latest)} unit="bpm avg" size={30} color={c.tintInk.rose} />
-              <TonePill tone={latest.tone}>{latest.label}</TonePill>
-            </View>
-          </Pressable>
-        ) : (
-          <Row icon={icon(Activity)}>
-            <Title size={15} color={c.sub}>
-              No ECG readings yet
-            </Title>
-          </Row>
-        )}
-        {older.map((e) => (
-          <Row key={e.id} icon={icon(Activity)} onPress={() => select(e)} label={`${e.label}, ${when(e)}, ${bpm(e)} bpm`} right={<Num value={bpm(e)} unit="bpm" size={18} />}>
-            <Title size={15}>{e.label}</Title>
-            <View style={{ marginTop: 2 }}>
-              <Sentence size={13}>{when(e)}</Sentence>
-            </View>
-          </Row>
-        ))}
-        <Row icon={icon(HeartPulse)} right={<Num value={String(irn.count)} size={20} />}>
-          <Title size={15}>Irregular rhythm notifications</Title>
-          <View style={{ marginTop: 2 }}>
-            <Sentence size={13}>{irn.latestDay ? `Latest ${formatDay(irn.latestDay, DAY.short)}` : "None. The check runs from time to time while you’re still, so no alert doesn’t rule out AFib."}</Sentence>
-          </View>
-        </Row>
-      </Grouped>
+  const empty = !ecg.length && !irn.count;
 
-      <Sentence size={13}>{RHYTHM_DISCLAIMER}</Sentence>
+  const rows: React.ReactNode[] = empty
+    ? [<Row key="none" icon={HeartPulse} title="No heart rhythm readings yet" line="ECG readings and irregular rhythm notifications from the Google Health app show up here after they sync." />]
+    : [
+        latest ? (
+          <Row
+            key="latest"
+            icon={Activity}
+            title="Latest ECG"
+            line={when(latest)}
+            onPress={() => select(latest)}
+            label={`Latest ECG, ${when(latest)}: ${latest.label}, average ${bpm(latest)} bpm`}
+            below={
+              <>
+                <Num value={bpm(latest)} unit="bpm avg" size={30} />
+                <TonePill tone={latest.tone}>{latest.label}</TonePill>
+              </>
+            }
+          />
+        ) : (
+          <Row key="latest" icon={Activity} title="No ECG readings yet" />
+        ),
+        ...older.map((e) => <Row key={e.id} icon={Activity} title={e.label} line={when(e)} onPress={() => select(e)} label={`${e.label}, ${when(e)}, ${bpm(e)} bpm`} right={<Num value={bpm(e)} unit="bpm" size={17} />} />),
+        <Row
+          key="irn"
+          icon={HeartPulse}
+          title="Irregular rhythm notifications"
+          line={irn.latestDay ? `Latest ${formatDay(irn.latestDay, DAY.short)}` : "None. The check runs from time to time while you’re still, so no alert doesn’t rule out AFib."}
+          right={<Num value={String(irn.count)} size={17} color={c.sub} />}
+          label={`Irregular rhythm notifications: ${irn.count}. ${irn.latestDay ? `Latest ${formatDay(irn.latestDay, DAY.short)}` : "None. The check runs from time to time while you’re still, so no alert doesn’t rule out AFib."}`}
+        />,
+      ];
+
+  return (
+    <View style={{ gap: 7 }}>
+      <SectionLabel>Heart rhythm</SectionLabel>
+      <View style={{ borderRadius: LIST_RADIUS, backgroundColor: c.card, overflow: "hidden" }}>
+        {rows.map((r, i) => (
+          <React.Fragment key={i}>
+            {i > 0 ? <Hairline inset={INSET} /> : null}
+            {r}
+          </React.Fragment>
+        ))}
+      </View>
+      {!empty && <SectionFooter>{RHYTHM_DISCLAIMER}</SectionFooter>}
 
       <BottomSheet open={!!current} onClose={() => setOpen(null)} title="ECG reading">
         {shown && (
@@ -138,6 +152,17 @@ export function HeartRhythm({ rhythm }: { rhythm: HeartRhythmVM }) {
           </View>
         )}
       </BottomSheet>
+    </View>
+  );
+}
+
+/** The section's loading shape: its header and one row of the card's height. */
+export function HeartRhythmSkeleton() {
+  const c = useCalm();
+  return (
+    <View importantForAccessibility="no-hide-descendants" style={{ gap: 7 }}>
+      <SectionLabel>Heart rhythm</SectionLabel>
+      <View style={{ height: 64, borderRadius: LIST_RADIUS, backgroundColor: c.card }} />
     </View>
   );
 }

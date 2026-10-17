@@ -1,3 +1,6 @@
+// The capsule meter (ScoreDial's small sizes, the Energy meter, Home's goal bars): a rounded bar on iOS's quiet track
+// fill, filled to its value in a band or family colour, flat or lit along its length, with faint stretches (a band
+// zone, the Strain Target) and thin ticks on the track. The fill moves on the UI thread as a transform, never a width.
 import * as React from "react";
 import { View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
@@ -24,7 +27,7 @@ export type CapsuleMeterProps = {
   /** Thin ticks at these shares, over the fill (the Strain Target's ends). */
   ticks?: number[];
   tickColor?: string;
-  /** The track's colour (default the hairline grey; a pastel card passes its white). */
+  /** The track's colour (default iOS's quiet fill; a tinted card passes its own). */
   track?: string;
   /** The fill lit along its length (a sheen gradient) instead of flat: the hero's meter. */
   sheen?: boolean;
@@ -37,7 +40,7 @@ const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 const pct = (x: number) => `${clamp01(x) * 100}%` as const;
 
 /**
- * The capsule meter: a rounded bar on the hairline track, filled to the value in its colour (a band or family ink),
+ * The capsule meter: a rounded bar on the quiet track, filled to the value in its colour (a band or family ink),
  * flat or (`sheen`) lit along its length. The fill (with `grow`) grows in from the left on mount and slides to a later value,
  * on the UI thread: a full-width fill clipped by the track and moved by a transform, never a width (no layout per
  * frame). Reduce motion jumps.
@@ -70,7 +73,7 @@ export function CapsuleMeter({ frac, color, height = 8, width, segments, ticks, 
       pointerEvents="none"
       importantForAccessibility="no-hide-descendants"
       onLayout={width === undefined ? (e) => w.set(e.nativeEvent.layout.width) : undefined}
-      style={[{ height, borderRadius: r, backgroundColor: track ?? c.line }, width === undefined ? { alignSelf: "stretch" } : { width }, style]}
+      style={[{ height, borderRadius: r, backgroundColor: track ?? c.fill }, width === undefined ? { alignSelf: "stretch" } : { width }, style]}
     >
       {segments?.map((s, i) =>
         s.to > s.from ? (

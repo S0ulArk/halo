@@ -126,7 +126,7 @@ const HRV_LABEL = /^(hrv|heart rate variability)\b/i;
 const LABEL_LINE = 15;
 /** The caption's tracking, px: the RN label and the Skia readout share it. */
 const LABEL_TRACKING = 1.1;
-/** The unit beside the 28 px headline: Figtree 500 at 12 px (0.42×), grey. */
+/** The unit beside the 28 px headline: Inter 500 at 12 px (0.42×), grey. */
 const UNIT_SIZE = 12;
 const VALUE_LINE = 32;
 const LEGEND_TOP = LABEL_LINE + VALUE_LINE + 6;

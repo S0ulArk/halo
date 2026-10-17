@@ -1,12 +1,13 @@
 // Settings › Notifications & background (`/settings?s=notifications`): the phone's stand-in for the web's App ›
-// Notifications (web push). Two cards. Background sync: the WorkManager task (src/background/task.ts), Health
-// Connect's background read permission, and the task's last runs. Notifications: "Recovery ready", "Halo can't
-// sync", the smart alerts (strain target, Health Monitor, weekly report; src/background/smart.ts), the daily check-in
-// reminder with its time, the wind-down reminder with its lead, app updates (src/update), and a test. Turning any notification on asks for
-// Android 13's POST_NOTIFICATIONS permission first.
+// Notifications (web push), as an iOS settings page. Notifications: "Recovery ready", "Halo can't sync", the smart
+// alerts (strain target, Health Monitor, weekly report; src/background/smart.ts) as switch rows with coloured icon
+// squares; the reminders (the daily check-in with its time, the wind-down reminder with its lead); app updates
+// (src/update); and a test. Background sync: the WorkManager task (src/background/task.ts), Health Connect's background
+// read permission, and the task's last runs. Turning any notification on asks for Android 13's POST_NOTIFICATIONS
+// permission first. The groups rise into place as the page opens.
 import * as React from "react";
 import { AppState, Linking, View } from "react-native";
-import { Bell, BellRing, Moon, TriangleAlert } from "lucide-react-native";
+import { Bell, BellRing, CalendarRange, CloudOff, Download, Flame, Moon, NotebookPen, RefreshCw, ShieldCheck, TriangleAlert } from "lucide-react-native";
 import { applyBedtime } from "@/background/alerts";
 import { DEEP_LINK, formatTime, parseTime, recoveryBody } from "@/background/decide";
 import { readLog, type RunLogEntry } from "@/background/log";
@@ -21,29 +22,11 @@ import { localDay } from "@/lib/time";
 import { useApp } from "@/state/app";
 import { Txt } from "@/ui";
 import { font } from "@/ui/fonts";
-import { CalmButton, CalmInput, CalmSwitch, Group, Sentence, useCalm } from "./calmKit";
-import { Body, ButtonGrid, Callout, Cell, Divided, Segmented } from "./parts";
+import { RiseEach } from "@/ui/motion/Rise";
+import { CalmInput, useCalm } from "./calmKit";
+import { ButtonRow, InfoRow, InsetGroup, NavRow, ROW_ICON, RowBox, SwitchRow } from "./list";
+import { Segmented } from "./parts";
 import { toast } from "./toast";
-
-/** A settings switch row: label, a caption under it, the switch on the right. */
-function SwitchRow({ label, caption, value, onChange, disabled }: { label: string; caption?: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
-  const c = useCalm();
-  // The grouped rows' 40 px band: the switch and the label's first line centred on it, the caption hanging below, so
-  // every switch sits on its label's line however the caption wraps.
-  return (
-    <View style={{ minHeight: 64, flexDirection: "row", alignItems: "flex-start", gap: 14, paddingVertical: 12, opacity: disabled ? 0.5 : 1 }}>
-      <View style={{ flex: 1, minWidth: 0, gap: 2, paddingTop: (40 - 21) / 2 }}>
-        <Txt size={16} lineHeight={21} weight={600} style={{ color: c.ink }}>
-          {label}
-        </Txt>
-        {!!caption && <Sentence>{caption}</Sentence>}
-      </View>
-      <View style={{ marginTop: (40 - 32) / 2 }}>
-        <CalmSwitch value={value} onChange={onChange} disabled={disabled} label={label} />
-      </View>
-    </View>
-  );
-}
 
 /** Settings and the notification permission, loaded once and re-read when the app returns from system settings. */
 function useNotificationSettings() {
@@ -74,38 +57,29 @@ function useNotificationSettings() {
 
 const RESULT_WORD: Record<RunLogEntry["result"], string> = { ok: "Synced", skipped: "Skipped", failed: "Failed" };
 
-function LastRuns({ log, timeZone }: { log: RunLogEntry[]; timeZone: string }) {
+/** One background run: when, how it ended and how long it took, its note under it. */
+function RunRow({ e, timeZone }: { e: RunLogEntry; timeZone: string }) {
   const c = useCalm();
-  if (!log.length) return <Sentence>No background runs yet.</Sentence>;
   return (
-    <View style={{ borderTopWidth: 1, borderTopColor: c.line }}>
-      <Txt size={15} lineHeight={20} weight={600} accessibilityRole="header" style={{ color: c.ink, marginTop: 14, marginBottom: 4 }}>
-        Last runs
-      </Txt>
-      <Divided>
-        {log.slice(0, 6).map((e) => (
-          <View key={e.at} style={{ minHeight: 48, justifyContent: "center", paddingVertical: 8 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-              <Txt size={15} lineHeight={20} style={[font.numeric(600), { color: c.ink, flexShrink: 1 }]}>
-                {`${formatDay(localDay(e.at / 1000, timeZone), DAY.monthDay)}, ${clock(e.at, timeZone)}`}
-              </Txt>
-              <Txt size={13} lineHeight={18} weight={600} style={{ color: e.result === "failed" ? c.tintInk.rose : e.result === "ok" ? c.tintInk.mint : c.sub, fontVariant: ["tabular-nums"] }}>
-                {`${RESULT_WORD[e.result]} · ${(e.ms / 1000).toFixed(1)} s`}
-              </Txt>
-            </View>
-            {!!e.note && (
-              <Txt size={13} lineHeight={18} style={{ color: c.sub, marginTop: 2 }}>
-                {e.note}
-              </Txt>
-            )}
-          </View>
-        ))}
-      </Divided>
+    <View style={{ minHeight: 48, justifyContent: "center", paddingHorizontal: 16, paddingVertical: 10 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <Txt size={16} lineHeight={21} style={[font.numeric(500), { color: c.ink, flexShrink: 1 }]}>
+          {`${formatDay(localDay(e.at / 1000, timeZone), DAY.monthDay)}, ${clock(e.at, timeZone)}`}
+        </Txt>
+        <Txt size={15} lineHeight={20} weight={500} style={{ color: e.result === "failed" ? c.system.red : e.result === "ok" ? c.system.green : c.sub, fontVariant: ["tabular-nums"] }}>
+          {`${RESULT_WORD[e.result]} · ${(e.ms / 1000).toFixed(1)} s`}
+        </Txt>
+      </View>
+      {!!e.note && (
+        <Txt size={13} lineHeight={18} style={{ color: c.sub, marginTop: 2 }}>
+          {e.note}
+        </Txt>
+      )}
     </View>
   );
 }
 
-function BackgroundSyncCard({ s }: { s: ReturnType<typeof useNotificationSettings> }) {
+function BackgroundSync({ s, start }: { s: ReturnType<typeof useNotificationSettings>; start: number }) {
   const c = useCalm();
   const app = useApp();
   const hc = app.source === "health_connect";
@@ -162,59 +136,57 @@ function BackgroundSyncCard({ s }: { s: ReturnType<typeof useNotificationSetting
     }
   };
 
-  const accessLine = !hc ? null : background === null ? "Checking Health Connect…" : background ? "Background access allowed" : "Background access not allowed";
+  const scheduled = registered === null ? "…" : registered && s.settings.backgroundSync ? "Scheduled with Android" : "Not scheduled";
 
   return (
-    <Group title="Background sync" padding={20} gap={12}>
-      <SwitchRow
-        label="Background sync"
-        caption={hc ? "Imports Health Connect and rescores while Halo is closed" : google ? "Imports from your Google account and rescores while Halo is closed" : "Needs Health Connect or a Google account as the data source"}
-        value={s.settings.backgroundSync}
-        onChange={(v) => void toggle(v)}
-        disabled={!hc && !google}
-      />
-      <Body>Android runs it roughly every 15–30 min when the phone allows. Battery Saver and app sleep settings can pause it; a run resumes when Halo is opened.</Body>
-      {!available && (
-        <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
-          <TriangleAlert size={16} color={c.tintInk.sand} strokeWidth={2} style={{ marginTop: 2 }} />
-          <Sentence color={c.tintInk.sand} weight={600} style={{ flex: 1 }}>
-            Background tasks are restricted for Halo on this phone.
-          </Sentence>
-        </View>
-      )}
+    <RiseEach start={start}>
+      <InsetGroup title="Background sync" footer="Android runs it roughly every 15–30 min when the phone allows. Battery Saver and app sleep settings can pause it; a run resumes when Halo is opened.">
+        <SwitchRow
+          icon={RefreshCw}
+          system="blue"
+          label="Background sync"
+          description={hc ? "Imports Health Connect and rescores while Halo is closed" : google ? "Imports from your Google account and rescores while Halo is closed" : "Needs Health Connect or a Google account as the data source"}
+          value={s.settings.backgroundSync}
+          onChange={(v) => void toggle(v)}
+          disabled={!hc && !google}
+        />
+        <InfoRow label="Schedule" value={scheduled} valueColor={registered && s.settings.backgroundSync ? c.system.green : undefined} />
+        {!available && <NavRow icon={TriangleAlert} system="yellow" label="Restricted on this phone" description="Background tasks are restricted for Halo on this phone." action />}
+        {__DEV__ && <ButtonRow label="Run the task now (debug)" onPress={() => void runNow()} disabled={busy} />}
+      </InsetGroup>
       {hc && (
-        <Callout tint={background === false ? "sand" : background ? "mint" : "sky"} title={accessLine ?? ""}>
-          <Body>Health Connect only answers a closed app with this extra permission. Without it the task skips quietly and Halo syncs when opened.</Body>
-          <ButtonGrid style={{ marginTop: 8 }}>
-            <Cell wide>
-              <CalmButton onPress={() => void allow()} disabled={busy || background === true}>
-                {background ? "Allowed" : "Allow background access"}
-              </CalmButton>
-            </Cell>
-          </ButtonGrid>
-        </Callout>
+        <InsetGroup title="Health Connect" footer="Health Connect only answers a closed app with this extra permission. Without it the task skips quietly and Halo syncs when opened.">
+          <InfoRow
+            label="Background access"
+            value={background === null ? "Checking…" : background ? "Allowed" : "Not allowed"}
+            valueColor={background === false ? c.tintInk.sand : background ? c.system.green : undefined}
+          />
+          {background !== true && <ButtonRow label="Allow background access" busy={busy} onPress={() => void allow()} disabled={busy} />}
+        </InsetGroup>
       )}
-      <Txt size={13} lineHeight={18} weight={600} style={{ color: registered ? c.tintInk.mint : c.sub }}>
-        {registered === null ? " " : registered && s.settings.backgroundSync ? "Scheduled with Android" : "Not scheduled"}
-      </Txt>
-      <LastRuns log={log} timeZone={app.timeZone} />
-      {__DEV__ && (
-        <CalmButton variant="secondary" on="card" onPress={() => void runNow()} disabled={busy}>
-          Run the task now (debug)
-        </CalmButton>
-      )}
-    </Group>
+      <InsetGroup title="Last runs">
+        {log.length ? (
+          log.slice(0, 6).map((e) => <RunRow key={e.at} e={e} timeZone={app.timeZone} />)
+        ) : (
+          <RowBox>
+            <Txt size={15} lineHeight={20} style={{ color: c.sub }}>
+              No background runs yet.
+            </Txt>
+          </RowBox>
+        )}
+      </InsetGroup>
+    </RiseEach>
   );
 }
 
 // ── Notifications ────────────────────────────────────────────────────────────
 
-/** HH:mm as text, applied on blur; a bad value shows a hint and keeps the last good one. */
-function TimeField({ value, onCommit, disabled }: { value: string; onCommit: (v: string) => void; disabled?: boolean }) {
+/** HH:mm as text, applied on blur; a bad value shows a hint and keeps the last good one. A row with the field on the right. */
+function TimeRow({ value, onCommit, disabled }: { value: string; onCommit: (v: string) => void; disabled?: boolean }) {
   const c = useCalm();
   const [draft, setDraft] = React.useState(value);
   const [bad, setBad] = React.useState(false);
-  // A saved value arriving from storage replaces the draft (adjusted during render, as ConfirmDialog tracks `open`).
+  // A saved value arriving from storage replaces the draft (adjusted during render, as the dialogs track `open`).
   const [seen, setSeen] = React.useState(value);
   if (value !== seen) {
     setSeen(value);
@@ -231,16 +203,15 @@ function TimeField({ value, onCommit, disabled }: { value: string; onCommit: (v:
     setDraft(v);
     if (v !== value) onCommit(v);
   };
-  // SwitchRow's band: the field (48) and the label's first line centred on 40 px, the hint hanging below.
   return (
-    <View style={{ minHeight: 64, flexDirection: "row", alignItems: "flex-start", gap: 14, paddingVertical: 12, opacity: disabled ? 0.5 : 1 }}>
-      <View style={{ flex: 1, minWidth: 0, gap: 2, paddingTop: (40 - 21) / 2 }}>
-        <Txt size={16} lineHeight={21} weight={600} style={{ color: c.ink }}>
+    <View style={{ minHeight: 48, flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 8, paddingLeft: 16 + ROW_ICON + 12, opacity: disabled ? 0.45 : 1 }}>
+      <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+        <Txt size={16} lineHeight={21} style={{ color: c.ink }}>
           Reminder time
         </Txt>
-        <Sentence color={bad ? c.tintInk.rose : undefined} accessibilityRole={bad ? "alert" : undefined}>
+        <Txt size={13} lineHeight={18} accessibilityRole={bad ? "alert" : undefined} style={{ color: bad ? c.system.red : c.sub }}>
           {bad ? "Use HH:mm, like 21:00" : "24-hour clock"}
-        </Sentence>
+        </Txt>
       </View>
       <CalmInput
         value={draft}
@@ -255,7 +226,7 @@ function TimeField({ value, onCommit, disabled }: { value: string; onCommit: (v:
         invalid={bad}
         on="card"
         numeric
-        style={{ width: 96, minHeight: 48, marginTop: (40 - 48) / 2, paddingHorizontal: 12, textAlign: "center" }}
+        style={{ width: 88, minHeight: 40, borderRadius: 10, paddingHorizontal: 10, textAlign: "center" }}
       />
     </View>
   );
@@ -263,12 +234,12 @@ function TimeField({ value, onCommit, disabled }: { value: string; onCommit: (v:
 
 const LEAD_ITEMS = BEDTIME_LEADS.map((m) => ({ value: String(m), label: `${m} min` }));
 
-/** The wind-down lead: how long before the planned bedtime the reminder comes. */
-function LeadField({ value, onChange, disabled }: { value: number; onChange: (min: number) => void; disabled?: boolean }) {
+/** The wind-down lead: how long before the planned bedtime the reminder comes, as a segmented control under its name. */
+function LeadRow({ value, onChange, disabled }: { value: number; onChange: (min: number) => void; disabled?: boolean }) {
   const c = useCalm();
   return (
-    <View pointerEvents={disabled ? "none" : "auto"} style={{ paddingVertical: 14, gap: 10, opacity: disabled ? 0.5 : 1 }}>
-      <Txt size={16} lineHeight={21} weight={600} style={{ color: c.ink }}>
+    <View pointerEvents={disabled ? "none" : "auto"} style={{ paddingHorizontal: 16, paddingLeft: 16 + ROW_ICON + 12, paddingVertical: 12, gap: 10, opacity: disabled ? 0.45 : 1 }}>
+      <Txt size={16} lineHeight={21} style={{ color: c.ink }}>
         Remind me before bed
       </Txt>
       <Segmented accessibilityLabel="Remind me before bed" value={String(value)} onChange={(v) => onChange(Number(v))} items={LEAD_ITEMS} />
@@ -276,8 +247,7 @@ function LeadField({ value, onChange, disabled }: { value: number; onChange: (mi
   );
 }
 
-function NotificationsCard({ s }: { s: ReturnType<typeof useNotificationSettings> }) {
-  const c = useCalm();
+function Notifications({ s }: { s: ReturnType<typeof useNotificationSettings> }) {
   const app = useApp();
   const denied = s.permission === "denied";
   // The wind-down reminder on the schedule, for its caption; re-planned on open as after a run.
@@ -332,65 +302,58 @@ function NotificationsCard({ s }: { s: ReturnType<typeof useNotificationSettings
   };
 
   return (
-    <Group title="Notifications" padding={20} gap={8}>
+    <RiseEach>
       {denied && (
-        <Callout tint="sand" icon={TriangleAlert} title="Blocked in Android settings" style={{ marginBottom: 4 }}>
-          <Body>Allow notifications for Halo there, then come back.</Body>
-          <ButtonGrid style={{ marginTop: 8 }}>
-            <Cell wide>
-              <CalmButton variant="secondary" on="ground" onPress={() => void Linking.openSettings()}>
-                Open settings
-              </CalmButton>
-            </Cell>
-          </ButtonGrid>
-        </Callout>
+        <InsetGroup title="Notifications are off">
+          <NavRow icon={TriangleAlert} system="yellow" label="Blocked in Android settings" description="Allow notifications for Halo there, then come back." action />
+          <ButtonRow label="Open settings" onPress={() => void Linking.openSettings()} />
+        </InsetGroup>
       )}
-      <Divided>
-        <SwitchRow label="Recovery ready" caption="Once a day, when today’s Recovery is scored" value={s.settings.recoveryReady} onChange={(v) => void set("recoveryReady", v)} disabled={denied} />
-        <SwitchRow label="Can’t sync" caption="Once a day, when Health Connect hasn’t synced for 36 hours" value={s.settings.cantSync} onChange={(v) => void set("cantSync", v)} disabled={denied} />
-        <SwitchRow label="Strain target reached" caption="Once a day, when Day Strain reaches today’s target" value={s.settings.strainTarget} onChange={(v) => void set("strainTarget", v)} disabled={denied} />
+      <InsetGroup title="Alerts">
+        <SwitchRow icon={Bell} system="red" label="Recovery ready" description="Once a day, when today’s Recovery is scored" value={s.settings.recoveryReady} onChange={(v) => void set("recoveryReady", v)} disabled={denied} />
+        <SwitchRow icon={CloudOff} system="gray" label="Can’t sync" description="Once a day, when Health Connect hasn’t synced for 36 hours" value={s.settings.cantSync} onChange={(v) => void set("cantSync", v)} disabled={denied} />
+        <SwitchRow icon={Flame} system="orange" label="Strain target reached" description="Once a day, when Day Strain reaches today’s target" value={s.settings.strainTarget} onChange={(v) => void set("strainTarget", v)} disabled={denied} />
         <SwitchRow
+          icon={ShieldCheck}
+          system="pink"
           label="Health Monitor"
-          caption="When last night’s vitals leave your normal range or an illness signal appears; not again while it lasts"
+          description="When last night’s vitals leave your normal range or an illness signal appears; not again while it lasts"
           value={s.settings.healthMonitor}
           onChange={(v) => void set("healthMonitor", v)}
           disabled={denied}
         />
-        <SwitchRow label="Weekly report" caption="Monday morning, when last week’s report is ready" value={s.settings.weeklyReport} onChange={(v) => void set("weeklyReport", v)} disabled={denied} />
-        <SwitchRow label="Check-in reminder" caption="Every day; opens the Journal" value={s.settings.checkIn} onChange={(v) => void setCheckIn(v)} disabled={denied} />
-        <TimeField value={s.settings.checkInTime} onCommit={(v) => void setTime(v)} disabled={denied || !s.settings.checkIn} />
-        <SwitchRow label="Wind-down reminder" caption={windDownCaption} value={s.settings.bedtime} onChange={(v) => void setWindDown({ bedtime: v })} disabled={denied} />
-        <LeadField value={s.settings.bedtimeLeadMin} onChange={(m) => void setWindDown({ bedtimeLeadMin: m })} disabled={denied || !s.settings.bedtime} />
+        <SwitchRow icon={CalendarRange} system="blue" label="Weekly report" description="Monday morning, when last week’s report is ready" value={s.settings.weeklyReport} onChange={(v) => void set("weeklyReport", v)} disabled={denied} />
+      </InsetGroup>
+      <InsetGroup title="Reminders" inset="icon">
+        <SwitchRow icon={NotebookPen} system="indigo" label="Check-in reminder" description="Every day; opens the Journal" value={s.settings.checkIn} onChange={(v) => void setCheckIn(v)} disabled={denied} />
+        <TimeRow value={s.settings.checkInTime} onCommit={(v) => void setTime(v)} disabled={denied || !s.settings.checkIn} />
+        <SwitchRow icon={Moon} system="indigo" label="Wind-down reminder" description={windDownCaption} value={s.settings.bedtime} onChange={(v) => void setWindDown({ bedtime: v })} disabled={denied} />
+        <LeadRow value={s.settings.bedtimeLeadMin} onChange={(m) => void setWindDown({ bedtimeLeadMin: m })} disabled={denied || !s.settings.bedtime} />
+      </InsetGroup>
+      <InsetGroup title="Updates">
         <SwitchRow
+          icon={Download}
+          system="teal"
           label="App updates"
-          caption="When a new version of Halo is out; Halo asks GitHub each time it opens and in the background, sending no health data"
+          description="When a new version of Halo is out; Halo asks GitHub each time it opens and in the background, sending no health data"
           value={s.settings.updates}
           onChange={(v) => void setUpdates(v)}
         />
-      </Divided>
-      <CalmButton variant="secondary" on="card" icon={BellRing} onPress={() => void test()} disabled={denied} style={{ marginTop: 8 }}>
-        Test notification
-      </CalmButton>
-      <View style={{ marginTop: 8, flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
-        <Moon size={14} color={c.faint} strokeWidth={2} style={{ marginTop: 3 }} />
-        <Sentence size={13} style={{ flex: 1 }}>
-          Alerts are checked after every sync, in the background or when Halo opens. Nothing leaves the phone except the update check’s request to GitHub.
-        </Sentence>
-      </View>
-    </Group>
+      </InsetGroup>
+      <InsetGroup footer="Alerts are checked after every sync, in the background or when Halo opens. Nothing leaves the phone except the update check’s request to GitHub.">
+        <ButtonRow label="Send a test notification" leading={<BellRing size={19} strokeWidth={2.2} />} onPress={() => void test()} disabled={denied} />
+      </InsetGroup>
+    </RiseEach>
   );
 }
 
-/** The section: both cards. */
+/** The section: the notifications, then the background sync. */
 export function NotificationsSection() {
   const s = useNotificationSettings();
   return (
     <>
-      <BackgroundSyncCard s={s} />
-      <NotificationsCard s={s} />
+      <Notifications s={s} />
+      <BackgroundSync s={s} start={5} />
     </>
   );
 }
-
-export const NOTIFICATIONS_ICON = Bell;
-export default NotificationsSection;

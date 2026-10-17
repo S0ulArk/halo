@@ -1,6 +1,7 @@
-// "Add a behaviour": the custom-tag form at the foot of the check-in sheet and of More › Behaviours.
+// "Add a behaviour": the custom-tag form at the foot of the check-in sheet and of More › Behaviours, iOS's: the label
+// over a field with the blue "Add" capsule beside it, the error in red under them.
 import * as React from "react";
-import { TextInput, View } from "react-native";
+import { StyleSheet, TextInput, View } from "react-native";
 import { useApp } from "@/state/app";
 import { useUnits } from "@/state/units";
 import { Txt } from "@/ui";
@@ -47,9 +48,9 @@ export function AddBehaviour({ tags, onAdded, divided }: { tags: { tag: string; 
   };
 
   return (
-    <View style={[{ marginTop: 16, gap: 8 }, divided && { borderTopWidth: 1, borderTopColor: c.line, paddingTop: 16 }]}>
-      <Txt size={14} lineHeight={19} weight={600} nativeID="new-behaviour-label" style={{ color: c.ink, paddingHorizontal: 4 }}>
-        Add a behaviour
+    <View style={[{ marginTop: 16, gap: 8 }, divided && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.line, paddingTop: 16 }]}>
+      <Txt size={13} lineHeight={18} nativeID="new-behaviour-label" style={{ color: c.sub, paddingHorizontal: 4 }}>
+        ADD A BEHAVIOUR
       </Txt>
       <View style={{ flexDirection: "row", gap: 8 }}>
         <TextField
@@ -76,7 +77,7 @@ export function AddBehaviour({ tags, onAdded, divided }: { tags: { tag: string; 
         </CalmButton>
       </View>
       {addError ? (
-        <Txt size={13} lineHeight={18} accessibilityRole="alert" style={{ color: c.tintInk.rose, paddingHorizontal: 4 }}>
+        <Txt size={13} lineHeight={18} accessibilityRole="alert" style={{ color: c.system.red, paddingHorizontal: 4 }}>
           {addError}
         </Txt>
       ) : null}

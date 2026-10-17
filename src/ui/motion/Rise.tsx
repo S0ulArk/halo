@@ -14,7 +14,7 @@ import { reduceMotionNow } from "./system";
 
 /** How long a block takes to rise, and how far it travels. */
 export const RISE_MS = 340;
-const RISE_PX = 16;
+const RISE_PX = 10;
 /** The cascade's step between sections on open, and the most steps it takes (later blocks start with the last). */
 const RISE_STEP = 55;
 const RISE_STEPS = 6;

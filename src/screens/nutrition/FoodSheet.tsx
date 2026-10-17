@@ -8,8 +8,13 @@
 //
 // Each opening is its own session (`key={request.id}`): the parent builds the request in its press handler, so the
 // state starts from it with no reset logic.
+//
+// The sheet is iOS's, like Health's Add Data: "Add" (or "Save" when editing) in its bar once there is something to
+// save, the other ways on at its foot; the ways in as cards on the sheet's grouped ground, an estimate under review as
+// an inset grouped list. Every press settles and dims on the UI thread.
 import * as React from "react";
-import { ActivityIndicator, Image, Keyboard, Linking, Pressable, View } from "react-native";
+import { ActivityIndicator, Image, Keyboard, Linking, Pressable, StyleSheet, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { router, type Href } from "expo-router";
 import { Camera, ChevronRight, ImagePlus, KeyRound, PencilLine, ShieldCheck, Sparkles, Trash2, TriangleAlert, type LucideIcon } from "lucide-react-native";
 import { providerLabel } from "@/coach/providers";
@@ -29,7 +34,10 @@ import { useActionCtx } from "@/screens/journal/AddBehaviour";
 import { Chips, ErrorAlert, Field, TextField, toast } from "@/screens/journal/controls";
 import { atOf, EMPTY_FOOD, foodFormOf, foodItemOf, mealAt, num, wallNow, type FoodForm } from "@/screens/journal/forms";
 import { bumpJournal } from "@/screens/journal/state";
-import { CalmButton, Hairline, IconTile, Notice, SectionLabel, Sentence, TintPill, useCalm, type CalmTint } from "@/screens/settings/calmKit";
+import { usePress, usePressStyle } from "@/ui/components/press";
+import { CalmButton, IconTile, Notice, SectionLabel, Sentence, TintPill, useCalm, type CalmTint } from "@/screens/settings/calmKit";
+
+const PressableView = Animated.createAnimatedComponent(Pressable);
 
 // ── Opening ─────────────────────────────────────────────────────────────────
 
@@ -80,22 +88,27 @@ function Section({ title, first, children }: { title: string; first?: boolean; c
   );
 }
 
-/** A way to add food, half the row: its icon on the sand pastel and its name under it. */
+/** A way to add food, half the row: a card on the sheet with its icon square and its name under it. */
 function MethodTile({ icon: Icon, label, onPress, disabled }: { icon: LucideIcon; label: string; onPress: () => void; disabled?: boolean }) {
   const c = useCalm();
+  const press = usePress();
+  const pressed = usePressStyle(press, { rest: disabled ? 0.45 : 1, dim: 0.8 });
   return (
-    <Pressable
+    <PressableView
       onPress={onPress}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => ({ flex: 1, minWidth: 0, minHeight: 104, borderRadius: 24, backgroundColor: c.tint.sand, padding: 14, gap: 12, opacity: disabled ? 0.5 : pressed ? 0.85 : 1 })}
+      accessibilityState={disabled ? { disabled: true } : undefined}
+      style={[{ flex: 1, minWidth: 0, minHeight: 96, borderRadius: 16, backgroundColor: c.sheetFill, padding: 14, gap: 10 }, pressed]}
     >
-      <IconTile icon={Icon} tint="sand" on="tint" size={40} />
-      <Txt size={15} lineHeight={20} weight={600} style={{ color: c.ink }}>
+      <IconTile icon={Icon} tint="sand" size={34} />
+      <Txt size={16} lineHeight={21} weight={600} style={{ color: c.ink }}>
         {label}
       </Txt>
-    </Pressable>
+    </PressableView>
   );
 }
 
@@ -112,15 +125,15 @@ function PrivacyNote({ provider }: { provider: string }) {
   );
 }
 
-/** A teal link with a chevron, inside a notice or a line. */
+/** A blue link with a chevron, iOS's, inside a notice or a line. */
 function Link({ label, onPress }: { label: string; onPress: () => void }) {
   const c = useCalm();
   return (
-    <Pressable onPress={onPress} accessibilityRole="link" hitSlop={{ top: 12, bottom: 12, left: 6, right: 6 }} style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start", opacity: pressed ? 0.6 : 1 })}>
-      <Txt size={14} lineHeight={19} weight={600} style={{ color: c.teal }}>
+    <Pressable onPress={onPress} accessibilityRole="link" hitSlop={{ top: 12, bottom: 12, left: 6, right: 6 }} style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 1, alignSelf: "flex-start", opacity: pressed ? 0.5 : 1 })}>
+      <Txt size={15} lineHeight={20} weight={500} style={{ color: c.teal }}>
         {label}
       </Txt>
-      <ChevronRight size={16} color={c.teal} strokeWidth={2.25} />
+      <ChevronRight size={17} color={c.teal} strokeWidth={2.4} />
     </Pressable>
   );
 }
@@ -149,7 +162,7 @@ function TodayLine({ today, onOpen }: { today: { kcal: number | null; protein: n
   return (
     <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", columnGap: 12, rowGap: 6, paddingHorizontal: 4 }}>
       <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8, flexGrow: 1, flexShrink: 1 }}>
-        <Txt size={11} lineHeight={15} weight={600} style={{ color: c.faint, letterSpacing: 1.4 }}>
+        <Txt size={13} lineHeight={18} style={{ color: c.sub }}>
           TODAY
         </Txt>
         <View style={{ flexShrink: 1 }}>{words}</View>
@@ -225,7 +238,7 @@ function DraftRow({ d, onToggle, onChange, onRemove }: { d: Draft; onToggle: () 
     <View style={{ gap: 12, paddingVertical: 14 }}>
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
         <Pressable onPress={onToggle} accessibilityRole="button" accessibilityLabel={`${d.open ? "Close" : "Edit"} ${name}`} accessibilityState={{ expanded: d.open }} style={({ pressed }) => ({ flex: 1, minWidth: 0, gap: 4, opacity: pressed ? 0.7 : 1 })}>
-          <Txt size={16} lineHeight={21} weight={600} style={{ color: c.ink }}>
+          <Txt size={16} lineHeight={21} style={{ color: c.ink }}>
             {name}
             {d.form.portion.trim() ? <Txt size={15} lineHeight={21} weight={400} style={{ color: c.sub }}>{`  ${d.form.portion.trim()}`}</Txt> : null}
           </Txt>
@@ -238,11 +251,11 @@ function DraftRow({ d, onToggle, onChange, onRemove }: { d: Draft; onToggle: () 
             </View>
           )}
         </Pressable>
-        <Pressable onPress={onToggle} accessibilityRole="button" accessibilityLabel={`Edit ${name}`} style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: pressed || d.open ? c.ground : "transparent" })}>
-          <PencilLine size={19} color={d.open ? c.teal : c.faint} strokeWidth={1.75} />
+        <Pressable onPress={onToggle} accessibilityRole="button" accessibilityLabel={`Edit ${name}`} style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: pressed || d.open ? c.fill : "transparent" })}>
+          <PencilLine size={19} color={c.teal} strokeWidth={2} />
         </Pressable>
-        <Pressable onPress={onRemove} accessibilityRole="button" accessibilityLabel={`Remove ${name}`} style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? c.ground : "transparent" })}>
-          <Trash2 size={19} color={c.faint} strokeWidth={1.75} />
+        <Pressable onPress={onRemove} accessibilityRole="button" accessibilityLabel={`Remove ${name}`} style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? c.fill : "transparent" })}>
+          <Trash2 size={19} color={c.sub} strokeWidth={2} />
         </Pressable>
       </View>
       {d.error && <ErrorAlert>{d.error}</ErrorAlert>}
@@ -530,16 +543,18 @@ export function FoodSheet({ request, open, onClose, today, overviewLink }: FoodS
 
   let body: React.ReactNode;
   let footer: React.ReactNode = null;
+  // The bar's filled action, once there is something to save.
+  let barAction: { label: string; onPress: () => void; disabled?: boolean } | undefined;
   const errorLine = error ? <ErrorAlert>{error}</ErrorAlert> : null;
-  const fullWidth = { alignSelf: "stretch", minHeight: 56, borderRadius: 28 } as const;
+  const fullWidth = { alignSelf: "stretch" } as const;
 
   if (step === "estimating") {
     body = (
       <View style={{ gap: 16, paddingTop: 4, paddingBottom: 8 }} accessibilityLiveRegion="polite">
         {photo ? (
-          <Image source={{ uri: `data:${photo.mediaType};base64,${photo.base64}` }} resizeMode="cover" accessibilityLabel="Your meal photo" style={{ alignSelf: "stretch", height: 200, borderRadius: 24, backgroundColor: c.ground }} />
+          <Image source={{ uri: `data:${photo.mediaType};base64,${photo.base64}` }} resizeMode="cover" accessibilityLabel="Your meal photo" style={{ alignSelf: "stretch", height: 200, borderRadius: 16, backgroundColor: c.sheetFill }} />
         ) : (
-          <View style={{ borderRadius: 20, backgroundColor: c.ground, padding: 16 }}>
+          <View style={{ borderRadius: 16, backgroundColor: c.sheetFill, padding: 16 }}>
             <Txt size={16} lineHeight={22} style={{ color: c.ink }}>{`“${text.trim()}”`}</Txt>
           </View>
         )}
@@ -621,10 +636,10 @@ export function FoodSheet({ request, open, onClose, today, overviewLink }: FoodS
         <Section title={drafts.length === 1 ? "Food" : `Foods (${drafts.length})`}>
           <Sentence style={{ paddingHorizontal: 4 }}>Estimates are approximate. Fix any number, or remove what isn’t there, before saving.</Sentence>
           {drafts.length ? (
-            <View style={{ borderRadius: 24, backgroundColor: c.card, borderWidth: 1, borderColor: c.edge, paddingHorizontal: 14 }}>
+            <View style={{ borderRadius: 14, backgroundColor: c.sheetFill, paddingHorizontal: 14 }}>
               {drafts.map((d, i) => (
                 <React.Fragment key={d.key}>
-                  {i > 0 && <Hairline />}
+                  {i > 0 && <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.line }} />}
                   <DraftRow
                     d={d}
                     onToggle={() => setDrafts((ds) => ds.map((x) => (x.key === d.key ? { ...x, open: !x.open } : x)))}
@@ -647,13 +662,11 @@ export function FoodSheet({ request, open, onClose, today, overviewLink }: FoodS
         </View>
       </View>
     );
+    barAction = { label: saving ? "Saving…" : drafts.length > 1 ? `Add ${drafts.length}` : "Add", onPress: saveReview, disabled: saving || !drafts.length };
     footer = (
       <View style={{ gap: 10, alignSelf: "stretch" }}>
         {errorLine}
-        <CalmButton onPress={saveReview} disabled={saving || !drafts.length} style={fullWidth}>
-          {saving ? "Saving…" : drafts.length > 1 ? `Save ${drafts.length} foods` : "Save"}
-        </CalmButton>
-        <CalmButton variant="quiet" on="card" onPress={typeIt} disabled={saving} style={{ alignSelf: "stretch" }}>
+        <CalmButton variant="secondary" onPress={typeIt} disabled={saving} style={{ alignSelf: "stretch" }}>
           Enter it yourself instead
         </CalmButton>
       </View>
@@ -681,19 +694,18 @@ export function FoodSheet({ request, open, onClose, today, overviewLink }: FoodS
         )}
       </View>
     );
-    footer = (
-      <View style={{ gap: 10, alignSelf: "stretch" }}>
-        {errorLine}
-        <CalmButton onPress={saveTyped} disabled={saving} style={fullWidth}>
-          {saving ? "Saving…" : edit ? "Save changes" : "Save"}
-        </CalmButton>
-        {!edit && hasKey && (
-          <CalmButton variant="quiet" on="card" onPress={again} disabled={saving} style={{ alignSelf: "stretch" }}>
-            Estimate from a photo instead
-          </CalmButton>
-        )}
-      </View>
-    );
+    barAction = { label: saving ? "Saving…" : edit ? "Save" : "Add", onPress: saveTyped, disabled: saving };
+    footer =
+      errorLine || (!edit && hasKey) ? (
+        <View style={{ gap: 10, alignSelf: "stretch" }}>
+          {errorLine}
+          {!edit && hasKey && (
+            <CalmButton variant="secondary" onPress={again} disabled={saving} style={{ alignSelf: "stretch" }}>
+              Estimate from a photo instead
+            </CalmButton>
+          )}
+        </View>
+      ) : null;
   } else {
     // The ways in (a coach key is set up, or the setup is still loading).
     body = (
@@ -745,7 +757,7 @@ export function FoodSheet({ request, open, onClose, today, overviewLink }: FoodS
 
   const title = edit ? "Edit food" : step === "review" ? "Check the estimate" : step === "estimating" ? "Estimating…" : "Log food";
   return (
-    <BottomSheet open={open} onClose={close} title={title} description={app.source === "demo" ? "Demo: saved in Halo only" : "Saved in Halo on this phone"} footer={footer ?? undefined}>
+    <BottomSheet open={open} onClose={close} title={title} description={app.source === "demo" ? "Demo: saved in Halo only" : "Saved in Halo on this phone"} done={barAction} footer={footer ?? undefined}>
       {body}
     </BottomSheet>
   );

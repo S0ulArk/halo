@@ -1,6 +1,6 @@
-// Calm meters: a flat capsule track (`calm.line`) with the value as a fill in its family or band ink, or as a dot on
-// a track whose normal range is a faint segment; and the pastel pill a delta or a band word sits in. Views only (no
-// SVG, no gradients).
+// The kit's meters in iOS's look: a capsule track in iOS's quiet fill with the value as a fill in its family or band
+// colour, or as a dot on a track whose normal range is a faint segment; and the soft capsule a delta or a band word sits
+// in ("Within range" in green). Views only (no SVG, no gradients).
 // A fill or dot is placed with a UI-thread transform (Reanimated) and slides only when its value changes: never on
 // mount, so a screen opening draws each meter once, already at its value.
 import * as React from "react";
@@ -63,7 +63,7 @@ export function Capsule({ value, color, height = 8, range, style }: CapsuleProps
   // is a transform, never a re-layout. Hidden for the one frame before the track is measured.
   const fill = useAnimatedStyle(() => ({ opacity: width.value > 0 ? 1 : 0, transform: [{ translateX: (f.value - 1) * width.value }] }));
   return (
-    <View onLayout={onLayout} style={[{ height, borderRadius: r, backgroundColor: c.line, overflow: "hidden" }, style]}>
+    <View onLayout={onLayout} style={[{ height, borderRadius: r, backgroundColor: c.fill, overflow: "hidden" }, style]}>
       {range && <Segment range={range} radius={r} color={alpha(c.ink, 0.12)} />}
       {frac !== null && frac > 0 && <Animated.View style={[{ position: "absolute", top: 0, bottom: 0, left: 0, width: "100%", borderRadius: r, backgroundColor: color }, fill]} />}
     </View>
@@ -102,7 +102,7 @@ export function RangeTrack({ value, color, range, rangeColor, tick, height = 8, 
   const dotStyle = useAnimatedStyle(() => ({ opacity: width.value > 0 ? 1 : 0, transform: [{ translateX: f.value * width.value - dot / 2 }] }));
   const t = fracOf(tick);
   return (
-    <View onLayout={onLayout} style={[{ height, borderRadius: r, backgroundColor: c.line }, style]}>
+    <View onLayout={onLayout} style={[{ height, borderRadius: r, backgroundColor: c.fill }, style]}>
       {range && <Segment range={range} radius={r} color={rangeColor ?? alpha(c.ink, 0.16)} />}
       {t !== null && <View style={{ position: "absolute", top: -3, bottom: -3, width: 2, marginLeft: -1, borderRadius: 1, left: `${t * 100}%`, backgroundColor: c.sub }} />}
       {frac !== null && (
@@ -146,9 +146,11 @@ export function TonePill({ tone = "neutral", color, dir, children, style }: { to
   const fg = color ?? (tint ? c.tintInk[tint] : c.sub);
   const bg = color ? alpha(color, 0.15) : tint ? c.tint[tint] : quiet;
   return (
-    <View style={[{ flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 5, height: 24, borderRadius: 12, paddingHorizontal: 9, backgroundColor: bg }, style]}>
+    // One line at 24 px for a short word; a long one ("Elevated, above 16.9" in a half-width tile) wraps inside the
+    // capsule rather than being cut.
+    <View style={[{ flexDirection: "row", alignItems: "center", alignSelf: "flex-start", maxWidth: "100%", gap: 5, minHeight: 24, borderRadius: 12, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: bg }, style]}>
       {dir && <DeltaGlyph dir={dir} color={fg} size={8} />}
-      <Txt size={12} lineHeight={16} weight={600} color={fg} numberOfLines={1} style={TABULAR}>
+      <Txt size={12} lineHeight={16} weight={600} color={fg} style={[TABULAR, { flexShrink: 1 }]}>
         {children}
       </Txt>
     </View>

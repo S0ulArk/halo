@@ -1,18 +1,22 @@
-// Settings › Goals `/settings?s=goals` (a phone-only addition): Fitbit-style daily goals, each with a switch and a
-// numeric target in its unit, the weekly Active Zone Minutes target, and "Reset to Fitbit defaults". Saved as typed
-// (src/state/goals.ts), so Home's rings and the Trends goal lines follow at once; an out-of-range number is shown in
-// red and not saved. Settings › Goals shows the Weekly plan's targets after these (./weeklyPlan.tsx).
+// Settings › Goals `/settings?s=goals` (a phone-only addition): Fitbit-style daily goals, each a row with its coloured
+// icon square and a switch and, while on, its numeric target in its unit under the name; the weekly Active Zone Minutes
+// target; and "Reset to Fitbit defaults". Saved as typed (src/state/goals.ts), so Home's rings and the Trends goal lines
+// follow at once; an out-of-range number is shown in red and not saved. Settings › Goals shows the Weekly plan's targets
+// after these (./weeklyPlan.tsx). The groups rise into place as the page opens; a target fades in when its switch turns on.
 import * as React from "react";
 import { View } from "react-native";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { Moon, type LucideIcon } from "lucide-react-native";
 import { GOAL_KEYS, GOAL_META, type GoalKey } from "@/queries/goals";
 import type { Units } from "@/lib/units";
 import { DEFAULT_GOALS, isDefaultGoals, parseTarget, targetLimit, targetText, useGoals, withEnabled, withTarget, type TargetKey } from "@/state/goals";
 import { useUnits } from "@/state/units";
 import { Txt } from "@/ui";
+import { reduceMotionNow } from "@/ui/motion/system";
+import { RiseEach } from "@/ui/motion/Rise";
 import { STAT_ICON } from "../home/view";
-import { CalmInput, CalmSwitch, Group, IconTile, Sentence, useCalm, type CalmTint } from "./calmKit";
-import { Body, Divided, OutlineButton } from "./parts";
+import { CalmInput, CalmSwitch, useCalm, type CalmTint } from "./calmKit";
+import { ButtonRow, InsetGroup, ROW_ICON, RowIcon } from "./list";
 import { toast } from "./toast";
 
 const HINT: Partial<Record<TargetKey, string>> = {
@@ -20,10 +24,10 @@ const HINT: Partial<Record<TargetKey, string>> = {
   azmWeek: "Fitbit counts moderate minutes once and vigorous or peak minutes twice.",
 };
 
-/** Each goal's family: activity sky, water (nutrition) sand, sleep lavender. */
+/** Each goal's family: activity blue, water (nutrition) sand, sleep indigo. */
 const GOAL_TINT: Partial<Record<GoalKey, CalmTint>> = { water: "sand", sleep: "lavender" };
 
-/** A goal's target: a 16 px rounded field with the number in the numeric face, grey on the white card. */
+/** A goal's target: a compact field with the number in tabular figures, in the quiet fill of the card. */
 export function NumberField({ value, onChange, onBlur, placeholder, invalid, label, decimals }: { value: string; onChange: (v: string) => void; onBlur: () => void; placeholder: string; invalid: boolean; label: string; decimals: number }) {
   return (
     <CalmInput
@@ -36,17 +40,18 @@ export function NumberField({ value, onChange, onBlur, placeholder, invalid, lab
       invalid={invalid}
       on="card"
       numeric
-      style={{ width: 128, minHeight: 48 }}
+      style={{ width: 132, minHeight: 44, borderRadius: 11 }}
     />
   );
 }
 
 /**
- * One habit or goal with a target: its tinted icon tile, the name, and its switch on one row; while on, the target
- * field with its unit and a hint (or a rose error) under it. Shared by Daily goals and the Weekly plan.
+ * One habit or goal with a target, as an iOS row: its coloured icon square, the name and its switch; while on, the
+ * target field with its unit under the name, and a hint (or a red error) under that. Shared by Daily goals and the
+ * Weekly plan.
  */
 export function TargetField({
-  icon: Icon,
+  icon,
   tint,
   label,
   switchLabel,
@@ -70,32 +75,34 @@ export function TargetField({
 }) {
   const c = useCalm();
   return (
-    <View style={{ paddingVertical: 14, gap: 12 }}>
-      <View style={{ minHeight: 40, flexDirection: "row", alignItems: "center", gap: 14 }}>
-        <View style={{ opacity: on ? 1 : 0.55 }}>
-          <IconTile icon={Icon} tint={tint} size={40} />
+    <View style={{ paddingHorizontal: 16, paddingVertical: 10, gap: 10 }}>
+      <View style={{ minHeight: 31, flexDirection: "row", alignItems: "center", gap: 12 }}>
+        <View style={{ opacity: on ? 1 : 0.45 }}>
+          <RowIcon icon={icon} tint={tint} />
         </View>
-        <Txt size={16} lineHeight={21} weight={600} style={{ flex: 1, minWidth: 0, color: on ? c.ink : c.sub }}>
+        <Txt size={16} lineHeight={21} style={{ flex: 1, minWidth: 0, color: c.ink }}>
           {label}
         </Txt>
         <CalmSwitch value={on} onChange={onToggle} label={switchLabel} />
       </View>
       {on && (
-        <View style={{ paddingLeft: 54, gap: 8 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+        <Animated.View entering={reduceMotionNow() ? undefined : FadeIn.duration(180)} style={{ paddingLeft: ROW_ICON + 12, gap: 6, paddingBottom: 2 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
             {field}
-            <Txt size={14} lineHeight={19} weight={500} style={{ flex: 1, minWidth: 0, color: c.sub }}>
+            <Txt size={15} lineHeight={20} style={{ flex: 1, minWidth: 0, color: c.sub }}>
               {unit}
             </Txt>
           </View>
           {error ? (
-            <Sentence color={c.tintInk.rose} weight={500} accessibilityRole="alert">
+            <Txt size={13} lineHeight={18} accessibilityRole="alert" style={{ color: c.system.red }}>
               {error}
-            </Sentence>
+            </Txt>
           ) : hint ? (
-            <Sentence>{hint}</Sentence>
+            <Txt size={13} lineHeight={18} style={{ color: c.sub }}>
+              {hint}
+            </Txt>
           ) : null}
-        </View>
+        </Animated.View>
       )}
     </View>
   );
@@ -187,20 +194,20 @@ export function GoalsSection() {
   const waterDefault = units.fluid === "floz" ? `about ${targetText("water", DEFAULT_GOALS.targets.water, units)} fl oz` : "2,000 ml";
 
   return (
-    <>
-      <Group title="Daily goals" padding={20} gap={4}>
-        <Body style={{ paddingBottom: 8 }}>{`Each goal is a ring on Home that fills through the day. Fitbit’s defaults: 10,000 steps, ${distanceDefault}, 10 floors, 22 Active Zone Minutes, 30 active minutes and ${waterDefault} of water.`}</Body>
-        <Divided top>{GOAL_KEYS.map((k) => field(k))}</Divided>
-      </Group>
-      <Group title="Weekly goal" padding={20} gap={4}>
-        <Body style={{ paddingBottom: 8 }}>Active Zone Minutes add up over the week, Monday to Sunday. The switch is the daily goal’s.</Body>
-        <Divided top>{field("azm", "azmWeek")}</Divided>
-      </Group>
-      <View style={{ alignItems: "center", paddingTop: 4, paddingBottom: 8 }}>
-        <OutlineButton on="ground" onPress={() => void doReset()} disabled={isDefaultGoals(goals)}>
-          Reset to Fitbit defaults
-        </OutlineButton>
-      </View>
-    </>
+    <RiseEach>
+      <InsetGroup
+        title="Daily goals"
+        inset="icon"
+        footer={`Each goal is a ring on Home that fills through the day. Fitbit’s defaults: 10,000 steps, ${distanceDefault}, 10 floors, 22 Active Zone Minutes, 30 active minutes and ${waterDefault} of water.`}
+      >
+        {GOAL_KEYS.map((k) => field(k))}
+      </InsetGroup>
+      <InsetGroup title="Weekly goal" footer="Active Zone Minutes add up over the week, Monday to Sunday. The switch is the daily goal’s.">
+        {field("azm", "azmWeek")}
+      </InsetGroup>
+      <InsetGroup>
+        <ButtonRow label="Reset to Fitbit defaults" center onPress={() => void doReset()} disabled={isDefaultGoals(goals)} />
+      </InsetGroup>
+    </RiseEach>
   );
 }
