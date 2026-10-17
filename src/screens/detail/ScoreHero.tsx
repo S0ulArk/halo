@@ -18,18 +18,13 @@ import { REASON_ICON } from "@/ui/components/ReasonPlaceholder";
 import { SkeletonText } from "@/ui/components/Skeleton";
 import type { Tokens } from "@/ui/theme";
 import { GlowCard } from "./ios";
+import { strainWord } from "./lines";
 
 /** The ring and its stroke (Apple's tenth of the diameter), the number in its 136 px hole. */
 const RING = 172;
 const STROKE = 18;
 const NUMBER = 54;
 const NUMBER_LINE = 58;
-
-/** The Strain bands as "How Strain works" names them: 0-9.9 light, 10-13.9 moderate, 14-17.9 strenuous, 18-21 all out. */
-export function strainWord(v: number): string {
-  const s = Math.round(v * 10) / 10;
-  return s >= 18 ? "All out" : s >= 14 ? "Strenuous" : s >= 10 ? "Moderate" : "Light";
-}
 
 /** A Recovery score's fill (the band's system colour) and its readable ink (yellow is a deeper amber as text on white). */
 export function recoveryInks(c: Tokens, calm: CalmPalette, value: number): { fill: string; ink: string } {

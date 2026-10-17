@@ -7,8 +7,7 @@ import * as React from "react";
 import { View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { DATA_COLORS, deltaTone, GOOD_DIRECTION } from "@/lib/bands";
-import { clock, DAY, durationWords, formatDay, hmm, statSentence } from "@/lib/format";
-import { localDay } from "@/lib/time";
+import { clock, durationWords, hmm, statSentence } from "@/lib/format";
 import { alpha } from "@/lib/utils";
 import type { SleepVM } from "@/queries";
 import { DeltaMark, EmptyState, ReasonPlaceholder, Txt, useTheme } from "@/ui";
@@ -23,6 +22,7 @@ import { SleepHrChart } from "@/ui/components/SleepHrChart";
 import { font, TABULAR } from "@/ui/fonts";
 import { haptic } from "@/ui/motion/haptics";
 import { ListGroup, ListRow, useGrowIn } from "./ios";
+import { nightDates } from "./lines";
 
 type Stage = "awake" | "rem" | "light" | "deep";
 type Night = NonNullable<NonNullable<SleepVM["stages"]>["value"]>;
@@ -61,15 +61,6 @@ function HoursMinutes({ minutes }: { minutes: number }) {
       {unit("min")}
     </View>
   );
-}
-
-/** The night's dates as Apple Health writes them: "Oct 16–17" across midnight, "Oct 17" within a day, "Sep 30 – Oct 1". */
-function nightDates(bed: number, wake: number, timeZone: string): string {
-  const from = localDay(Math.floor(bed / 1000), timeZone);
-  const to = localDay(Math.floor(wake / 1000), timeZone);
-  if (from === to) return formatDay(to, DAY.monthDay);
-  if (from.slice(0, 7) === to.slice(0, 7)) return `${formatDay(from, DAY.monthDay)}–${Number(to.slice(8))}`;
-  return `${formatDay(from, DAY.monthDay)} – ${formatDay(to, DAY.monthDay)}`;
 }
 
 /**

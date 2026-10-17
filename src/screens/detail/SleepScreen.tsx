@@ -10,9 +10,9 @@ import * as React from "react";
 import { View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { getSleep, type SleepVM } from "@/queries";
-import { getChartSeries, type ChartSeriesVM } from "@/queries/chart";
+import { getChartSeries } from "@/queries/chart";
 import { useApp, useQuery } from "@/state/app";
-import { InsightCard, SectionShell, TrendChart, Txt, useTheme, type TrendPoint, type TrendRange, type TrendSeries } from "@/ui";
+import { InsightCard, SectionShell, TrendChart, Txt, useTheme, type TrendRange, type TrendSeries } from "@/ui";
 import { ExpandButton } from "@/ui/components/ChartFrame";
 import { useOpenChart, type ChartRange } from "@/screens/chart/href";
 import { useCalm } from "@/ui/calm";
@@ -22,6 +22,7 @@ import { SleepWeekCard } from "@/screens/home/calm";
 import { Anchor, DetailScreen, LoadError, useAnchors, type Anchors } from "./DetailScreen";
 import { SLEEP_INFO } from "./info";
 import { GlassSegmented, ListGroup } from "./ios";
+import { seriesPoints } from "./lines";
 import { useBack, useDayNav, useHashScroll, usePush, useRefresh } from "./nav";
 import { HoursVsNeed, Planner, SleepConsistency } from "./SleepCards";
 import { NightHeart, StagesCards, TimeAsleep } from "./SleepNight";
@@ -235,16 +236,6 @@ const Debt = React.memo(function Debt({ vm, today, open, fixed }: CardProps) {
     </SectionShell>
   );
 });
-
-/** A daily series from the chart explorer's query as a trend's points, ending on `day` (a year at most). */
-function seriesPoints(s: ChartSeriesVM, day: string): TrendPoint[] {
-  const end = s.days.findIndex((x) => x > day);
-  const upto = end === -1 ? s.days.length : end;
-  return s.days.slice(Math.max(0, upto - 365), upto).map((date, i, all) => {
-    const k = upto - all.length + i;
-    return { date, value: s.values[k], provisional: s.provisional[k] };
-  });
-}
 
 /** W, M, 6M: the nights over the range, as DetailScreen's slots. */
 function nightsSlots({ vm, mode, day, today, open }: { vm: SleepVM; mode: Exclude<Mode, "d">; day: string; today: string; open: Open }) {

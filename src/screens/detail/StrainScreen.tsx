@@ -29,6 +29,7 @@ import { homeKey, useDashboardKeys } from "@/screens/home/dashboard";
 import { Anchor, DetailScreen, LoadError, useAnchors } from "./DetailScreen";
 import { CALORIES_INFO, STRAIN_INFO, STRAIN_TARGET_INFO } from "./info";
 import { ListGroup, ListRow } from "./ios";
+import { targetLine } from "./lines";
 import { useBack, useDayNav, useHashScroll, usePush, useRefresh } from "./nav";
 import { ScoreHero } from "./ScoreHero";
 import { strainSkeleton } from "./skeletons";
@@ -175,12 +176,6 @@ function StrainView({ tab = false }: { tab?: boolean }) {
 
 type Open = (metric: string, r: ChartRange) => () => void;
 
-/** The day against its Strain Target, in a line: below it (by how much), inside it, or past it; nothing without both. */
-function targetLine(strain: number | null, t: { low: number; high: number } | null): string | null {
-  if (strain === null || !t) return null;
-  if (strain < t.low) return `${formatValue("decimal1", t.low - strain)} below today’s Strain Target of ${formatValue("decimal1", t.low)} – ${formatValue("decimal1", t.high)}.`;
-  return strain > t.high ? "Past today’s Strain Target: prioritise sleep tonight." : "Inside today’s Strain Target.";
-}
 
 /** The day's heart rate (a tap or the ↗ opens the explorer on Day Strain). Memoised: a page re-render skips it. */
 const HeartCard = React.memo(function HeartCard({ vm, timeZone, open }: { vm: StrainVM; timeZone: string; open: Open }) {
