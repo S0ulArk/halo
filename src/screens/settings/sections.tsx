@@ -1,28 +1,37 @@
 // Settings' sections, ported from the web's SettingsView.tsx, SettingsClient.tsx and AppSettings.tsx, kept to what a
-// phone with no server has: Profile (the web's Account section without the account), Data source (Health Connect, a
-// Google account through the Google Health API (google.tsx), or demo data; permissions, sync), App (appearance) and
-// Coach (a way into the coach).
+// phone with no server has, each laid out as an iOS settings page whose groups rise into place as it opens: Profile
+// (the monogram, the details as label / value rows, Remove all data in red), Data source (Health Connect, a Google
+// account through the Google Health API (google.tsx), or demo data: the source's feature header, what needs doing,
+// Sync now, which apps' data to use, the permissions per data type, switching or disconnecting), Appearance (System,
+// Light or Dark as three previews, iOS's picker) and Coach (the provider and the ways into the coach).
 import * as React from "react";
 import { AppState, Pressable, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { useRouter, type Href } from "expo-router";
-import { BotMessageSquare, Check, ChevronDown, HeartPulse, Minus, Monitor, Moon, Sun, TriangleAlert } from "lucide-react-native";
+import { Check, CircleAlert, HeartPulse, History, MessageCircle, Minus, Settings2, Sparkles, TriangleAlert } from "lucide-react-native";
+import { providerLabel } from "@/coach/providers";
+import { useChatCount, useCoachSetup } from "@/coach/session";
 import { GOOGLE_SOURCE_ENABLED } from "@/google/flags";
 import { askPermissions, openHealthConnectSettings, permissionState, READ_TYPES, type PermissionState, type ReadType } from "@/health/connect";
 import { getSourcePolicy, setSourcePolicy, SOURCE_POLICIES, SOURCE_POLICY_LABELS, type SourcePolicy } from "@/health/sourcePolicy";
 import { ago, DAY, formatDay } from "@/lib/format";
+import { wholeYears } from "@/lib/time";
 import { amount, cmToIn, heightText } from "@/lib/units";
 import { getSettings } from "@/queries/settings";
 import { useApp, useQuery, useSyncProgress } from "@/state/app";
 import { useUnits } from "@/state/units";
 import { Mark, SkeletonText, Txt, useTheme, type ColorToken, type ThemeChoice } from "@/ui";
+import { usePress, usePressStyle } from "@/ui/components/press";
 import { font } from "@/ui/fonts";
+import { haptic } from "@/ui/motion/haptics";
+import { RiseEach } from "@/ui/motion/Rise";
 import { useNow } from "../health/shells";
 import { progressLabel } from "../home/status";
-import { CalmButton, Group, Sentence, Title, useCalm } from "./calmKit";
-import { Body, ButtonGrid, Callout, Cell, ConfirmDialog, Divided, OutlineButton, ProgressBar, Row, Segmented, Tile, toneOf } from "./parts";
+import { Hairline, useCalm } from "./calmKit";
+import { ButtonRow, CheckRow, Disclosure, HeroCard, ICON_INSET, InfoRow, InsetGroup, NavRow, ProfileAvatar, RowBox } from "./list";
+import { ConfirmDialog, ProgressBar, toneOf } from "./parts";
 import { GoogleConnectGroup, GoogleSourceGroup } from "./google";
-import { EditProfileButton } from "./ProfileSheet";
-import { SyncNowButton } from "./syncNow";
+import { SyncNowRow } from "./syncNow";
 import { toast } from "./toast";
 import { describeZone } from "./zone";
 
@@ -32,15 +41,16 @@ const PROFILE_ROWS = ["Birth date", "Age", "Sex", "Height", "Waist", "Max heart 
 
 type ProfileRow = { label: string; value: string; numeric?: boolean; unit?: string; detail?: string };
 
-/** The profile as rows, its Edit sheet, and (last and quiet, as the web's Delete account) Remove all data. */
+/** The profile: the monogram head, the details as rows (edited from the bar's Edit), and Remove all data last, in red. */
 export function ProfileSection() {
+  const c = useCalm();
   const app = useApp();
   const q = useQuery(getSettings);
   const p = q.data?.profile;
   const { units } = useUnits();
-  // Numbers in the numeric face with their unit small beside them; words stay words ("Not set", "Male"). Height and
-  // waist follow Settings › Units: centimetres, or a height in feet and inches written out ("5 ft 9 in") and a waist
-  // in inches.
+  const [confirm, setConfirm] = React.useState(false);
+  // Numbers in tabular figures with their unit beside them; words stay words ("Not set", "Male"). Height and waist
+  // follow Settings › Units: centimetres, or a height in feet and inches written out ("5 ft 9 in") and a waist in inches.
   const ftin = units.height === "ftin";
   const rows: ProfileRow[] | null = p
     ? [
@@ -57,37 +67,35 @@ export function ProfileSection() {
         { label: "Time zone", value: describeZone(p.timeZone) },
       ]
     : null;
+  const age = app.profile ? wholeYears(app.profile.birthDate, app.today) : null;
   return (
     <>
-      <Group title="Profile" right={app.profile ? <EditProfileButton profile={app.profile} /> : undefined} padding={20} gap={8}>
-        <Divided>
+      <RiseEach>
+        <View accessible accessibilityLabel={age !== null ? `Your profile, ${age} years` : "Your profile"} style={{ alignItems: "center", gap: 4, paddingTop: 4 }}>
+          <ProfileAvatar size={84} />
+          <Txt size={22} lineHeight={28} weight={700} style={{ color: c.ink, marginTop: 8 }}>
+            Your profile
+          </Txt>
+          <Txt size={15} lineHeight={20} style={{ color: c.sub }}>
+            Tap Edit to change any of it
+          </Txt>
+        </View>
+        <InsetGroup title="Details" footer="Your days start at midnight in your time zone. Saving an edit recomputes your scores.">
           {rows
-            ? rows.map((r) => <Row key={r.label} label={r.label} value={r.value} numeric={r.numeric} unit={r.unit} detail={r.detail} />)
+            ? rows.map((r) => <InfoRow key={r.label} label={r.label} value={r.value} numeric={r.numeric} unit={r.unit} detail={r.detail} />)
             : PROFILE_ROWS.map((k) => (
-                <Row key={k} label={k}>
+                <InfoRow key={k} label={k}>
                   <SkeletonText width={96} size={15} lineHeight={20} />
-                </Row>
+                </InfoRow>
               ))}
-        </Divided>
-        <Sentence>Your days start at midnight in your time zone. Saving an edit recomputes your scores.</Sentence>
-      </Group>
-      <RemoveAllData />
-    </>
-  );
-}
-
-/** The one irreversible action, below everything: a rose pill (the web's Delete account). */
-function RemoveAllData() {
-  const app = useApp();
-  const [open, setOpen] = React.useState(false);
-  return (
-    <View style={{ alignItems: "center", paddingTop: 16, paddingBottom: 8 }}>
-      <CalmButton variant="danger" size="md" onPress={() => setOpen(true)}>
-        Remove all data
-      </CalmButton>
+        </InsetGroup>
+        <InsetGroup footer="Removes your profile and every row and score Halo stored on this phone. Health Connect keeps its own copy.">
+          <ButtonRow label="Remove all data" danger center onPress={() => setConfirm(true)} />
+        </InsetGroup>
+      </RiseEach>
       <ConfirmDialog
-        open={open}
-        onClose={() => setOpen(false)}
+        open={confirm}
+        onClose={() => setConfirm(false)}
         title="Remove all data?"
         description="Removes your profile and every row and score Halo stored on this phone. Health Connect keeps its own copy. This can’t be undone."
         confirm="Remove all data"
@@ -96,10 +104,10 @@ function RemoveAllData() {
         onConfirm={async () => {
           // The root gate moves on to onboarding once the profile is gone.
           await app.reset();
-          setOpen(false);
+          setConfirm(false);
         }}
       />
-    </View>
+    </>
   );
 }
 
@@ -147,75 +155,61 @@ function usePermissions(enabled: boolean) {
   return { state, read };
 }
 
-function StatusIcon({ ok }: { ok: boolean }) {
+/** One data type's row: its name, whether it is allowed (amber when not), and a check or a dash. */
+function TypeRow({ label, ok }: { label: string; ok: boolean }) {
   const c = useCalm();
-  return ok ? <Check size={16} color={c.tintInk.mint} strokeWidth={2.5} /> : <Minus size={16} color={c.faint} strokeWidth={2} />;
+  return (
+    <View accessible accessibilityLabel={`${label}: ${ok ? "Allowed" : "Not allowed"}`} style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 10 }}>
+      <Txt size={16} lineHeight={21} style={{ flex: 1, minWidth: 0, color: c.ink }}>
+        {label}
+      </Txt>
+      <Txt size={15} lineHeight={20} style={{ color: ok ? c.sub : c.tintInk.sand }}>
+        {ok ? "Allowed" : "Not allowed"}
+      </Txt>
+      {ok ? <Check size={17} color={c.system.green} strokeWidth={2.6} /> : <Minus size={17} color={c.faint} strokeWidth={2.2} />}
+    </View>
+  );
 }
 
-/** Per record type, folded under one summary line; it opens itself when something is not allowed (the web's DataTypes). */
+/** Per record type, folded under one summary row; it opens itself when something is not allowed (the web's DataTypes). */
 function DataTypes({ perms }: { perms: PermissionState }) {
   const c = useCalm();
   const missing = perms.missing.length + (perms.history ? 0 : 1);
-  const [open, setOpen] = React.useState(missing > 0);
   const rows: { key: string; label: string; ok: boolean }[] = [
     ...READ_TYPES.map((t) => ({ key: t, label: TYPE_LABEL[t], ok: perms.granted.includes(t) })),
     { key: "history", label: "Past data", ok: perms.history },
   ];
   const allowed = rows.length - missing;
   return (
-    <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: c.line }}>
-      <Pressable
-        onPress={() => setOpen((o) => !o)}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
-        accessibilityLabel={`Data types, ${missing ? `${missing} not allowed` : "All allowed"}`}
-        style={({ pressed }) => ({ minHeight: 56, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingVertical: 10, opacity: pressed ? 0.7 : 1 })}
-      >
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Txt size={16} lineHeight={21} weight={600} style={{ color: c.ink }}>
-            Data types
-          </Txt>
-          <Sentence color={missing ? c.tintInk.sand : c.sub} weight={missing ? 600 : 400}>
-            {missing ? `${missing} not allowed` : "All allowed"}
-          </Sentence>
-        </View>
+    <Disclosure
+      label="Data types"
+      summary={missing ? `${missing} not allowed` : "All allowed"}
+      summaryColor={missing ? c.tintInk.sand : undefined}
+      defaultOpen={missing > 0}
+      count={
         <View style={{ flexDirection: "row", alignItems: "baseline" }}>
-          <Txt size={18} lineHeight={22} style={[font.numeric(700), { color: c.ink }]}>
+          <Txt size={17} lineHeight={22} style={[font.numeric(600), { color: c.ink }]}>
             {String(allowed)}
           </Txt>
-          <Txt size={13} lineHeight={18} weight={500} style={{ color: c.sub, marginLeft: 4 }}>
+          <Txt size={15} lineHeight={20} style={[font.numeric(500), { color: c.sub, marginLeft: 3 }]}>
             {`/ ${rows.length}`}
           </Txt>
         </View>
-        <View style={{ transform: [{ rotate: open ? "180deg" : "0deg" }] }}>
-          <ChevronDown size={18} color={c.label} strokeWidth={1.5} />
-        </View>
-      </Pressable>
-      {open && (
-        <Divided top>
-          {rows.map((r) => (
-            <View key={r.key} accessible accessibilityLabel={`${r.label}: ${r.ok ? "Allowed" : "Not allowed"}`} style={{ minHeight: 48, flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 }}>
-              <Txt size={15} lineHeight={20} style={{ flex: 1, minWidth: 0, color: c.ink }}>
-                {r.label}
-              </Txt>
-              <Txt size={13} lineHeight={18} weight={500} style={{ color: r.ok ? c.sub : c.tintInk.sand }}>
-                {r.ok ? "Allowed" : "Not allowed"}
-              </Txt>
-              <StatusIcon ok={r.ok} />
-            </View>
-          ))}
-        </Divided>
-      )}
-    </View>
+      }
+    >
+      {rows.map((r) => (
+        <TypeRow key={r.key} label={r.label} ok={r.ok} />
+      ))}
+    </Disclosure>
   );
 }
 
 type SourceConfirm = "disconnect" | "demo" | "health" | null;
 
 /**
- * Data source (spec §7.14): the source as one row (logo, name, last sync), its status only when something needs doing,
- * Sync now, and the per-type permissions folded underneath. A Google account as the source has its own card
- * (google.tsx); with any other source, the Google account follows as the richer option.
+ * Data source (spec §7.14): the source's feature header (its icon, name and state), what needs doing, Sync now, and
+ * the per-type permissions folded underneath. A Google account as the source has its own page (google.tsx); with any
+ * other source, the Google account follows as the richer option.
  */
 export function DataSourceSection() {
   const app = useApp();
@@ -226,6 +220,17 @@ export function DataSourceSection() {
       {GOOGLE_SOURCE_ENABLED && <GoogleConnectGroup />}
     </>
   );
+}
+
+/** The demo source's mark: the ring in white on its square. */
+function WhiteMark({ size }: { size: number }) {
+  return <Mark size={size} color="mono" mono="#ffffff" />;
+}
+
+/** A warning in a group: the coloured icon square, a title and its sentence (a row that does nothing on its own). */
+function WarningRow({ title, body, red = false }: { title: string; body: string; red?: boolean }) {
+  const c = useCalm();
+  return <NavRow icon={red ? CircleAlert : TriangleAlert} system={red ? "red" : "yellow"} label={title} description={body} descriptionColor={c.sub} action />;
 }
 
 /** Health Connect, demo data or no source yet. */
@@ -265,80 +270,54 @@ function HealthConnectSource() {
   };
 
   return (
-    <Group title="Data source" gap={14}>
-      <View style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 14 }}>
-        <Tile tint={demo ? "mint" : "rose"}>{demo ? <Mark size={20} /> : <HeartPulse size={22} color={c.tintInk.rose} strokeWidth={1.75} />}</Tile>
-        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Title>{label}</Title>
-          <Sentence color={status.tone ? toneOf(c, status.tone) : undefined} weight={status.tone ? 600 : 400}>
-            {status.line}
-          </Sentence>
-        </View>
-      </View>
-      {!!status.body && <Body>{status.body}</Body>}
-      {!!failed && !syncing && (
-        <Sentence color={c.tintInk.rose} accessibilityRole="alert">
-          {`Last run failed: ${failed}`}
-        </Sentence>
-      )}
-      {hc && app.syncWarnings.includes("no_fitbit_records") && !syncing && <NoFitbitRecords />}
-      {needsPermissions && (
-        <Callout tint="sand" icon={TriangleAlert} title="Halo needs more permissions">
-          <Body>Allow every data type, including past data, so Halo can read all of what your Fitbit writes. Sync keeps working until then.</Body>
-          <ButtonGrid style={{ marginTop: 8 }}>
-            <Cell>
-              <CalmButton onPress={() => void allow()}>Allow</CalmButton>
-            </Cell>
-            <Cell>
-              <CalmButton variant="secondary" on="ground" onPress={() => openHealthConnectSettings()}>
-                Open settings
-              </CalmButton>
-            </Cell>
-          </ButtonGrid>
-        </Callout>
-      )}
-      {syncing && syncProgress && (
-        <View accessibilityLiveRegion="polite" style={{ gap: 8 }}>
-          <Txt size={15} lineHeight={20} weight={500} style={{ color: c.ink, fontVariant: ["tabular-nums"] }}>
-            {`Importing… ${progressLabel(syncProgress)}`}
-          </Txt>
-          <ProgressBar value={syncProgress.total > 0 ? syncProgress.done / syncProgress.total : 0} />
-        </View>
-      )}
-      <ButtonGrid style={{ marginTop: 2 }}>
-        {hc ? (
-          <>
-            <Cell>
-              {revoked ? <CalmButton onPress={() => void allow()}>Allow access</CalmButton> : <SyncNowButton />}
-            </Cell>
-            <Cell>
-              <OutlineButton danger onPress={() => setConfirm("disconnect")}>
-                Disconnect
-              </OutlineButton>
-            </Cell>
-            <Cell wide>
-              <CalmButton variant="secondary" on="card" onPress={() => setConfirm("demo")} disabled={syncing}>
-                Use demo data
-              </CalmButton>
-            </Cell>
-          </>
-        ) : (
-          <>
-            {demo && (
-              <Cell wide>
-                <SyncNowButton />
-              </Cell>
-            )}
-            <Cell wide>
-              <CalmButton onPress={() => setConfirm("health")} disabled={!hcReady || syncing}>
-                Connect Health Connect
-              </CalmButton>
-            </Cell>
-          </>
+    <>
+      <RiseEach>
+        <HeroCard
+          icon={demo ? undefined : HeartPulse}
+          iconNode={demo ? <WhiteMark size={40} /> : undefined}
+          system={demo ? "indigo" : "pink"}
+          title={label}
+          status={status.line}
+          statusColor={status.tone ? toneOf(c, status.tone) : undefined}
+          body={status.body}
+        />
+        {(!!failed && !syncing) || (hc && app.syncWarnings.includes("no_fitbit_records") && !syncing) || needsPermissions ? (
+          <InsetGroup title="Needs attention">
+            {!!failed && !syncing && <WarningRow red title="Last run failed" body={failed} />}
+            {hc && app.syncWarnings.includes("no_fitbit_records") && !syncing && <NoFitbitRecords />}
+            {needsPermissions && <WarningRow title="Halo needs more permissions" body="Allow every data type, including past data, so Halo can read all of what your Fitbit writes. Sync keeps working until then." />}
+            {needsPermissions && <ButtonRow label="Allow" onPress={() => void allow()} />}
+            {needsPermissions && <ButtonRow label="Open Health Connect settings" onPress={() => openHealthConnectSettings()} />}
+          </InsetGroup>
+        ) : null}
+        <InsetGroup title="Sync" footer={hc || demo ? `${status.line}. Halo also syncs on its own when it opens and, with background sync on, while it is closed.` : undefined}>
+          {syncing && syncProgress ? (
+            <RowBox gap={8}>
+              <View accessibilityLiveRegion="polite">
+                <Txt size={15} lineHeight={20} weight={500} style={{ color: c.ink, fontVariant: ["tabular-nums"] }}>
+                  {`Importing… ${progressLabel(syncProgress)}`}
+                </Txt>
+              </View>
+              <ProgressBar value={syncProgress.total > 0 ? syncProgress.done / syncProgress.total : 0} />
+            </RowBox>
+          ) : null}
+          {hc ? revoked ? <ButtonRow label="Allow access" onPress={() => void allow()} /> : <SyncNowRow /> : demo ? <SyncNowRow /> : null}
+          {hc && <ButtonRow label="Re-import all history" leading={<History size={19} strokeWidth={2.2} />} disabled={syncing} onPress={() => void app.reimport()} description="For data an app shared late" />}
+          {!hc && <ButtonRow label="Connect Health Connect" onPress={() => setConfirm("health")} disabled={!hcReady || syncing} />}
+        </InsetGroup>
+        {hc && <SourcePolicyPicker />}
+        {hc && perms.state && (
+          <InsetGroup title="Permissions" footer="Health Connect decides what Halo may read. Change it there any time.">
+            <DataTypes key={String(perms.state.missing.length)} perms={perms.state} />
+          </InsetGroup>
         )}
-      </ButtonGrid>
-      {hc && <SourcePolicyPicker />}
-      {hc && perms.state && <DataTypes key={String(perms.state.missing.length)} perms={perms.state} />}
+        {hc && (
+          <InsetGroup footer="Disconnecting removes your profile and everything Halo imported and scored on this phone. Health Connect keeps its own copy.">
+            <ButtonRow label="Use demo data" onPress={() => setConfirm("demo")} disabled={syncing} />
+            <ButtonRow label="Disconnect Health Connect" danger onPress={() => setConfirm("disconnect")} />
+          </InsetGroup>
+        )}
+      </RiseEach>
 
       <ConfirmDialog
         open={confirm === "disconnect"}
@@ -376,51 +355,12 @@ function HealthConnectSource() {
           void app.connectHealth();
         }}
       />
-    </Group>
+    </>
   );
 }
 
-// ── App ──────────────────────────────────────────────────────────────────────
-
-const THEMES = [
-  { value: "system", label: "System", icon: Monitor },
-  { value: "light", label: "Light", icon: Sun },
-  { value: "dark", label: "Dark", icon: Moon },
-] as const satisfies readonly { value: ThemeChoice; label: string; icon: unknown }[];
-
-/** Appearance: system, light or dark. Kept per device (ThemeProvider stores it). */
-export function AppSection() {
-  const { choice, setChoice } = useTheme();
-  return (
-    <Group title="Appearance" gap={12}>
-      <Segmented accessibilityLabel="Theme" value={choice} onChange={setChoice} items={THEMES} />
-      <Sentence>System follows this device’s light or dark setting.</Sentence>
-    </Group>
-  );
-}
-
-// ── Coach ────────────────────────────────────────────────────────────────────
-
-/** Settings › Coach: the coach keeps its own setup (provider, key, chats); this opens it. */
-export function CoachSection() {
-  const c = useCalm();
-  const router = useRouter();
-  return (
-    <Group title="Coach" gap={16}>
-      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 14 }}>
-        <Tile tint="lavender">
-          <BotMessageSquare size={22} color={c.tintInk.lavender} strokeWidth={1.75} />
-        </Tile>
-        <Body style={{ flex: 1, minWidth: 0 }}>Ask about your scores, your training and your sleep. The coach’s provider, key and chats are set up in the coach itself.</Body>
-      </View>
-      <CalmButton onPress={() => router.push("/coach" as Href)}>Open coach</CalmButton>
-    </Group>
-  );
-}
-
-/** Which Health Connect records Pulse uses: Fitbit only (default), Fitbit first, or every app. A change re-imports. */
+/** Which Health Connect records Halo uses: Fitbit only (default), Fitbit first, or every app, as iOS's checkmark list. A change re-imports. */
 function SourcePolicyPicker() {
-  const c = useCalm();
   const app = useApp();
   const [policy, setPolicy] = React.useState<SourcePolicy | null>(null);
   React.useEffect(() => {
@@ -439,37 +379,11 @@ function SourcePolicyPicker() {
   };
   const syncing = app.status === "syncing";
   return (
-    <View style={{ marginTop: 6, gap: 8 }}>
-      <Txt size={14} lineHeight={19} weight={600} style={{ color: c.ink, paddingHorizontal: 4 }}>
-        Use data from
-      </Txt>
-      <View accessibilityRole="radiogroup" accessibilityLabel="Use data from" style={{ borderRadius: 20, backgroundColor: c.ground, overflow: "hidden" }}>
-        {SOURCE_POLICIES.map((p, i) => {
-          const on = policy === p;
-          return (
-            <Pressable
-              key={p}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: on, disabled: syncing }}
-              accessibilityLabel={`${SOURCE_POLICY_LABELS[p].label}. ${SOURCE_POLICY_LABELS[p].detail}`}
-              disabled={syncing}
-              onPress={() => void choose(p)}
-              style={({ pressed }) => ({ flexDirection: "row", gap: 12, padding: 16, borderTopWidth: i ? 1 : 0, borderTopColor: c.line, opacity: syncing ? 0.5 : pressed ? 0.7 : 1 })}
-            >
-              <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: on ? c.teal : c.faint, alignItems: "center", justifyContent: "center", marginTop: 1 }}>
-                {on && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: c.teal }} />}
-              </View>
-              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                <Txt size={16} lineHeight={21} weight={600} style={{ color: c.ink }}>
-                  {SOURCE_POLICY_LABELS[p].label}
-                </Txt>
-                <Sentence>{SOURCE_POLICY_LABELS[p].detail}</Sentence>
-              </View>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
+    <InsetGroup title="Use data from" footer="Changing it re-imports your history from Health Connect.">
+      {SOURCE_POLICIES.map((p) => (
+        <CheckRow key={p} label={SOURCE_POLICY_LABELS[p].label} description={SOURCE_POLICY_LABELS[p].detail} selected={policy === p} disabled={syncing} onPress={() => void choose(p)} />
+      ))}
+    </InsetGroup>
   );
 }
 
@@ -477,22 +391,118 @@ function SourcePolicyPicker() {
 function NoFitbitRecords() {
   const app = useApp();
   return (
-    <Callout tint="sand" icon={TriangleAlert} title="Nothing from your Fitbit yet" role="alert">
-      <Body>
-        With “Fitbit only”, Halo found no records from the Google Health app that weren’t measured by the phone. Either Google Health isn’t sharing with Health Connect yet, or it labels its records as the phone’s. “Fitbit first” uses the phone’s data on days the Fitbit has none.
-      </Body>
-      <CalmButton
-        variant="secondary"
-        on="ground"
-        style={{ marginTop: 8 }}
+    <View>
+      <WarningRow
+        title="Nothing from your Fitbit yet"
+        body="With “Fitbit only”, Halo found no records from the Google Health app that weren’t measured by the phone. Either Google Health isn’t sharing with Health Connect yet, or it labels its records as the phone’s. “Fitbit first” uses the phone’s data on days the Fitbit has none."
+      />
+      <Hairline inset={ICON_INSET} />
+      <ButtonRow
+        label="Use Fitbit first"
         onPress={async () => {
           await setSourcePolicy("fitbit_first");
           toast("Fitbit first: re-importing your history");
           void app.reimport();
         }}
-      >
-        Use Fitbit first
-      </CalmButton>
-    </Callout>
+      />
+    </View>
+  );
+}
+
+// ── Appearance ───────────────────────────────────────────────────────────────
+
+const THEMES: { value: ThemeChoice; label: string }[] = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+];
+
+/** A phone in miniature in one scheme's colours: the ground, a title bar and three cards. */
+function Miniature({ ground, card, ink }: { ground: string; card: string; ink: string }) {
+  return (
+    <View style={{ flex: 1, backgroundColor: ground, padding: 7, gap: 5 }}>
+      <View style={{ width: "55%", height: 6, borderRadius: 3, backgroundColor: ink, opacity: 0.85, marginBottom: 2 }} />
+      <View style={{ height: 18, borderRadius: 5, backgroundColor: card }} />
+      <View style={{ height: 12, borderRadius: 4, backgroundColor: card }} />
+      <View style={{ height: 12, borderRadius: 4, backgroundColor: card }} />
+    </View>
+  );
+}
+
+/** One choice of the picker: the preview, its name, and the round check under it (filled blue when chosen). */
+function ThemeTile({ value, label, selected, onPress }: { value: ThemeChoice; label: string; selected: boolean; onPress: () => void }) {
+  const c = useCalm();
+  const press = usePress(0.95);
+  const pressed = usePressStyle(press, { dim: 0.85 });
+  const light = { ground: "#f2f2f7", card: "#ffffff", ink: "#000000" };
+  const dark = { ground: "#000000", card: "#2c2c2e", ink: "#ffffff" };
+  return (
+    <Pressable onPress={onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut} accessibilityRole="radio" accessibilityState={{ checked: selected }} accessibilityLabel={label} style={{ flex: 1 }}>
+      <Animated.View style={[{ alignItems: "center", gap: 8 }, pressed]}>
+        <View style={{ width: "100%", maxWidth: 96, aspectRatio: 0.62, borderRadius: 14, overflow: "hidden", flexDirection: "row", borderWidth: 2, borderColor: selected ? c.teal : c.line }}>
+          {value === "dark" ? <Miniature {...dark} /> : <Miniature {...light} />}
+          {/* System: the light screen's right half in the dark scheme. */}
+          {value === "system" ? (
+            <View style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "50%", overflow: "hidden" }}>
+              <View style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: "200%" }}>
+                <Miniature {...dark} />
+              </View>
+            </View>
+          ) : null}
+        </View>
+        <Txt size={15} lineHeight={20} weight={selected ? 600 : 400} style={{ color: c.ink }}>
+          {label}
+        </Txt>
+        <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: selected ? 0 : 1.5, borderColor: c.tertiary, backgroundColor: selected ? c.teal : "transparent", alignItems: "center", justifyContent: "center" }}>
+          {selected ? <Check size={14} color="#ffffff" strokeWidth={3} /> : null}
+        </View>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+/** Appearance: system, light or dark, as iOS's three previews. Kept per device (ThemeProvider stores it). */
+export function AppSection() {
+  const { choice, setChoice } = useTheme();
+  return (
+    <RiseEach>
+      <InsetGroup title="Appearance" footer="System follows this device’s light or dark setting.">
+        <View accessibilityRole="radiogroup" accessibilityLabel="Theme" style={{ flexDirection: "row", gap: 12, paddingHorizontal: 16, paddingTop: 18, paddingBottom: 16 }}>
+          {THEMES.map((t) => (
+            <ThemeTile
+              key={t.value}
+              value={t.value}
+              label={t.label}
+              selected={choice === t.value}
+              onPress={() => {
+                if (choice !== t.value) haptic.select();
+                setChoice(t.value);
+              }}
+            />
+          ))}
+        </View>
+      </InsetGroup>
+    </RiseEach>
+  );
+}
+
+// ── Coach ────────────────────────────────────────────────────────────────────
+
+/** Settings › Coach: the coach keeps its own setup (provider, key, chats); this shows the provider and opens it. */
+export function CoachSection() {
+  const router = useRouter();
+  const setup = useCoachSetup();
+  const chats = useChatCount();
+  const on = !!setup?.consent && !!setup.provider;
+  return (
+    <RiseEach>
+      <HeroCard icon={Sparkles} system="teal" title="Coach" body="Ask about your scores, your training and your sleep. The coach looks up your own Halo numbers before it answers." />
+      <InsetGroup footer="The coach’s provider, key and chats are set up in the coach itself.">
+        <InfoRow label="Provider" value={setup === undefined ? "…" : on ? providerLabel(setup.provider) : "Not set up"} />
+        <NavRow icon={MessageCircle} system="teal" label="Open coach" onPress={() => router.push("/coach" as Href)} />
+        <NavRow icon={History} system="indigo" label="Chats" value={chats === undefined ? undefined : String(chats)} onPress={() => router.push("/coach/chats" as Href)} />
+        <NavRow icon={Settings2} system="gray" label="Coach settings" onPress={() => router.push("/coach/settings" as Href)} />
+      </InsetGroup>
+    </RiseEach>
   );
 }

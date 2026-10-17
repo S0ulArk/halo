@@ -1,11 +1,14 @@
-// The settings rows (spec §7.14 v2), ported from the web's src/components/shells/LinkList.tsx and drawn in the Calm
-// style: a small spaced-capitals group label, then one white 28 px card per group with a row per link: a tinted icon
-// tile, the label with a short sentence under it, an aside, and a chevron. On the phone a row can also run an action
-// (Sync now) instead of opening a route.
+// More's rows (spec §7.14 v2, ported from the web's src/components/shells/LinkList.tsx) as iOS Settings lists them: a
+// small capital group header over one inset grouped card, a row per link with its coloured icon square, the label with a
+// short sentence under it, a grey value and the thin chevron. On the phone a row can also run an action (Sync now)
+// instead of opening a route.
 import * as React from "react";
-import { View, type StyleProp, type ViewStyle } from "react-native";
+import type { StyleProp, ViewStyle } from "react-native";
+import { useRouter, type Href } from "expo-router";
 import type { LucideIcon } from "lucide-react-native";
-import { CALM_COLUMN, CALM_RADIUS, GroupList, GroupRow, SectionLabel, useCalm, type CalmTint } from "../settings/calmKit";
+import type { SystemColor } from "@/ui/calm";
+import type { CalmTint } from "../settings/calmKit";
+import { InsetGroup, NavRow } from "../settings/list";
 
 export type LinkListRow = {
   label: string;
@@ -16,42 +19,57 @@ export type LinkListRow = {
   icon?: LucideIcon;
   /** In place of `icon` (a spinner while syncing). */
   iconNode?: React.ReactNode;
-  /** The icon tile's pastel (the metric family the row belongs to). */
+  /** The icon square's family colour (the metric family the row belongs to). */
   tint?: CalmTint;
-  /** Right-aligned, before the chevron: a short caption ("Sep 22 - Sep 28") or a node. */
-  aside?: React.ReactNode;
+  /** An iOS system colour for the icon square, in place of the family's (red notifications, purple, grey). */
+  system?: SystemColor;
+  /** Right-aligned, before the chevron, in grey: a short value ("Sep 22 - Sep 28"). */
+  aside?: string;
   /** A line under the label, sentence case. */
   description?: string;
-  /** The description's colour (a failed sync in rose). */
+  /** The description's colour (a failed sync in red). */
   descriptionColor?: string;
   /** Opens outside the app, with an arrow instead of the chevron. */
   external?: boolean;
   /** No chevron: the row is an action, not a way somewhere. */
   action?: boolean;
-  /** The label in rose (Remove all data). */
+  /** The label in red (Remove all data). */
   danger?: boolean;
   disabled?: boolean;
+  /** Words a search finds the row by, beside its label and sentence ("theme", "dark"). */
+  keywords?: string;
 };
 
-/** One centred column up to 640 px, 24 px between groups. */
-export const MORE_COLUMN = CALM_COLUMN;
-
-/** A group's label: small spaced capitals, a heading for screen readers. */
-export function GroupLabel({ children }: { children: string }) {
-  return <SectionLabel>{children}</SectionLabel>;
-}
-
-/** One row on its own white card (the rows of a group share one card in LinkList). */
+/** One row as NavRow draws it: its action, or a push to its route. */
 export function LinkRow({ row }: { row: LinkListRow }) {
-  const c = useCalm();
+  const router = useRouter();
+  const open = row.onPress ?? (row.href ? () => router.push(row.href as Href) : undefined);
   return (
-    <View style={{ borderRadius: CALM_RADIUS, overflow: "hidden", backgroundColor: c.card }}>
-      <GroupRow row={row} />
-    </View>
+    <NavRow
+      icon={row.icon}
+      iconNode={row.iconNode}
+      tint={row.tint}
+      system={row.system}
+      label={row.label}
+      description={row.description}
+      descriptionColor={row.descriptionColor}
+      value={row.aside}
+      onPress={open}
+      external={row.external}
+      action={row.action}
+      danger={row.danger}
+      disabled={row.disabled}
+    />
   );
 }
 
-/** A group label over one white card of rows, hairlines between them. */
-export function LinkList({ title, rows, style }: { title: string; rows: LinkListRow[]; style?: StyleProp<ViewStyle> }) {
-  return <GroupList title={title} rows={rows} style={style} />;
+/** A group header over one inset grouped card of rows, each hairline inset to the text above it; an optional footer. */
+export function LinkList({ title, rows, footer, style }: { title?: string; rows: LinkListRow[]; footer?: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+  return (
+    <InsetGroup title={title} footer={footer} style={style}>
+      {rows.map((r) => (
+        <LinkRow key={r.href ?? r.label} row={r} />
+      ))}
+    </InsetGroup>
+  );
 }

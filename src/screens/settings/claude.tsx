@@ -1,18 +1,20 @@
 // Settings › Connect to Claude (`/settings?s=claude`): Halo's data in Claude through the person's own MCP connector
-// (src/mcp). Before setup: what it does and what leaves the phone, then two steps — make a Cloudflare token from the
-// pre-filled link, paste it and Set up (each setup step named as it runs). After: the link to paste into Claude with
-// Copy, how to add it there, when Halo last sent data, Send now, and Remove (deletes the Worker from Cloudflare).
+// (src/mcp), as an iOS settings page. Before setup: the feature header with what it does, what leaves the phone, then
+// the two steps in one grouped list — make a Cloudflare token from the pre-filled link, paste it and Set up (each setup
+// step named as it runs). After: when Halo last sent data and to which account, Send now, the link to paste into
+// Claude with Copy and how to add it there, and Remove in red (deletes the Worker from Cloudflare).
 import * as React from "react";
 import { Linking, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { Copy, ExternalLink, KeyRound, Send, ShieldAlert, Trash2 } from "lucide-react-native";
+import { Cable, Copy, ExternalLink, KeyRound, Send, ShieldAlert } from "lucide-react-native";
 import { ago } from "@/lib/format";
 import { TOKEN_URL } from "@/mcp/cloudflare";
 import { connectorLink, connectorState, removeConnector, sendSnapshot, setUpConnector, subscribeConnector, type ConnectorState, type SetupStep } from "@/mcp/connector";
 import { useQueryCtx } from "@/state/app";
 import { Txt } from "@/ui";
-import { font } from "@/ui/fonts";
-import { CalmButton, CalmField, CalmInput, Group, InfoLine, Rows, Sentence, useCalm } from "./calmKit";
+import { RiseEach } from "@/ui/motion/Rise";
+import { CalmButton, CalmField, CalmInput, useCalm } from "./calmKit";
+import { ButtonRow, HeroCard, InfoRow, InsetGroup, RowBox, Step } from "./list";
 import { Callout, ConfirmDialog } from "./parts";
 import { toast } from "./toast";
 
@@ -46,27 +48,8 @@ function useConnector() {
   return { state, link };
 }
 
-/** A numbered step: the number in a teal circle, the title, then what to do. */
-function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
-  const c = useCalm();
-  return (
-    <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
-      <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: c.tint.mint, alignItems: "center", justifyContent: "center", marginTop: 1 }}>
-        <Txt size={14} lineHeight={18} style={[font.numeric(700), { color: c.tintInk.mint }]}>
-          {String(n)}
-        </Txt>
-      </View>
-      <View style={{ flex: 1, minWidth: 0, gap: 8 }}>
-        <Txt size={16} lineHeight={21} weight={600} style={{ color: c.ink }}>
-          {title}
-        </Txt>
-        {children}
-      </View>
-    </View>
-  );
-}
-
 function SetUp() {
+  const c = useCalm();
   const ctx = useQueryCtx();
   const [token, setToken] = React.useState("");
   const [step, setStepState] = React.useState<SetupStep | null>(null);
@@ -96,36 +79,42 @@ function SetUp() {
     }
   };
   return (
-    <>
-      <Group title="Connect to Claude" gap={12}>
-        <Sentence>
-          Let Claude read your Halo data: Recovery, sleep, Strain, workouts, Halo Age, your journal and more. Halo sets up a small connector on your own free Cloudflare account and keeps it up to date after each sync.
-          Then, in Claude, you can ask things like “Why was my recovery low this week?”
-        </Sentence>
-        <Callout tint="sand" icon={ShieldAlert} title="What leaves your phone">
-          <Sentence>
-            Your daily scores, sleep, workouts, journal and health readings go to your Cloudflare account, and to Claude (Anthropic) when you ask it about them. Anyone with your connector link can read them, so keep the
-            link to yourself.
-          </Sentence>
-        </Callout>
-      </Group>
-      <Group title="Set up" gap={20}>
-        <Step n={1} title="Make a Cloudflare token">
-          <Sentence>Sign up free if you don’t have an account. The form opens filled in: scroll down, tap Continue to summary, then Create Token, and copy the token.</Sentence>
-          <CalmButton variant="secondary" on="card" size="md" icon={ExternalLink} onPress={() => void Linking.openURL(TOKEN_URL)}>
-            Open Cloudflare
-          </CalmButton>
-        </Step>
-        <Step n={2} title="Paste it here">
-          <CalmField label="Cloudflare token" error={error} help="Kept encrypted on this phone, so Halo can update or remove the connector later.">
-            <CalmInput value={token} onChangeText={setToken} placeholder="Paste the token" secureTextEntry autoCapitalize="none" autoCorrect={false} autoComplete="off" importantForAutofill="no" editable={!busy} />
-          </CalmField>
-          <CalmButton variant="primary" on="card" icon={KeyRound} disabled={busy || !ctx} onPress={() => void run()}>
-            {step ? STEP_WORDS[step] : "Set up"}
-          </CalmButton>
-        </Step>
-      </Group>
-    </>
+    <RiseEach>
+      <HeroCard
+        icon={Cable}
+        system="purple"
+        title="Connect to Claude"
+        body="Let Claude read your Halo data: Recovery, sleep, Strain, workouts, Halo Age, your journal and more. Halo sets up a small connector on your own free Cloudflare account and keeps it up to date after each sync. Then, in Claude, you can ask things like “Why was my recovery low this week?”"
+      />
+      <Callout tint="sand" icon={ShieldAlert} title="What leaves your phone">
+        <Txt size={15} lineHeight={20} style={{ color: c.sub }}>
+          Your daily scores, sleep, workouts, journal and health readings go to your Cloudflare account, and to Claude (Anthropic) when you ask it about them. Anyone with your connector link can read them, so keep the link to
+          yourself.
+        </Txt>
+      </Callout>
+      <InsetGroup title="Set up">
+        <RowBox style={{ paddingVertical: 16 }}>
+          <Step n={1} title="Make a Cloudflare token" tint="lavender">
+            <Txt size={15} lineHeight={20} style={{ color: c.sub }}>
+              Sign up free if you don’t have an account. The form opens filled in: scroll down, tap Continue to summary, then Create Token, and copy the token.
+            </Txt>
+            <CalmButton variant="secondary" size="md" icon={ExternalLink} onPress={() => void Linking.openURL(TOKEN_URL)} style={{ alignSelf: "flex-start", marginTop: 4 }}>
+              Open Cloudflare
+            </CalmButton>
+          </Step>
+        </RowBox>
+        <RowBox style={{ paddingVertical: 16 }}>
+          <Step n={2} title="Paste it here" tint="lavender">
+            <CalmField label="Cloudflare token" error={error} help="Kept encrypted on this phone, so Halo can update or remove the connector later.">
+              <CalmInput value={token} onChangeText={setToken} placeholder="Paste the token" secureTextEntry autoCapitalize="none" autoCorrect={false} autoComplete="off" importantForAutofill="no" editable={!busy} />
+            </CalmField>
+            <CalmButton variant="primary" size="md" icon={KeyRound} disabled={busy || !ctx} onPress={() => void run()} style={{ marginTop: 4 }}>
+              {step ? STEP_WORDS[step] : "Set up"}
+            </CalmButton>
+          </Step>
+        </RowBox>
+      </InsetGroup>
+    </RiseEach>
   );
 }
 
@@ -133,7 +122,7 @@ function Ready({ state, link }: { state: ConnectorState; link: string | null }) 
   const c = useCalm();
   const ctx = useQueryCtx();
   const [sending, setSending] = React.useState(false);
-  const [confirm, setConfirm] = React.useState<null | "remove" | "forget">(null);
+  const [confirm, setConfirm] = React.useState(false);
   const [removeError, setRemoveError] = React.useState<string | null>(null);
   // "Last sent … ago" moves on while the screen stays open.
   const [now, setNow] = React.useState(() => Date.now());
@@ -158,41 +147,37 @@ function Ready({ state, link }: { state: ConnectorState; link: string | null }) 
   };
   return (
     <>
-      <Group title="Connect to Claude" gap={12}>
-        <Rows>
-          <InfoLine label="Last sent" value={state.lastSentAt ? ago(state.lastSentAt, now) : "Not yet"} valueColor={state.lastError ? c.tintInk.rose : undefined} />
-          <InfoLine label="Cloudflare account" value={state.accountName} />
-        </Rows>
-        {state.lastError ? <Sentence color={c.tintInk.rose}>{state.lastError}</Sentence> : null}
-        <CalmButton variant="secondary" on="card" size="md" icon={Send} disabled={sending || !ctx} onPress={() => void sendNow()}>
-          {sending ? "Sending…" : "Send now"}
-        </CalmButton>
-      </Group>
-      <Group title="Add it to Claude" gap={12}>
-        <Sentence>
-          On claude.ai (a browser on this phone works) or in the Claude desktop app: Customize › Connectors › Add custom connector. Paste this link; if it asks how people sign in, choose No sign-in. Then Add. It also
-          shows up in the Claude phone app. The free plan allows one custom connector.
-        </Sentence>
-        <View style={{ borderRadius: 16, backgroundColor: c.ground, padding: 14 }}>
-          <Txt size={13} lineHeight={18} selectable style={{ color: c.ink, fontFamily: "monospace" }}>
-            {link ?? "…"}
-          </Txt>
-        </View>
-        <CalmButton variant="primary" on="card" icon={Copy} disabled={!link} onPress={() => void copy()}>
-          Copy link
-        </CalmButton>
-        <Sentence>Then ask Claude, for example: “Use Halo. How did I sleep this week, and what should I change?”</Sentence>
-      </Group>
-      <Group gap={8}>
-        <CalmButton variant="danger" on="card" size="md" icon={Trash2} onPress={() => setConfirm("remove")}>
-          Remove connector
-        </CalmButton>
-        <Sentence size={13}>Deletes the connector and the data it holds from your Cloudflare account. The link stops working.</Sentence>
-      </Group>
+      <RiseEach>
+        <HeroCard icon={Cable} system="purple" title="Connect to Claude" status={state.lastError ? "Last send failed" : "Connected"} statusColor={state.lastError ? c.system.red : c.system.green} body="Halo keeps your connector up to date after each sync." />
+        <InsetGroup title="Connector" footer={state.lastError ?? undefined}>
+          <InfoRow label="Last sent" value={state.lastSentAt ? ago(state.lastSentAt, now) : "Not yet"} valueColor={state.lastError ? c.system.red : undefined} />
+          <InfoRow label="Cloudflare account" value={state.accountName} />
+          <ButtonRow label={sending ? "Sending…" : "Send now"} leading={<Send size={19} strokeWidth={2.2} />} busy={sending} disabled={sending || !ctx} onPress={() => void sendNow()} />
+        </InsetGroup>
+        <InsetGroup title="Add it to Claude" footer="Then ask Claude, for example: “Use Halo. How did I sleep this week, and what should I change?”">
+          <RowBox gap={12} style={{ paddingVertical: 14 }}>
+            <Txt size={15} lineHeight={20} style={{ color: c.sub }}>
+              On claude.ai (a browser on this phone works) or in the Claude desktop app: Customize › Connectors › Add custom connector. Paste this link; if it asks how people sign in, choose No sign-in. Then Add. It also
+              shows up in the Claude phone app. The free plan allows one custom connector.
+            </Txt>
+            <View style={{ borderRadius: 12, backgroundColor: c.fill, padding: 12 }}>
+              <Txt size={13} lineHeight={18} selectable style={{ color: c.ink, fontFamily: "monospace" }}>
+                {link ?? "…"}
+              </Txt>
+            </View>
+            <CalmButton variant="primary" size="md" icon={Copy} disabled={!link} onPress={() => void copy()}>
+              Copy link
+            </CalmButton>
+          </RowBox>
+        </InsetGroup>
+        <InsetGroup footer="Deletes the connector and the data it holds from your Cloudflare account. The link stops working.">
+          <ButtonRow label="Remove connector" danger center onPress={() => setConfirm(true)} />
+        </InsetGroup>
+      </RiseEach>
       <ConfirmDialog
-        open={confirm === "remove"}
+        open={confirm}
         onClose={() => {
-          setConfirm(null);
+          setConfirm(false);
           setRemoveError(null);
         }}
         title="Remove the connector?"
@@ -204,7 +189,7 @@ function Ready({ state, link }: { state: ConnectorState; link: string | null }) 
         onConfirm={async () => {
           try {
             await removeConnector({ localOnly: !!removeError });
-            setConfirm(null);
+            setConfirm(false);
             setRemoveError(null);
             toast("Connector removed");
           } catch (e) {

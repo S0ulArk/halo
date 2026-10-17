@@ -1,7 +1,9 @@
 // Data check `/more/datacheck`: for each of the last 10 days, what the source holds per metric — Health Connect split by
-// the app and device that wrote it, or the Google Health API by device with its daily roll-ups — next to what Pulse
-// stored, so a number that differs from the Fitbit app can be traced. Read-only: it never changes data. The report can
-// be shared as text, and it is also logged (one entry per day) so it can be read over adb while diagnosing.
+// the app and device that wrote it, or the Google Health API by device with its daily roll-ups — next to what Halo
+// stored, so a number that differs from the Fitbit app can be traced. Read-only: it never changes data. Laid out as an
+// iOS settings page: the feature header with Run check and Share, then one inset grouped list per day (each metric a row
+// with Halo's value on the right and every source under it, ★ in orange on what Halo keeps). The report can be shared
+// as text, and it is also logged (one entry per day) so it can be read over adb while diagnosing.
 import * as React from "react";
 import { ActivityIndicator, Share, View } from "react-native";
 import { ClipboardCheck, ClipboardList, Share2 } from "lucide-react-native";
@@ -15,14 +17,15 @@ import { useApp } from "@/state/app";
 import { useUnits } from "@/state/units";
 import { DetailShell, Txt } from "@/ui";
 import { useBack } from "../detail/nav";
-import { Caption, CalmButton, CalmCard, Hairline, Num, Sentence, Surface, Title, useCalm } from "../settings/calmKit";
+import { Caption, CalmButton, Num, useCalm } from "../settings/calmKit";
+import { HeroCard, InsetGroup, RowBox } from "../settings/list";
 
-/** One metric's head: its name, and what Pulse stored as a number with its unit. */
+/** One metric's head: its name, and what Halo stored as a number with its unit. */
 function MetricHead({ label, pulse, unit }: { label: string; pulse: string; unit?: string }) {
   const c = useCalm();
   return (
     <View accessible accessibilityLabel={`${label}: Halo ${pulse}${unit ? ` ${unit}` : ""}`} style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-      <Txt size={15} lineHeight={20} weight={600} style={{ color: c.ink, flexShrink: 1 }}>
+      <Txt size={16} lineHeight={21} weight={600} style={{ color: c.ink, flexShrink: 1 }}>
         {label}
       </Txt>
       <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, flexShrink: 1 }}>
@@ -40,12 +43,12 @@ function SourceRow({ s, unit, records = true }: { s: SourceLine; unit?: string; 
   const detail = records ? `${s.records} rec · ${s.detail}` : s.detail;
   return (
     <View accessible accessibilityLabel={`${s.fitbit ? "Kept: " : ""}${s.source}: ${value}${unit ? ` ${unit}` : ""}, ${detail}`} style={{ flexDirection: "row", gap: 6 }}>
-      <Txt size={14} lineHeight={20} weight={700} style={{ color: c.orange, width: 14 }}>
+      <Txt size={14} lineHeight={20} weight={700} style={{ color: c.system.orange, width: 14 }}>
         {s.fitbit ? "★" : ""}
       </Txt>
       <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
         <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
-          <Txt size={14} lineHeight={19} weight={s.fitbit ? 600 : 400} style={{ color: s.fitbit ? c.ink : c.sub, flexShrink: 1 }}>
+          <Txt size={15} lineHeight={20} weight={s.fitbit ? 600 : 400} style={{ color: s.fitbit ? c.ink : c.sub, flexShrink: 1 }}>
             {s.source}
           </Txt>
           <Num value={value} unit={unit} size={15} weight={600} color={s.fitbit ? c.ink : c.sub} />
@@ -102,35 +105,38 @@ export default function DataCheckScreen() {
       title="Data check"
       onBack={onBack}
       primary={
-        <View style={{ alignSelf: "center", width: "100%", maxWidth: 640, gap: 12 }}>
-          <CalmCard icon={ClipboardCheck} iconTint="mint" title={`${google ? "Google Health API" : "Health Connect"} vs Halo`} gap={16}>
-            <Sentence>
-              {google
+        <View style={{ alignSelf: "center", width: "100%", maxWidth: 640, gap: 24 }}>
+          <HeroCard
+            icon={ClipboardCheck}
+            system="green"
+            title={`${google ? "Google Health API" : "Health Connect"} vs Halo`}
+            body={
+              google
                 ? "Compares the last 10 days: what the Google Health API returns for each metric (each device’s daily value, Google’s merged roll-up for totals) and each night, and what Halo stored. ★ marks what Halo uses. Nothing is changed."
                 : hc
                   ? "Compares the last 10 days: every app and device that wrote each metric to Health Connect, and what Halo stored. ★ marks what your data-source setting keeps. Nothing is changed."
-                  : "Connect Health Connect or a Google account to compare its data with Halo. Demo data has nothing to check."}
-            </Sentence>
-            <View style={{ flexDirection: "row", gap: 8 }}>
+                  : "Connect Health Connect or a Google account to compare its data with Halo. Demo data has nothing to check."
+            }
+          >
+            <View style={{ flexDirection: "row", gap: 10 }}>
               <CalmButton size="md" grow onPress={() => void run()} disabled={!(hc || google) || state.busy || !app.store}>
-                {state.busy ? <ActivityIndicator size="small" color={c.card} /> : <ClipboardList size={20} color={c.card} strokeWidth={2} />}
-                <Txt size={15} lineHeight={20} weight={600} style={{ color: c.card }}>
+                {state.busy ? <ActivityIndicator size="small" color="#ffffff" /> : <ClipboardList size={19} color="#ffffff" strokeWidth={2} />}
+                <Txt size={16} lineHeight={21} weight={600} style={{ color: "#ffffff" }}>
                   {state.busy ? "Checking…" : "Run check"}
                 </Txt>
               </CalmButton>
-              <CalmButton variant="secondary" on="card" size="md" grow icon={Share2} disabled={!state.text} onPress={() => void Share.share({ message: state.text, title: "Halo data check" })}>
+              <CalmButton variant="secondary" size="md" grow icon={Share2} disabled={!state.text} onPress={() => void Share.share({ message: state.text, title: "Halo data check" })}>
                 Share
               </CalmButton>
             </View>
             {!!state.error && (
-              <Sentence color={c.tintInk.rose} accessibilityRole="alert">
+              <Txt size={15} lineHeight={20} align="center" accessibilityRole="alert" style={{ color: c.system.red }}>
                 {state.error}
-              </Sentence>
+              </Txt>
             )}
-          </CalmCard>
+          </HeroCard>
           {state.days?.map((d) => (
-            <Surface key={d.day} gap={14}>
-              <Title header>{formatDay(d.day, DAY.full)}</Title>
+            <InsetGroup key={d.day} title={formatDay(d.day, DAY.full)}>
               {d.metrics
                 .filter((m) => m.sources.length || m.pulse != null)
                 .map((m) => {
@@ -139,29 +145,28 @@ export default function DataCheckScreen() {
                   const to = (v: number | null) => (v === null || !conv ? v : roundTo(shown(v, conv), 2));
                   const unit = conv?.unit ?? (m.unit || undefined);
                   return (
-                    <View key={m.key} style={{ gap: 8 }}>
+                    <RowBox key={m.key} gap={8}>
                       <MetricHead label={m.label} pulse={m.pulse == null ? "—" : String(to(m.pulse))} unit={unit} />
                       {m.sources.length ? m.sources.map((s) => <SourceRow key={s.source} s={{ ...s, value: to(s.value) }} unit={unit} />) : <Nothing>{`Nothing from ${where}`}</Nothing>}
-                      <Hairline />
-                    </View>
+                    </RowBox>
                   );
                 })}
-              <View style={{ gap: 8 }}>
-                {/* What Pulse stored is a sentence per session ("main 23:10–07:05 asleep 452 min"): it wraps under the name. */}
+              <RowBox key="sleep" gap={8}>
+                {/* What Halo stored is a sentence per session ("main 23:10–07:05 asleep 452 min"): it wraps under the name. */}
                 <View accessible accessibilityLabel={`Sleep: Halo ${d.sleep.pulse.join(" | ") || "—"}`} style={{ gap: 2 }}>
                   <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-                    <Txt size={15} lineHeight={20} weight={600} style={{ color: c.ink }}>
+                    <Txt size={16} lineHeight={21} weight={600} style={{ color: c.ink }}>
                       Sleep
                     </Txt>
                     <Caption>Halo</Caption>
                   </View>
-                  <Txt size={14} lineHeight={19} weight={500} style={{ color: c.ink }}>
+                  <Txt size={15} lineHeight={20} weight={500} style={{ color: c.ink }}>
                     {d.sleep.pulse.join(" | ") || "—"}
                   </Txt>
                 </View>
                 {d.sleep.sources.length ? d.sleep.sources.map((s, i) => <SourceRow key={`${s.source}-${i}`} s={s} unit="h" records={false} />) : <Nothing>{`No sleep from ${where}`}</Nothing>}
-              </View>
-            </Surface>
+              </RowBox>
+            </InsetGroup>
           ))}
         </View>
       }

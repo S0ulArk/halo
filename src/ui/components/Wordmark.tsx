@@ -1,3 +1,4 @@
+// The Halo wordmark, drawn as vector strokes (no font), for the onboarding heads, the About card and the kit preview.
 import * as React from "react";
 import Svg, { Path } from "react-native-svg";
 import { useTheme } from "@/ui/ThemeProvider";

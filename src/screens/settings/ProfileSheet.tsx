@@ -1,17 +1,20 @@
-// Settings › Profile's "Edit" (U19), ported from the web's EditProfileButton + ProfileForm: the profile fields in a sheet.
-// Saving goes through useApp().saveProfile, which rescoring every day picks up. The time zone is the phone's own (the
-// import and every screen read the device zone), so the sheet shows it rather than offering a picker.
+// Settings › Profile's "Edit" (U19), ported from the web's EditProfileButton + ProfileForm: the bar's glass Edit capsule
+// and the profile fields in a sheet, set as Apple Health sets "Health Details": inset grouped form rows (the label on
+// the left, the value or field on the right, a red error under a row), what each is for in the groups' footers, and a
+// filled Save at the foot. Saving goes through useApp().saveProfile, which rescoring every day picks up. The time zone
+// is the phone's own (the import and every screen read the device zone), so the sheet shows it rather than offering a
+// picker.
 import * as React from "react";
 import { View } from "react-native";
-import { Pencil } from "lucide-react-native";
 import type { Profile, Sex } from "@/data/types";
 import { wholeYears } from "@/lib/time";
 import { amount, cmToIn, conversionFor, heightDraftOf, heightFromDraft, heightText, IMPERIAL, inputText, inToCm, lengthFromInput, METRIC, type HeightDraft, type Units } from "@/lib/units";
 import { deviceTimeZone, useApp } from "@/state/app";
 import { useUnits } from "@/state/units";
-import { BottomSheet, Txt } from "@/ui";
+import { BottomSheet, GlassButton, Txt } from "@/ui";
 import { BirthDatePicker } from "./BirthDatePicker";
-import { CalmButton, CalmField, CalmInput, useCalm } from "./calmKit";
+import { CalmButton, CalmInput, useCalm } from "./calmKit";
+import { FormRow, InfoRow, InsetGroup } from "./list";
 import { Segmented } from "./parts";
 import { toast } from "./toast";
 import { HeightInput, useHeightDraft } from "./units";
@@ -51,20 +54,20 @@ export function validateProfile(
   return { errors, maxHr, heightCm, waistCm };
 }
 
-/** A labelled field: the label above (with "Optional" in grey), the control, then its hint or a rose error. */
-function Field({ label, hint, error, optional, children }: { label: string; hint: string; error?: string; optional?: boolean; children: React.ReactNode }) {
+/** A number typed into a row: a compact field with tabular figures and its unit after it. */
+function NumberField({ value, onChange, placeholder, invalid, label, unit, decimal = false }: { value: string; onChange: (v: string) => void; placeholder: string; invalid: boolean; label: string; unit: string; decimal?: boolean }) {
+  const c = useCalm();
   return (
-    <CalmField label={label} hint={optional ? "Optional" : undefined} help={hint} error={error}>
-      {children}
-    </CalmField>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+      <CalmInput value={value} onChangeText={onChange} placeholder={placeholder} keyboardType={decimal ? "decimal-pad" : "number-pad"} accessibilityLabel={label} invalid={invalid} on="card" numeric style={{ width: 96, minHeight: 40, borderRadius: 10, textAlign: "right" }} />
+      <Txt size={16} lineHeight={21} style={{ color: c.sub, minWidth: 30 }}>
+        {unit}
+      </Txt>
+    </View>
   );
 }
 
-function NumberField({ value, onChange, placeholder, invalid, label, decimal = false }: { value: string; onChange: (v: string) => void; placeholder: string; invalid: boolean; label: string; decimal?: boolean }) {
-  return <CalmInput value={value} onChangeText={onChange} placeholder={placeholder} keyboardType={decimal ? "decimal-pad" : "number-pad"} accessibilityLabel={label} invalid={invalid} on="card" numeric />;
-}
-
-/** The teal "✎ Edit" link beside the Profile header, and its sheet. */
+/** The bar's "Edit" (a glass capsule, iOS's), and its sheet. */
 export function EditProfileButton({ profile }: { profile: Profile }) {
   const c = useCalm();
   const app = useApp();
@@ -113,9 +116,11 @@ export function EditProfileButton({ profile }: { profile: Profile }) {
 
   return (
     <>
-      <CalmButton variant="quiet" size="sm" icon={Pencil} onPress={start} accessibilityLabel="Edit profile" style={{ marginVertical: -8 }}>
-        Edit
-      </CalmButton>
+      <GlassButton wide onPress={start} accessibilityLabel="Edit profile">
+        <Txt size={16} lineHeight={21} weight={600} style={{ color: c.teal }}>
+          Edit
+        </Txt>
+      </GlassButton>
       <BottomSheet
         open={open}
         onClose={() => !pending && setOpen(false)}
@@ -128,37 +133,52 @@ export function EditProfileButton({ profile }: { profile: Profile }) {
           </CalmButton>
         }
       >
-        <View style={{ gap: 22, paddingTop: 4 }}>
-          <Field label="Birth date" hint="For heart rate zones, sleep need and Halo Age." error={errors.birthDate}>
-            <BirthDatePicker value={birthDate} onChange={setBirthDate} invalid={!!errors.birthDate} />
-          </Field>
-          <Field label="Sex" hint="Sex at birth. Reference ranges differ by sex." error={errors.sex}>
-            <Segmented
-              accessibilityLabel="Sex"
-              value={sex}
-              onChange={setSex}
-              items={[
-                { value: "male", label: "Male" },
-                { value: "female", label: "Female" },
-              ]}
-            />
-          </Field>
-          <Field label="Time zone" hint="This phone’s time zone. Your days start at midnight here.">
-            <View style={{ minHeight: 52, borderRadius: 16, backgroundColor: c.ground, paddingHorizontal: 16, paddingVertical: 12, justifyContent: "center" }}>
-              <Txt size={16} lineHeight={21} style={{ color: c.ink }}>
-                {describeZone(zone)}
-              </Txt>
+        <View style={{ gap: 24, paddingTop: 4 }}>
+          <InsetGroup footer="For heart rate zones, sleep need and Halo Age. Sex at birth: reference ranges differ by sex.">
+            <View>
+              <BirthDatePicker label="Birth date" value={birthDate} onChange={setBirthDate} invalid={!!errors.birthDate} />
+              {errors.birthDate ? (
+                <Txt size={13} lineHeight={18} accessibilityRole="alert" style={{ color: c.system.red, paddingHorizontal: 16, paddingBottom: 10 }}>
+                  {errors.birthDate}
+                </Txt>
+              ) : null}
             </View>
-          </Field>
-          <Field label="Height" hint={`${ftin ? "In feet and inches" : "In cm"}. Lean body mass for your height, and body fat from weight when no scale reports it.`} error={errors.heightCm} optional>
-            <HeightInput value={height} onChange={setHeight} units={units} invalid={!!errors.heightCm} placeholder="cm" />
-          </Field>
-          <Field label="Waist" hint={`${ftin ? "In inches" : "In cm"}, at the navel. Sharpens the VO2 max Halo estimates from resting heart rate and activity.`} error={errors.waistCm} optional>
-            <NumberField label={ftin ? "Waist in inches" : "Waist in centimetres"} value={waist} onChange={setWaist} placeholder={ftin ? "in" : "cm"} invalid={!!errors.waistCm} decimal={ftin} />
-          </Field>
-          <Field label="Max heart rate" hint="Leave blank to estimate it from your age." error={errors.maxHr} optional>
-            <NumberField label="Max heart rate in beats per minute" value={maxHr} onChange={setMaxHr} placeholder="bpm" invalid={!!errors.maxHr} />
-          </Field>
+            <FormRow label="Sex" error={errors.sex}>
+              <View style={{ width: 190 }}>
+                <Segmented
+                  accessibilityLabel="Sex"
+                  value={sex}
+                  onChange={setSex}
+                  items={[
+                    { value: "male", label: "Male" },
+                    { value: "female", label: "Female" },
+                  ]}
+                />
+              </View>
+            </FormRow>
+          </InsetGroup>
+          <InsetGroup title="Body" footer={`${ftin ? "Height in feet and inches, waist in inches" : "In cm"}. Height gives lean body mass, and body fat from weight when no scale reports it; the waist, measured at the navel, sharpens the VO2 max Halo estimates from resting heart rate and activity.`}>
+            <FormRow label="Height" optional error={errors.heightCm} wide={ftin}>
+              {ftin ? (
+                <HeightInput value={height} onChange={setHeight} units={units} invalid={!!errors.heightCm} placeholder="cm" />
+              ) : (
+                <View style={{ width: 134 }}>
+                  <HeightInput value={height} onChange={setHeight} units={units} invalid={!!errors.heightCm} placeholder="cm" />
+                </View>
+              )}
+            </FormRow>
+            <FormRow label="Waist" optional error={errors.waistCm}>
+              <NumberField label={ftin ? "Waist in inches" : "Waist in centimetres"} value={waist} onChange={setWaist} placeholder={ftin ? "in" : "cm"} unit={ftin ? "in" : "cm"} invalid={!!errors.waistCm} decimal={ftin} />
+            </FormRow>
+          </InsetGroup>
+          <InsetGroup title="Heart" footer="Leave max heart rate blank to estimate it from your age.">
+            <FormRow label="Max heart rate" optional error={errors.maxHr}>
+              <NumberField label="Max heart rate in beats per minute" value={maxHr} onChange={setMaxHr} placeholder="bpm" unit="bpm" invalid={!!errors.maxHr} />
+            </FormRow>
+          </InsetGroup>
+          <InsetGroup footer="This phone’s time zone. Your days start at midnight here.">
+            <InfoRow label="Time zone" value={describeZone(zone)} />
+          </InsetGroup>
         </View>
       </BottomSheet>
     </>

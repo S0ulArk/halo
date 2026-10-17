@@ -1,35 +1,45 @@
-// The web's SyncNowButton, shared by Settings › Data source's sources (sections.tsx, google.tsx): re-imports and
-// rescores; the icon spins while it runs.
+// The web's SyncNowButton as an iOS action row, shared by Settings › Data source's sources (sections.tsx, google.tsx):
+// "Sync now" in blue re-imports and rescores; while it runs the row reads "Syncing…" and its arrows turn, one
+// revolution a second, on the UI thread (a Reanimated repeat; still under Reduce motion).
 import * as React from "react";
-import { Animated, Easing } from "react-native";
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import { RefreshCw } from "lucide-react-native";
 import { useApp } from "@/state/app";
-import { Txt } from "@/ui";
-import { CalmButton, useCalm } from "./calmKit";
+import { reduceMotionNow } from "@/ui/motion/system";
+import { useCalm } from "./calmKit";
+import { ButtonRow } from "./list";
 
-export function SyncNowButton() {
+/** The two arrows, turning while `spinning`. */
+function Arrows({ spinning, color }: { spinning: boolean; color?: string }) {
+  const turn = useSharedValue(0);
+  React.useEffect(() => {
+    if (!spinning || reduceMotionNow()) return;
+    turn.set(0);
+    turn.set(withRepeat(withTiming(1, { duration: 1000, easing: Easing.linear }), -1));
+    return () => {
+      cancelAnimation(turn);
+      turn.set(0);
+    };
+  }, [spinning, turn]);
+  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.value * 360}deg` }] }));
+  return (
+    <Animated.View style={style}>
+      <RefreshCw size={19} color={color} strokeWidth={2.2} />
+    </Animated.View>
+  );
+}
+
+export function SyncNowRow({ description }: { description?: string }) {
   const c = useCalm();
   const app = useApp();
   const running = app.status === "syncing";
-  const [spin] = React.useState(() => new Animated.Value(0));
-  React.useEffect(() => {
-    if (!running) return;
-    spin.setValue(0);
-    const loop = Animated.loop(Animated.timing(spin, { toValue: 1, duration: 1000, easing: Easing.linear, useNativeDriver: true }));
-    loop.start();
-    return () => loop.stop();
-  }, [running, spin]);
-  const run = async () => {
-    await app.refresh();
-  };
   return (
-    <CalmButton variant="secondary" on="card" onPress={() => void run()} disabled={running} accessibilityLabel={running ? "Syncing…" : "Sync now"}>
-      <Animated.View style={{ transform: [{ rotate: spin.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] }) }] }}>
-        <RefreshCw size={18} color={c.teal} strokeWidth={2} />
-      </Animated.View>
-      <Txt size={15} lineHeight={20} weight={600} style={{ color: c.teal }}>
-        {running ? "Syncing…" : "Sync now"}
-      </Txt>
-    </CalmButton>
+    <ButtonRow
+      label={running ? "Syncing…" : "Sync now"}
+      description={description}
+      leading={<Arrows spinning={running} color={c.teal} />}
+      disabled={running}
+      onPress={() => void app.refresh()}
+    />
   );
 }
