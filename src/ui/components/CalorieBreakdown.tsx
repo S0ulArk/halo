@@ -10,7 +10,7 @@ import { formatValue } from "@/lib/format";
 import { useCalm } from "@/ui/calm";
 import { font } from "@/ui/fonts";
 import { iosSpring } from "@/ui/motion/springs";
-import { reduceMotionNow } from "@/ui/motion/system";
+import { entranceStill } from "@/ui/motion/system";
 import { Num } from "./calmKit";
 import { Txt } from "./Text";
 
@@ -30,7 +30,7 @@ const WIPE = iosSpring(0.7, 0.92);
 
 /** The meter, its capsules laid out once at their shares and revealed left to right. */
 function Meter({ shares }: { shares: { key: string; share: number; color: string }[] }) {
-  const [still] = React.useState(() => reduceMotionNow());
+  const [still] = React.useState(() => entranceStill());
   const p = useSharedValue(still ? 1 : 0);
   const w = useSharedValue(0);
   const onLayout = (e: LayoutChangeEvent) => {

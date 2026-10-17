@@ -20,7 +20,7 @@ import { MetricState } from "./MetricState";
 import { MetricTags } from "./primitives";
 import { SkeletonText } from "./Skeleton";
 import { Txt } from "./Text";
-import { reduceMotionNow } from "@/ui/motion/system";
+import { entranceStill } from "@/ui/motion/system";
 
 export type DriverItem = {
   key: string;
@@ -101,7 +101,7 @@ function Track({ i, max, fill, index = 0, style }: { i: DriverItem | null; max: 
   const c = useCalm();
   const share = i && i.delta !== 0 ? Math.min(50, (Math.abs(i.delta) / (max || 1)) * 50) : 0;
   const opened = useAfterTransition();
-  const [still] = React.useState(() => reduceMotionNow());
+  const [still] = React.useState(() => entranceStill());
   const grow = useSharedValue(still ? 1 : 0);
   React.useEffect(() => {
     if (!opened || still) return;

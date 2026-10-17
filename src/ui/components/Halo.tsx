@@ -37,7 +37,7 @@ import { formatValue } from "@/lib/format";
 import { alpha } from "@/lib/utils";
 import { HALO, HALO_DEEP } from "@/ui/calm";
 import { REASE } from "@/ui/motion/easing";
-import { reduceMotionNow, useAppActive, useReduceMotion } from "@/ui/motion/system";
+import { reduceMotionNow, useAppActive, useReduceMotion, entranceStill } from "@/ui/motion/system";
 import { useTheme } from "@/ui/ThemeProvider";
 import { BandInView } from "./BandHero";
 
@@ -464,10 +464,10 @@ const DIGITS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 /** One digit's column: the digits 0-9 stacked, slid by a transform so `digit` shows; it rolls up from 0 on mount. */
 function DigitColumn({ digit, line, textStyle, delay, duration }: { digit: number; line: number; textStyle: StyleProp<TextStyle>; delay: number; duration: number }) {
-  const [still] = React.useState(() => reduceMotionNow());
+  const [still] = React.useState(() => entranceStill());
   const y = useSharedValue(still ? digit : 0);
   React.useEffect(() => {
-    y.set(reduceMotionNow() ? digit : withDelay(delay, withTiming(digit, { duration, easing: DRAW_EASE })));
+    y.set(entranceStill() ? digit : withDelay(delay, withTiming(digit, { duration, easing: DRAW_EASE })));
     return () => cancelAnimation(y);
   }, [digit, delay, duration, y]);
   const roll = useAnimatedStyle(() => ({ transform: [{ translateY: -y.value * line }] }));

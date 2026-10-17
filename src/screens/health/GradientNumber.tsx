@@ -13,7 +13,7 @@ import { Txt } from "@/ui";
 import { DRAW_MS } from "@/ui/components/Halo";
 import { font as type, iosTracking } from "@/ui/fonts";
 import { REASE } from "@/ui/motion/easing";
-import { reduceMotionNow } from "@/ui/motion/system";
+import { entranceStill } from "@/ui/motion/system";
 
 const DIGITS = "0123456789".split("");
 /** A rolling column's clip reaches this far past its digit either side, so a wider passing digit is never cut. */
@@ -21,10 +21,10 @@ const BLEED = 8;
 
 /** One digit's column: 0-9 stacked a line apart, slid up so `digit` shows; it rolls from 0 on mount and to each new digit. */
 function DigitColumn({ digit, x, w, line, base, font, delay }: { digit: number; x: number; w: number; line: number; base: number; font: SkFont; delay: number }) {
-  const [still] = React.useState(() => reduceMotionNow());
+  const [still] = React.useState(() => entranceStill());
   const y = useSharedValue(still ? digit : 0);
   React.useEffect(() => {
-    y.set(reduceMotionNow() ? digit : withDelay(delay, withTiming(digit, { duration: DRAW_MS, easing: REASE.outExpo })));
+    y.set(entranceStill() ? digit : withDelay(delay, withTiming(digit, { duration: DRAW_MS, easing: REASE.outExpo })));
     return () => cancelAnimation(y);
   }, [digit, delay, y]);
   const transform = useDerivedValue(() => [{ translateY: -y.value * line }]);

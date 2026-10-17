@@ -11,7 +11,7 @@ import { useWindowDimensions, View, type StyleProp, type ViewStyle } from "react
 import Animated, { measure, runOnJS, useAnimatedReaction, useAnimatedRef, useAnimatedStyle, useScrollOffset, useSharedValue, withDelay, withTiming, type SharedValue } from "react-native-reanimated";
 import { useAfterTransition } from "@/ui/components/AfterTransition";
 import { REASE } from "./easing";
-import { reduceMotionNow } from "./system";
+import { entranceStill } from "./system";
 
 /** How long a block takes to rise, and how far it travels. */
 export const RISE_MS = 340;
@@ -26,7 +26,7 @@ export const RevealScroll = React.createContext<SharedValue<number> | null>(null
 export function Rise({ index = 0, style, children }: { index?: number; style?: StyleProp<ViewStyle>; children: React.ReactNode }) {
   const opened = useAfterTransition();
   // Decided once at mount: a block that mounted still never starts moving later.
-  const [still] = React.useState(() => reduceMotionNow() || !opened);
+  const [still] = React.useState(() => entranceStill() || !opened);
   const scroll = React.useContext(RevealScroll);
   const { height } = useWindowDimensions();
   const ref = useAnimatedRef<Animated.View>();
@@ -103,7 +103,7 @@ export function useRevealScroll<T>(ref?: React.RefObject<T | null>, enabled = tr
  */
 export function GrowIn({ mode = "rise", delay = 120, style, children }: { mode?: "rise" | "wipe"; delay?: number; style?: StyleProp<ViewStyle>; children: React.ReactNode }) {
   const opened = useAfterTransition();
-  const [still] = React.useState(() => reduceMotionNow() || !opened);
+  const [still] = React.useState(() => entranceStill() || !opened);
   const p = useSharedValue(still ? 1 : 0);
   const size = useSharedValue(0);
   const onLayout = (e: { nativeEvent: { layout: { width: number; height: number } } }) => {

@@ -17,7 +17,7 @@ import { useCalm } from "@/ui/calm";
 import { useAfterTransition } from "@/ui/components/AfterTransition";
 import { useTheme } from "@/ui/ThemeProvider";
 import { iosSpring } from "@/ui/motion/springs";
-import { reduceMotionNow } from "@/ui/motion/system";
+import { entranceStill } from "@/ui/motion/system";
 
 /** A Health card's chart box. */
 export const MINI_W = 112;
@@ -41,7 +41,7 @@ export function useSoft(color: string): string {
  */
 export function Grow({ mode, width, height, delay = GROW_DELAY, style, children }: { mode: "rise" | "wipe"; width?: number; height?: number; delay?: number; style?: StyleProp<ViewStyle>; children: React.ReactNode }) {
   const opened = useAfterTransition();
-  const [still] = React.useState(() => reduceMotionNow() || !opened);
+  const [still] = React.useState(() => entranceStill() || !opened);
   const fixed = mode === "rise" ? height : width;
   const p = useSharedValue(still ? 1 : 0);
   const size = useSharedValue(fixed ?? 0);

@@ -15,7 +15,7 @@ import { alpha } from "@/lib/utils";
 import { useCalm } from "@/ui/calm";
 import { font } from "@/ui/fonts";
 import { iosSpring } from "@/ui/motion/springs";
-import { reduceMotionNow } from "@/ui/motion/system";
+import { entranceStill } from "@/ui/motion/system";
 import { useTheme } from "@/ui/ThemeProvider";
 import { CapsuleMeter } from "./CapsuleMeter";
 import { MetricState } from "./MetricState";
@@ -65,10 +65,10 @@ export function TickScale(p: TickScaleProps) {
 function Track({ frac, color, colors, segments }: { frac: number | null; color: string; colors?: readonly string[]; segments: { from: number; to: number; color: string }[] }) {
   const calm = useCalm();
   const w = useSharedValue(0);
-  const f = useSharedValue(frac !== null && reduceMotionNow() ? frac : 0);
+  const f = useSharedValue(frac !== null && entranceStill() ? frac : 0);
   React.useEffect(() => {
     if (frac === null) return;
-    if (reduceMotionNow()) {
+    if (entranceStill()) {
       f.set(frac);
       return;
     }

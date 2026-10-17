@@ -39,6 +39,16 @@ export function useReduceMotion(): boolean {
 /** The same setting read once, for one-shot animations (an entrance, a count-up) that need no re-render on change. */
 export const reduceMotionNow = (): boolean => reduceMotion.get();
 
+/**
+ * Entrance animations (cards rising in turn, numbers rolling up, bars and markers growing in) are off: content shows the
+ * moment a screen opens, as in Apple's own apps, instead of arriving over most of a second while the screen is still
+ * being built (it made the app feel slow). Touch feedback, the tab drop and the Activity rings' sweep keep their motion.
+ */
+export const ENTRANCES = false;
+
+/** True when an entrance should show its end state at once: entrances off, or Reduce motion on. */
+export const entranceStill = (): boolean => !ENTRANCES || reduceMotionNow();
+
 /** False while the app is in the background: ambient loops stop there. */
 export function useAppActive(): boolean {
   return React.useSyncExternalStore(appActive.subscribe, appActive.get, appActive.get);

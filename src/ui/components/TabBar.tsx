@@ -120,9 +120,9 @@ function Drop({ slot, slotW, dark }: { slot: number; slotW: number; dark: boolea
         backdrop={false}
         style={StyleSheet.absoluteFill}
         cornerRadius={DROP_H / 2}
-        tint="#ffffff"
-        frost={dark ? 0.14 : 0.72}
-        shadow={dark ? "0 3px 10px rgba(0,0,0,0.35)" : "0 3px 10px rgba(0,0,0,0.10)"}
+        tint={dark ? "#ffffff" : "#787880"}
+        frost={dark ? 0.12 : 0.14}
+        shadow={false}
       />
     </Animated.View>
   );

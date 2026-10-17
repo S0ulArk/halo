@@ -14,7 +14,7 @@ import { TabBarFade } from "@/ui/components/TabBar";
 import { FloatingTabBar, TabBarBridge } from "@/ui/components/TabBarHost";
 
 /**
- * Builds the other three tabs in the background once Today has settled, one at a time, so the first switch to each is
+ * Builds the other three tabs in the background once Today has settled and the launch sync has run, one at a time, so the first switch to each is
  * instant (a tab otherwise builds its whole screen at the moment it is tapped, which ate the cross-fade). A prebuilt tab
  * is then frozen like any tab out of view (freezeOnBlur), so it costs nothing until it is shown.
  */
@@ -28,7 +28,7 @@ function TabPreloader() {
         timers.push(
           setTimeout(() => {
             if (!cancelled) router.prefetch(href as Href);
-          }, 1500 + i * 900),
+          }, 6000 + i * 700),
         );
       });
     });

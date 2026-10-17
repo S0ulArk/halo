@@ -12,7 +12,7 @@ import { alpha } from "@/lib/utils";
 import { Txt } from "@/ui";
 import { useCalm } from "@/ui/calm";
 import { iosSpring } from "@/ui/motion/springs";
-import { reduceMotionNow } from "@/ui/motion/system";
+import { entranceStill } from "@/ui/motion/system";
 import { ageSpan } from "./format";
 
 const TRACK = 8;
@@ -36,11 +36,11 @@ export function AgeRuler({ age, pulseAge, color, spoken = true }: { age: number;
   const from = x(age);
   const to = x(pulseAge);
   // 0: the knob on your age; 1: on the Halo Age.
-  const p = useSharedValue(reduceMotionNow() ? 1 : 0);
+  const p = useSharedValue(entranceStill() ? 1 : 0);
   const laid = w > 0;
   React.useEffect(() => {
     if (!laid) return;
-    if (reduceMotionNow()) {
+    if (entranceStill()) {
       p.set(1);
       return;
     }

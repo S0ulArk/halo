@@ -9,7 +9,7 @@ export default function PerfRoute() {
   const router = useRouter();
   React.useEffect(() => {
     const on = (v: string | undefined) => v !== "0";
-    setPerfFlags({ liveGlass: on(p.glass), glassShadow: on(p.shadow), riseLayer: on(p.layer), barOnlyGlass: p.bar === "1" });
+    setPerfFlags({ liveGlass: on(p.glass), glassShadow: on(p.shadow), riseLayer: on(p.layer), barOnlyGlass: p.bar !== "0" });
     router.replace("/" as Href);
   }, [p.glass, p.shadow, p.layer, p.bar, router]);
   return null;

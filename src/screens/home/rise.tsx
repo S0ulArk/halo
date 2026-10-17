@@ -15,7 +15,7 @@ import { useAfterTransition } from "@/ui/components/AfterTransition";
 import { REASE } from "@/ui/motion/easing";
 import { RevealScroll } from "@/ui/motion/Rise";
 import { iosSpring } from "@/ui/motion/springs";
-import { reduceMotionNow } from "@/ui/motion/system";
+import { entranceStill } from "@/ui/motion/system";
 
 /** How far a block travels up, in dp. */
 const RISE_DP = 10;
@@ -30,7 +30,7 @@ const LIFT = iosSpring(0.55, 0.86);
 export function Rise({ index = 0, style, children }: { index?: number; style?: StyleProp<ViewStyle>; children: React.ReactNode }) {
   const opened = useAfterTransition();
   // Decided once at mount: a block that mounted still never starts moving later.
-  const [still] = React.useState(() => reduceMotionNow() || !opened);
+  const [still] = React.useState(() => entranceStill() || !opened);
   const scroll = React.useContext(RevealScroll);
   const { height } = useWindowDimensions();
   const ref = useAnimatedRef<Animated.View>();

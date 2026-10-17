@@ -17,7 +17,7 @@ import { RollingNumber } from "@/ui/components/Halo";
 import { TileLabel } from "@/ui/components/TileRow";
 import { font } from "@/ui/fonts";
 import { REASE } from "@/ui/motion/easing";
-import { reduceMotionNow } from "@/ui/motion/system";
+import { entranceStill } from "@/ui/motion/system";
 
 /** How long a small chart takes to grow in, once, as it mounts: Apple's marks land in well under half a second. */
 export const GROW_MS = 420;
@@ -30,7 +30,7 @@ export const GROW_MS = 420;
  */
 export function Grow({ mode = "rise", delay = 80, style, children }: { mode?: "rise" | "wipe"; delay?: number; style?: StyleProp<ViewStyle>; children: React.ReactNode }) {
   const opened = useAfterTransition();
-  const [still] = React.useState(() => reduceMotionNow() || !opened);
+  const [still] = React.useState(() => entranceStill() || !opened);
   const p = useSharedValue(still ? 1 : 0);
   const size = useSharedValue(0);
   const onLayout = (e: LayoutChangeEvent) => {

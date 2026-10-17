@@ -16,7 +16,7 @@ import { usePress, usePressStyle } from "@/ui/components/press";
 import { useAfterTransition } from "@/ui/components/AfterTransition";
 import { LiquidGlass } from "@/ui/glass";
 import { haptic } from "@/ui/motion/haptics";
-import { reduceMotionNow } from "@/ui/motion/system";
+import { reduceMotionNow, entranceStill } from "@/ui/motion/system";
 import { useTheme } from "@/ui/ThemeProvider";
 import { font, TABULAR } from "@/ui/fonts";
 import { Rows, SectionFooter, SectionLabel } from "@/screens/settings/calmKit";
@@ -278,7 +278,7 @@ export function GlowCard({ color, padding = 16, gap, style, children }: { color:
   const dark = useTheme().scheme === "dark";
   const id = React.useId().replace(/:/g, "");
   const opened = useAfterTransition();
-  const [still] = React.useState(() => reduceMotionNow());
+  const [still] = React.useState(() => entranceStill());
   const lit = useSharedValue(still ? 1 : 0);
   React.useEffect(() => {
     if (!opened || !color) return;
@@ -312,7 +312,7 @@ export function GlowCard({ color, padding = 16, gap, style, children }: { color:
  */
 export function useGrowIn(index = 0, delay = 100, duration = 700): SharedValue<number> {
   const opened = useAfterTransition();
-  const [still] = React.useState(() => reduceMotionNow());
+  const [still] = React.useState(() => entranceStill());
   const grow = useSharedValue(still ? 1 : 0);
   React.useEffect(() => {
     if (!opened || still) return;

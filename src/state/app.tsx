@@ -4,7 +4,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { perf } from "@/lib/perf";
 import * as React from "react";
-import { AppState as RNAppState } from "react-native";
+import { AppState as RNAppState, InteractionManager } from "react-native";
 // Background sync and notifications (src/background): the run body shared with the WorkManager task, the task's
 // registration at boot, and the tapped-notification → screen hook.
 import { useNotificationDeepLinks } from "@/background/links";
@@ -239,8 +239,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Google's grant lives in Play services; with no account saved there is nothing to sync from.
         if (source === "google" && !google) return patch({ status: "needs_permissions" });
         // Show the last scores at once; refresh in the background.
-        patch({ status: sync.lastSyncTs || source === "demo" ? "ready" : "syncing" });
-        void run(st, profile, source);
+        const hasScores = !!sync.lastSyncTs || source === "demo";
+        patch({ status: hasScores ? "ready" : "syncing" });
+        if (!hasScores) {
+          void run(st, profile, source);
+        } else {
+          // The first screen draws first: the launch sync (an import and a rescore, heavy on the JS thread, and then
+          // every open screen recomputing) waits until the opening frames are done, so the first seconds stay smooth.
+          InteractionManager.runAfterInteractions(() => {
+            setTimeout(() => {
+              if (!cancelled) void run(st, profile, source);
+            }, 1200);
+          });
+        }
       } catch (e) {
         if (!cancelled) patch({ status: "error", error: e instanceof Error ? e.message : String(e) });
       }

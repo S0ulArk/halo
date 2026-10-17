@@ -6,7 +6,7 @@ import * as React from "react";
 
 export type PerfFlags = { liveGlass: boolean; glassShadow: boolean; riseLayer: boolean; barOnlyGlass: boolean };
 
-let flags: PerfFlags = { liveGlass: true, glassShadow: true, riseLayer: true, barOnlyGlass: false };
+let flags: PerfFlags = { liveGlass: true, glassShadow: true, riseLayer: true, barOnlyGlass: true };
 let version = 0;
 const listeners = new Set<() => void>();
 
