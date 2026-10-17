@@ -116,6 +116,7 @@ function Drop({ slot, slotW, dark }: { slot: number; slotW: number; dark: boolea
   return (
     <Animated.View pointerEvents="none" style={[{ position: "absolute", left: PAD + DROP_INSET, top: (BAR_H - DROP_H) / 2, width: slotW - DROP_INSET * 2, height: DROP_H }, style]}>
       <LiquidGlass
+        essential
         backdrop={false}
         style={StyleSheet.absoluteFill}
         cornerRadius={DROP_H / 2}
@@ -152,7 +153,7 @@ function TabCapsule({ tabs, current, onPress, dark }: { tabs: TabItem[]; current
   const blue = BLUE[dark ? "dark" : "light"];
   const idle = alpha(calm.ink, dark ? 0.82 : 0.74);
   return (
-    <LiquidGlass style={{ flex: 1, height: BAR_H }} cornerRadius={BAR_H / 2}>
+    <LiquidGlass essential style={{ flex: 1, height: BAR_H }} cornerRadius={BAR_H / 2}>
       <View accessibilityRole="tablist" onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ flex: 1, flexDirection: "row", paddingHorizontal: PAD }}>
         {slotW > 0 && current >= 0 && <Drop slot={current} slotW={slotW} dark={dark} />}
         {tabs.map((t, i) => (
@@ -186,7 +187,7 @@ function ActionButton({ icon: Icon, accessibilityLabel, onPress, dark }: { icon:
       hitSlop={4}
     >
       <Animated.View style={[{ width: BAR_H, height: BAR_H }, body]}>
-        <LiquidGlass style={StyleSheet.absoluteFill} cornerRadius={BAR_H / 2}>
+        <LiquidGlass essential style={StyleSheet.absoluteFill} cornerRadius={BAR_H / 2}>
           {/* Lit from inside while pressed. */}
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: BAR_H / 2, backgroundColor: dark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.45)" }, glow]} />
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center" }]}>

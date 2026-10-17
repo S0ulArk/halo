@@ -4,9 +4,9 @@
 // adb. Nothing is saved: a restart turns everything back on.
 import * as React from "react";
 
-export type PerfFlags = { liveGlass: boolean; glassShadow: boolean; riseLayer: boolean };
+export type PerfFlags = { liveGlass: boolean; glassShadow: boolean; riseLayer: boolean; barOnlyGlass: boolean };
 
-let flags: PerfFlags = { liveGlass: true, glassShadow: true, riseLayer: true };
+let flags: PerfFlags = { liveGlass: true, glassShadow: true, riseLayer: true, barOnlyGlass: false };
 let version = 0;
 const listeners = new Set<() => void>();
 

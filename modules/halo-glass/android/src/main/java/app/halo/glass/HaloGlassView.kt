@@ -279,7 +279,12 @@ class HaloGlassView(context: Context, appContext: AppContext) : ExpoView(context
       val tier = if (builtFor == wanted) wanted else build(wanted) ?: return null
       // A transform that can't be inverted (scaled to 0 mid-animation) shows nothing: keep the last recording.
       if (map(found, mapping)) record(found)
+      // The node holds the glass at SCALE of its size; drawn scaled back up (its effect output is filtered bilinearly).
+      canvas.save()
+      canvas.translate(-margin.toFloat(), -margin.toFloat())
+      canvas.scale(1f / SCALE, 1f / SCALE)
       canvas.drawRenderNode(node)
+      canvas.restore()
       return tier
     }
 
@@ -296,7 +301,7 @@ class HaloGlassView(context: Context, appContext: AppContext) : ExpoView(context
       val blur = blurPx()
       // The blur reads about 3σ past the glass's edge; HWUI turns a radius r into σ = 0.577 r + 0.5.
       margin = if (blur > 0.5f) ceil(3f * (0.57735f * blur + 0.5f)).toInt() + 2 else 2
-      node.setPosition(-margin, -margin, width + margin, height + margin)
+      node.setPosition(0, 0, ceil((width + 2 * margin) * SCALE).toInt(), ceil((height + 2 * margin) * SCALE).toInt())
       if (wanted == Tier.LENS && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !lensBroken) {
         try {
           node.setRenderEffect(lensEffect(blur))
@@ -310,8 +315,9 @@ class HaloGlassView(context: Context, appContext: AppContext) : ExpoView(context
       }
       return try {
         node.setRenderEffect(blurEffect(blur))
-        val r = radiusPx()
-        outline.setRoundRect(margin, margin, margin + width, margin + height, r)
+        val r = radiusPx() * SCALE
+        val m = (margin * SCALE).toInt()
+        outline.setRoundRect(m, m, m + (width * SCALE).toInt(), m + (height * SCALE).toInt(), r)
         node.setOutline(outline)
         node.setClipToOutline(true)
         builtFor = Tier.BLUR
@@ -327,13 +333,14 @@ class HaloGlassView(context: Context, appContext: AppContext) : ExpoView(context
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     private fun lensEffect(blur: Float): RenderEffect {
       val s = shader as? RuntimeShader ?: RuntimeShader(LENS_AGSL).also { shader = it }
-      val w = width.toFloat()
-      val h = height.toFloat()
+      // Everything in the node's space: the glass's own size times SCALE.
+      val w = width * SCALE
+      val h = height * SCALE
       val short = min(w, h)
       val rim = rimLevels()
-      s.setFloatUniform("origin", margin.toFloat(), margin.toFloat())
+      s.setFloatUniform("origin", margin * SCALE, margin * SCALE)
       s.setFloatUniform("size", w, h)
-      s.setFloatUniform("radius", radiusPx())
+      s.setFloatUniform("radius", radiusPx() * SCALE)
       s.setFloatUniform("shift", refraction * 0.3f * short)
       s.setFloatUniform("band", max(1f, 0.4f * short))
       s.setFloatUniform("magnify", 0.04f * refraction)
@@ -341,9 +348,10 @@ class HaloGlassView(context: Context, appContext: AppContext) : ExpoView(context
       s.setFloatUniform("brightness", 1.04f)
       s.setFloatUniform("tint", Color.red(tintColor) / 255f, Color.green(tintColor) / 255f, Color.blue(tintColor) / 255f, Color.alpha(tintColor) / 255f * frost)
       s.setFloatUniform("rim", rim[0], rim[1], rim[2], rim[3])
-      s.setFloatUniform("dp", density)
+      s.setFloatUniform("dp", density * SCALE)
       val lens = RenderEffect.createRuntimeShaderEffect(s, "content")
-      return if (blur > 0.5f) RenderEffect.createChainEffect(lens, RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.CLAMP)) else lens
+      val b = blur * SCALE
+      return if (b > 0.5f) RenderEffect.createChainEffect(lens, RenderEffect.createBlurEffect(b, b, Shader.TileMode.CLAMP)) else lens
     }
 
     private fun blurEffect(blur: Float): RenderEffect {
@@ -352,8 +360,9 @@ class HaloGlassView(context: Context, appContext: AppContext) : ExpoView(context
         postConcat(ColorMatrix().apply { setScale(1.04f, 1.04f, 1.04f, 1f) })
       }
       val filter = ColorMatrixColorFilter(colour)
-      return if (blur > 0.5f) {
-        RenderEffect.createColorFilterEffect(filter, RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.CLAMP))
+      val b = blur * SCALE
+      return if (b > 0.5f) {
+        RenderEffect.createColorFilterEffect(filter, RenderEffect.createBlurEffect(b, b, Shader.TileMode.CLAMP))
       } else {
         RenderEffect.createColorFilterEffect(filter)
       }
@@ -369,6 +378,7 @@ class HaloGlassView(context: Context, appContext: AppContext) : ExpoView(context
       out.set(targetToScreen)
       out.postConcat(screenToSelf)
       out.postTranslate(margin.toFloat(), margin.toFloat())
+      out.postScale(SCALE, SCALE)
       return true
     }
 
@@ -390,6 +400,12 @@ class HaloGlassView(context: Context, appContext: AppContext) : ExpoView(context
 
   companion object {
     private const val TAG = "HaloGlass"
+    /**
+     * The glass renders at half resolution (a quarter of the pixels), as Haze and other fast Android glass do: the
+     * backdrop is bent and softened anyway, so the difference doesn't show, while the replay, blur and lens cost a
+     * quarter. Measured on a 120 Hz phone, full-resolution glass doubled the janky frames.
+     */
+    private const val SCALE = 0.5f
     /** The fill's least opacity when it stands in for live glass: enough that text on it never fights the page. */
     private const val STAND_IN_OPACITY = 0.88f
     private const val LOOKUP_GAP_MS = 250L

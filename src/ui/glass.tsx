@@ -21,8 +21,8 @@ import { useTheme } from "@/ui/ThemeProvider";
 export type GlassTint = "light" | "dark" | "clear" | (string & {});
 
 const PRESETS: Record<"light" | "dark" | "clear", { color: string; frost: number }> = {
-  light: { color: "#fafafc", frost: 0.7 },
-  dark: { color: "#1e1e22", frost: 0.72 },
+  light: { color: "#fafafc", frost: 0.55 },
+  dark: { color: "#1e1e22", frost: 0.6 },
   clear: { color: "#ffffff", frost: 0.1 },
 };
 
@@ -102,6 +102,8 @@ export type LiquidGlassProps = {
   saturation?: number;
   /** False draws tint and rim only, no live backdrop: for glass on glass (a selection drop). Default true. */
   backdrop?: boolean;
+  /** The tab bar's glass: it stays live when the rest of the app's glass is frosted for speed. */
+  essential?: boolean;
   /** The soft shadow: true (default) for the glass one, false for none, or a boxShadow string. */
   shadow?: boolean | string;
   pointerEvents?: "auto" | "none" | "box-none" | "box-only";
@@ -114,12 +116,12 @@ export function LiquidGlass({
   cornerRadius,
   tint,
   refraction = 1,
-  // No blur by default: the lens alone is one cheap shader pass, while a blur re-filters the layer on the GPU every
-  // frame anything under the glass moves (measured on the phone: the GPU was the bottleneck). The frost keeps text legible.
-  blurRadius = 0,
+  // The glass renders at half resolution (HaloGlassView's SCALE), so this soft blur costs a quarter of what it did.
+  blurRadius = 5,
   frost,
   saturation = 1.8,
   backdrop = true,
+  essential = false,
   shadow = true,
   pointerEvents,
   style,
@@ -128,7 +130,7 @@ export function LiquidGlass({
   const { scheme } = useTheme();
   const target = React.useContext(Backdrop);
   const perf = perfFlags();
-  const live = backdrop && perf.liveGlass;
+  const live = backdrop && perf.liveGlass && (!perf.barOnlyGlass || essential);
   const t = tint ?? (scheme === "dark" ? "dark" : "light");
   const preset = isPreset(t) ? PRESETS[t] : null;
   const color = preset ? preset.color : t;
@@ -167,7 +169,7 @@ export function LiquidGlass({
  * GlassTarget's overlay; elsewhere the stand-in. `strength` scales the lens (0–1); `radius` defaults to a capsule.
  */
 export function GlassMaterial({ strength = 1, radius, tint, shadow = true }: { strength?: number; radius?: number; tint?: GlassTint; shadow?: boolean | string }) {
-  return <LiquidGlass pointerEvents="none" style={StyleSheet.absoluteFill} cornerRadius={radius} tint={tint} refraction={strength} blurRadius={0} shadow={shadow} />;
+  return <LiquidGlass pointerEvents="none" style={StyleSheet.absoluteFill} cornerRadius={radius} tint={tint} refraction={strength} blurRadius={2} shadow={shadow} />;
 }
 
 const styles = StyleSheet.create({ fill: { flex: 1 } });

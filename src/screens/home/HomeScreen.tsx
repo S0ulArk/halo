@@ -1,23 +1,21 @@
-// Home `/` (spec §7.1), ported from the web's src/app/(app)/(home)/page.tsx, as the mockups' iOS Today: a soft wash of
-// the metric colours at the top of the page fading into the grouped ground, the floating bar (a Liquid Glass streak
+// Home `/` (spec §7.1), ported from the web's src/app/(app)/(home)/page.tsx, as the mockups' iOS Today: the plain grouped
+// ground like every other tab, the floating bar (a Liquid Glass streak
 // capsule and the profile button over the page), the date eyebrow and the "Today" large title that folds into the bar
 // as the page scrolls, then the rings hero, the coach, Pinned and the day's cards (sections.tsx).
 //
-// The page is the glass's backdrop: the wash, the scroll view and the bar's scroll edge sit inside one GlassTarget and
+// The page is the glass's backdrop: the scroll view and the bar's scroll edge sit inside one GlassTarget and
 // the bar is its overlay, so the glass bends what is under it. The scroll offset lives on the UI thread (Reanimated):
 // the large title's fold, the inline title, the scroll edge and the cards that rise as they scroll into view all read
 // it there, and no JS runs while the page scrolls. Pull to refresh reads the live heart rate first, then syncs.
 import * as React from "react";
-import { Image, RefreshControl, ScrollView, useWindowDimensions, View } from "react-native";
+import { RefreshControl, ScrollView, View } from "react-native";
 import { useRouter, useScrollToTop, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CircleAlert } from "lucide-react-native";
 import Animated, { Extrapolation, interpolate, useAnimatedStyle, type SharedValue } from "react-native-reanimated";
-import { LinearGradient } from "expo-linear-gradient";
 import { RevealScroll, useRevealScroll } from "@/ui/motion/Rise";
 import { dayLabel } from "@/lib/format";
 import { dayHref, useDay } from "@/lib/day";
-import { alpha } from "@/lib/utils";
 import { getHealthHub, getHome, getRecovery, getSleep, getStrain, getTrends } from "@/queries";
 import { prefetchQuery, useApp, useQuery, useQueryCtx, useQueryStamp, useSyncProgress } from "@/state/app";
 import { EmptyState, useTheme } from "@/ui";
@@ -33,32 +31,6 @@ import { HomeSkeleton } from "./skeleton";
 import { progressLabel, useSyncShell, wearStreak } from "./status";
 import { hasData } from "./view";
 
-// Soft washes of the metric colours (green, indigo, orange) at the top of the page.
-const BG_LIGHT = require("../../../assets/bg/halo-light.webp");
-const BG_DARK = require("../../../assets/bg/calm-dark.webp");
-
-/** The wash's box: the picture's own height on a phone, and the share of it shown before it has melted into the ground. */
-const washHeight = (screen: number) => Math.max(screen, 780);
-const WASH_SHOWN = 0.62;
-const WASH_MELT = 0.24;
-
-/**
- * The page's picture, fixed behind the scroll: the wash at the top, melting into the exact grouped ground through a
- * gradient, so the picture's own lower tone never shows as a seam.
- */
-function Wash() {
-  const { scheme } = useTheme();
-  const c = useCalm();
-  const { height } = useWindowDimensions();
-  const H = washHeight(height);
-  return (
-    <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, height: H * WASH_SHOWN, overflow: "hidden" }}>
-      <Image source={scheme === "dark" ? BG_DARK : BG_LIGHT} resizeMode="cover" style={{ position: "absolute", top: 0, left: 0, right: 0, height: H }} fadeDuration={0} />
-      <LinearGradient colors={[alpha(c.ground, 0), c.ground]} style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: H * WASH_MELT }} />
-    </View>
-  );
-}
-
 /** The scroll edge's steps under the bar: the wash at full strength to the bar's foot, then fading out over 18 dp. */
 const EDGE_STEPS: [extra: number, opacity: number][] = [
   [0, 1],
@@ -68,23 +40,20 @@ const EDGE_STEPS: [extra: number, opacity: number][] = [
 ];
 
 /**
- * iOS 26's scroll edge for Today: once the page has moved, the same wash as behind the page rises under the bar, so the
- * content softens away as it passes under it rather than showing through the glass. Copies of the wash clipped to the
- * bar and a few dp past it, each fainter, make the soft foot; it fades in with the first 14 dp of scroll (UI thread).
+ * iOS 26's scroll edge for Today: once the page has moved, the ground colour rises under the bar, so the content softens
+ * away as it passes under it rather than showing through the glass. Plain fills of the ground, each a few dp taller and
+ * fainter, make the soft foot; it fades in with the first 14 dp of scroll (UI thread). Plain fills, not pictures: a
+ * bitmap here was redrawn on every frame of a scroll.
  */
 function ScrollEdge({ y }: { y: SharedValue<number> | null }) {
-  const { scheme } = useTheme();
+  const c = useCalm();
   const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
-  const H = washHeight(height);
   const bar = insets.top + BAR_ROW;
   const shown = useAnimatedStyle(() => ({ opacity: y ? interpolate(y.value, [0, 14], [0, 1], Extrapolation.CLAMP) : 0 }));
   return (
     <Animated.View pointerEvents="none" style={[{ position: "absolute", top: 0, left: 0, right: 0, height: bar + EDGE_STEPS[EDGE_STEPS.length - 1][0] }, shown]}>
       {EDGE_STEPS.map(([extra, opacity]) => (
-        <View key={extra} style={{ position: "absolute", top: 0, left: 0, right: 0, height: bar + extra, overflow: "hidden", opacity }}>
-          <Image source={scheme === "dark" ? BG_DARK : BG_LIGHT} resizeMode="cover" style={{ position: "absolute", top: 0, left: 0, right: 0, height: H }} fadeDuration={0} />
-        </View>
+        <View key={extra} style={{ position: "absolute", top: 0, left: 0, right: 0, height: bar + extra, opacity, backgroundColor: c.ground }} />
       ))}
     </Animated.View>
   );
@@ -203,7 +172,6 @@ export default function HomeScreen() {
           />
         }
       >
-        <Wash />
         <Animated.ScrollView
           ref={setScrollRef}
           scrollEventThrottle={16}
