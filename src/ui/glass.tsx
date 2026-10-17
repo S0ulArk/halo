@@ -37,6 +37,9 @@ const SHADOW = {
 /** The stand-in's least opacity when there is no live backdrop (mirrors HaloGlassView's). */
 const STAND_IN = 0.88;
 
+/** The bars' glass (the tab bar, and the round buttons and pills of the top bars): a clearer tint than the preset's. */
+export const BAR_FROST = { light: 0.42, dark: 0.6 } as const;
+
 /** The react tag of the target glass here refracts; null inside a target's content or outside any target. */
 const Backdrop = React.createContext<number | null>(null);
 
@@ -130,7 +133,8 @@ export function LiquidGlass({
   const { scheme } = useTheme();
   const target = React.useContext(Backdrop);
   const perf = perfFlags();
-  const live = backdrop && perf.liveGlass && (!perf.barOnlyGlass || essential);
+  // Live only over a backdrop: glass with no GlassTarget behind it (a sheet's close button) keeps the opaque stand-in.
+  const live = backdrop && target != null && perf.liveGlass && (!perf.barOnlyGlass || essential);
   const t = tint ?? (scheme === "dark" ? "dark" : "light");
   const preset = isPreset(t) ? PRESETS[t] : null;
   const color = preset ? preset.color : t;
@@ -166,10 +170,13 @@ export function LiquidGlass({
 
 /**
  * The material, filling its parent (first inside a rounded box, e.g. a round header button). Live glass in a
- * GlassTarget's overlay; elsewhere the stand-in. `strength` scales the lens (0–1); `radius` defaults to a capsule.
+ * GlassTarget's overlay, the same as the tab bar's (lens, blur and tint); elsewhere the stand-in. `strength` scales the
+ * lens (0–1); `radius` defaults to a capsule.
  */
 export function GlassMaterial({ strength = 1, radius, tint, shadow = true }: { strength?: number; radius?: number; tint?: GlassTint; shadow?: boolean | string }) {
-  return <LiquidGlass pointerEvents="none" style={StyleSheet.absoluteFill} cornerRadius={radius} tint={tint} refraction={strength} blurRadius={2} shadow={shadow} />;
+  const { scheme } = useTheme();
+  const frost = tint === undefined ? BAR_FROST[scheme === "dark" ? "dark" : "light"] : undefined;
+  return <LiquidGlass essential pointerEvents="none" style={StyleSheet.absoluteFill} cornerRadius={radius} tint={tint} refraction={strength} frost={frost} shadow={shadow} />;
 }
 
 const styles = StyleSheet.create({ fill: { flex: 1 } });

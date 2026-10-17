@@ -4,13 +4,14 @@
 // search field needs: a tap on a result while the keyboard is up lands on the result, and a drag closes the keyboard.
 // The page's blocks rise into place in a short cascade as it opens (motion/Rise), on the UI thread.
 import * as React from "react";
-import { RefreshControl, View, type ScrollView } from "react-native";
+import { View, type ScrollView } from "react-native";
 import Animated from "react-native-reanimated";
 import { useScrollToTop } from "expo-router";
 import { useApp } from "@/state/app";
 import { BottomSheet, Button, SyncStatus, syncView, TitleHeader, Txt, useTheme, type SyncShellStatus } from "@/ui";
 import { LargeTitle, useBarInset } from "@/ui/components/DetailHeader";
 import { useBottomClearance } from "@/ui/components/PageShell";
+import { PullToRefresh } from "@/ui/components/PullToRefresh";
 import { GlassTarget } from "@/ui/glass";
 import { RiseEach, useRevealScroll } from "@/ui/motion/Rise";
 import { useNow } from "../health/shells";
@@ -48,27 +49,25 @@ function SyncButton() {
   );
 }
 
-/** Pull to refresh: re-imports and rescores (useApp().refresh), its spinner under the bar until the run ends. */
+/** Pull to refresh (the Halo ring, PullToRefresh): re-imports and rescores (useApp().refresh), the ring spinning until the run ends. */
 function usePullRefresh() {
-  const top = useBarInset();
   const app = useApp();
-  const { c } = useTheme();
   const [refreshing, setRefreshing] = React.useState(false);
-  const onRefresh = async () => {
+  const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
     try {
       await app.refresh();
     } finally {
       setRefreshing(false);
     }
-  };
-  return <RefreshControl refreshing={refreshing} onRefresh={onRefresh} progressViewOffset={top} tintColor={c.foregroundSecondary} colors={[c.primary]} progressBackgroundColor={c.card} />;
+  }, [app]);
+  return { refreshing, onRefresh: () => void onRefresh() };
 }
 
 /** The page: `head` (the search field) right under the large title, then each child a block that rises into place. */
 export function MoreShell({ title, onBack, head, children }: { title: string; onBack: () => void; head?: React.ReactNode; children: React.ReactNode }) {
   const { c } = useTheme();
-  const refreshControl = usePullRefresh();
+  const pull = usePullRefresh();
   const clearance = useBottomClearance("tabs");
   const top = useBarInset();
   const scrollRef = React.useRef<ScrollView>(null);
@@ -78,21 +77,23 @@ export function MoreShell({ title, onBack, head, children }: { title: string; on
   return (
     <View style={{ flex: 1, backgroundColor: c.background }}>
       <GlassTarget style={{ flex: 1 }} overlay={<TitleHeader title={title} onBack={onBack} right={<SyncButton />} scrollY={y} />}>
-        <Animated.ScrollView
-          ref={setRef}
-          refreshControl={refreshControl}
-          scrollEventThrottle={16}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: top, paddingBottom: clearance }}
-          contentInsetAdjustmentBehavior="never"
-        >
-          <LargeTitle title={title} y={y} />
-          {head ? <View style={{ marginTop: -4, marginBottom: 20 }}>{head}</View> : null}
-          <View style={{ alignSelf: "center", width: "100%", maxWidth: 640, gap: 24 }}>
-            <RiseEach>{children}</RiseEach>
-          </View>
-        </Animated.ScrollView>
+        <PullToRefresh {...pull} y={y} top={top}>
+          <Animated.ScrollView
+            ref={setRef}
+            overScrollMode="never"
+            scrollEventThrottle={16}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            contentContainerStyle={{ paddingHorizontal: 16, paddingTop: top, paddingBottom: clearance }}
+            contentInsetAdjustmentBehavior="never"
+          >
+            <LargeTitle title={title} y={y} />
+            {head ? <View style={{ marginTop: -4, marginBottom: 20 }}>{head}</View> : null}
+            <View style={{ alignSelf: "center", width: "100%", maxWidth: 640, gap: 24 }}>
+              <RiseEach>{children}</RiseEach>
+            </View>
+          </Animated.ScrollView>
+        </PullToRefresh>
       </GlassTarget>
     </View>
   );

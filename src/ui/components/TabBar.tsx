@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { createLucideIcon, HeartPlus, LayoutGrid, Menu, Moon, Plus, Sparkles, type LucideIcon } from "lucide-react-native";
 import { alpha } from "@/lib/utils";
 import { useCalm } from "@/ui/calm";
-import { LiquidGlass } from "@/ui/glass";
+import { BAR_FROST, LiquidGlass } from "@/ui/glass";
 import { reduceMotionNow } from "@/ui/motion/system";
 import { Mark } from "./Mark";
 import { useTheme } from "@/ui/ThemeProvider";
@@ -146,7 +146,7 @@ function TabCapsule({ tabs, current, onPress, dark }: { tabs: TabItem[]; current
   const blue = BLUE[dark ? "dark" : "light"];
   const idle = alpha(calm.ink, dark ? 0.82 : 0.74);
   return (
-    <LiquidGlass essential style={{ flex: 1, height: BAR_H }} cornerRadius={BAR_H / 2} frost={dark ? 0.6 : 0.42}>
+    <LiquidGlass essential style={{ flex: 1, height: BAR_H }} cornerRadius={BAR_H / 2} frost={BAR_FROST[dark ? "dark" : "light"]}>
       <View accessibilityRole="tablist" onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ flex: 1, flexDirection: "row", paddingHorizontal: PAD }}>
         {slotW > 0 && current >= 0 && <Drop slot={current} slotW={slotW} dark={dark} />}
         {tabs.map((t, i) => (
@@ -180,7 +180,7 @@ function ActionButton({ icon: Icon, accessibilityLabel, onPress, dark }: { icon:
       hitSlop={4}
     >
       <Animated.View style={[{ width: BAR_H, height: BAR_H }, body]}>
-        <LiquidGlass essential style={StyleSheet.absoluteFill} cornerRadius={BAR_H / 2} frost={dark ? 0.6 : 0.42}>
+        <LiquidGlass essential style={StyleSheet.absoluteFill} cornerRadius={BAR_H / 2} frost={BAR_FROST[dark ? "dark" : "light"]}>
           {/* Lit from inside while pressed. */}
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: BAR_H / 2, backgroundColor: dark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.45)" }, glow]} />
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center" }]}>

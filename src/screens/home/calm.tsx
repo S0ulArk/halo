@@ -17,7 +17,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, HeartPulse, Moon } from "lucide
 import { BAND_WORD, recoveryBand } from "@/lib/bands";
 import { DAY, dayLabel, formatDay, formatValue, MISSING } from "@/lib/format";
 import { reasonCopy } from "@/lib/reasons";
-import { mix } from "@/lib/utils";
+import { alpha, mix } from "@/lib/utils";
 import { getTrends, type HomeVM, type KeyStat } from "@/queries";
 import { useApp, useQuery } from "@/state/app";
 import { SyncStatus, Txt, type SyncShellStatus } from "@/ui";
@@ -114,11 +114,16 @@ export function TodayBar({ y, title, streak, sync, onAvatar }: { y: SharedValue<
 
 // ── The large title ──────────────────────────────────────────────────────────
 
-/** A round step button beside the large title: the quiet fill with the blue chevron, faint where the days stop. */
+/**
+ * A round step button beside the large title, iOS's tinted button: a light blue fill under a bold blue chevron, so it
+ * reads as a control on the pastel wash (the old system-grey fill all but vanished there). Where the days stop it turns
+ * the quiet grey with a grey chevron.
+ */
 function StepButton({ dir, disabled, onPress }: { dir: -1 | 1; disabled: boolean; onPress: () => void }) {
   const c = useCalm();
+  const dark = useTheme().scheme === "dark";
   const press = usePress(0.9);
-  const pressed = usePressStyle(press, { rest: disabled ? 0.35 : 1, dim: 0.6 });
+  const pressed = usePressStyle(press, { rest: disabled ? 0.6 : 1, dim: 0.6 });
   const Icon = dir < 0 ? ChevronLeft : ChevronRight;
   return (
     <PressableView
@@ -133,9 +138,9 @@ function StepButton({ dir, disabled, onPress }: { dir: -1 | 1; disabled: boolean
       accessibilityLabel={dir < 0 ? "Previous day" : "Next day"}
       accessibilityState={{ disabled }}
       hitSlop={4}
-      style={[{ width: 34, height: 34, borderRadius: 17, backgroundColor: c.fill, alignItems: "center", justifyContent: "center" }, pressed]}
+      style={[{ width: 40, height: 40, borderRadius: 20, backgroundColor: disabled ? c.fill : alpha(c.teal, dark ? 0.26 : 0.15), alignItems: "center", justifyContent: "center" }, pressed]}
     >
-      <Icon size={19} color={c.teal} strokeWidth={2.5} style={dir < 0 ? { marginLeft: -2 } : { marginRight: -2 }} />
+      <Icon size={23} color={disabled ? c.tertiary : c.teal} strokeWidth={2.8} style={dir < 0 ? { marginLeft: -2 } : { marginRight: -2 }} />
     </PressableView>
   );
 }

@@ -2,7 +2,7 @@
 // and day-switch behaviour, the header's sync status, and the error state. The kit shells own their ScrollView and
 // take no RefreshControl, so these compose the same kit pieces (Ground, TitleHeader, DetailHeader, the large title).
 import * as React from "react";
-import { RefreshControl, ScrollView, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { useRouter, type Href, useScrollToTop } from "expo-router";
 import { CloudOff } from "lucide-react-native";
 import { useApp } from "@/state/app";
@@ -26,6 +26,7 @@ import { DetailLargeTitle, LargeTitle, useBarInset } from "@/ui/components/Detai
 import { useBottomClearance } from "@/ui/components/PageShell";
 import Animated from "react-native-reanimated";
 import { RevealScroll, Rise, RiseEach, useRevealScroll } from "@/ui/motion/Rise";
+import { PullToRefresh } from "@/ui/components/PullToRefresh";
 import { GlassTarget } from "@/ui/glass";
 
 /** Wall-clock ms, ticking every 30 s (the web's useNow), for "2 minutes ago" and the sync age. */
@@ -38,21 +39,19 @@ export function useNow(every = 30_000) {
   return now;
 }
 
-/** Pull-to-refresh: re-imports and rescores (useApp().refresh), spinning until the run ends, its spinner under the bar. */
+/** Pull-to-refresh (the Halo ring, PullToRefresh): re-imports and rescores (useApp().refresh), the ring spinning until the run ends. */
 function usePullRefresh() {
-  const top = useBarInset();
   const app = useApp();
-  const { c } = useTheme();
   const [refreshing, setRefreshing] = React.useState(false);
-  const onRefresh = async () => {
+  const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
     try {
       await app.refresh();
     } finally {
       setRefreshing(false);
     }
-  };
-  return <RefreshControl refreshing={refreshing} onRefresh={onRefresh} progressViewOffset={top} tintColor={c.foregroundSecondary} colors={[c.primary]} progressBackgroundColor={c.card} />;
+  }, [app]);
+  return { refreshing, onRefresh: () => void onRefresh() };
 }
 
 /** Back to wherever the screen was opened from; a deep link with no history lands on `fallback` (Home). */
@@ -113,7 +112,7 @@ function HeaderSync() {
  */
 export function TabShell({ title, lead, onBack, gap = 32, children }: { title: string; lead?: React.ReactNode; onBack?: () => void; gap?: number; children: React.ReactNode }) {
   const { c } = useTheme();
-  const refreshControl = usePullRefresh();
+  const pull = usePullRefresh();
   const clearance = useBottomClearance("tabs");
   // Tapping the tab again while on it scrolls back to the top.
   const scrollRef = React.useRef<ScrollView>(null);
@@ -127,14 +126,16 @@ export function TabShell({ title, lead, onBack, gap = 32, children }: { title: s
       {/* Every frame's offset reaches the UI thread: the floating bar's inline title and scroll edge follow it. The page
           is the glass's backdrop: the bar's round buttons (its overlay) bend what scrolls under them. */}
       <GlassTarget style={{ flex: 1 }} overlay={<TitleHeader title={title} lead={lead} onBack={onBack} right={<HeaderSync />} scrollY={revealY} />}>
-        <Animated.ScrollView ref={setRef} refreshControl={refreshControl} scrollEventThrottle={16} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: top, paddingBottom: clearance }} contentInsetAdjustmentBehavior="never">
-          <LargeTitle title={title} y={revealY} />
-          <RevealScroll.Provider value={revealY}>
-            <View style={{ gap }}>
-              <RiseEach>{children}</RiseEach>
-            </View>
-          </RevealScroll.Provider>
-        </Animated.ScrollView>
+        <PullToRefresh {...pull} y={revealY} top={top}>
+          <Animated.ScrollView ref={setRef} overScrollMode="never" scrollEventThrottle={16} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: top, paddingBottom: clearance }} contentInsetAdjustmentBehavior="never">
+            <LargeTitle title={title} y={revealY} />
+            <RevealScroll.Provider value={revealY}>
+              <View style={{ gap }}>
+                <RiseEach>{children}</RiseEach>
+              </View>
+            </RevealScroll.Provider>
+          </Animated.ScrollView>
+        </PullToRefresh>
       </GlassTarget>
     </View>
   );
@@ -161,7 +162,7 @@ export type DetailScreenProps = {
 export function DetailScreen({ title, subtitle, info, backTo, dateSwitcher, hero, summary, insight, primary, secondary, footer }: DetailScreenProps) {
   const { c } = useTheme();
   const onBack = useBack(backTo);
-  const refreshControl = usePullRefresh();
+  const pull = usePullRefresh();
   const side = summary || (hero ? insight : null);
   // The slide runs over the hero and its summary alone; everything under them mounts once the screen has opened.
   const opened = useAfterTransition();
@@ -173,34 +174,36 @@ export function DetailScreen({ title, subtitle, info, backTo, dateSwitcher, hero
     <View style={{ flex: 1, backgroundColor: c.background }}>
       <Ground />
       <GlassTarget style={{ flex: 1 }} overlay={<DetailHeader title={title} info={info} onBack={onBack} scrollY={revealY} />}>
-        <Animated.ScrollView ref={setRef} refreshControl={refreshControl} scrollEventThrottle={16} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: top, paddingBottom: clearance }} contentInsetAdjustmentBehavior="never">
-          {/* The large title, its subtitle and the day under them (Monitor, Stress, Halo Age, metric detail). */}
-          <DetailLargeTitle title={title} subtitle={subtitle} dateTitle={dateSwitcher} y={revealY} />
-          <RevealScroll.Provider value={revealY}>
-            {/* One column of cards 14 px apart, the hero a card the width of the column; each block rises into place (a block
-                mounting mid-push slides in with the screen instead). */}
-            <View style={{ gap: 14 }}>
-              {(hero || side) && (
-                <View style={{ gap: 14 }}>
-                  {hero && <Rise index={0}>{hero}</Rise>}
-                  {side && <Rise index={1}>{side}</Rise>}
-                </View>
-              )}
-              {below && (summary || !hero) && insight && <Rise index={2}>{insight}</Rise>}
-              {below && primary && <Rise index={2}>{primary}</Rise>}
-              {opened && secondary && secondary.length > 0 && (
-                <View style={{ gap: 14 }}>
-                  {secondary.map((s, i) => (
-                    <Rise key={i} index={3 + i}>
-                      {s}
-                    </Rise>
-                  ))}
-                </View>
-              )}
-              {opened && footer && <Rise index={3 + (secondary?.length ?? 0)}>{footer}</Rise>}
-            </View>
-          </RevealScroll.Provider>
-        </Animated.ScrollView>
+        <PullToRefresh {...pull} y={revealY} top={top}>
+          <Animated.ScrollView ref={setRef} overScrollMode="never" scrollEventThrottle={16} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: top, paddingBottom: clearance }} contentInsetAdjustmentBehavior="never">
+            {/* The large title, its subtitle and the day under them (Monitor, Stress, Halo Age, metric detail). */}
+            <DetailLargeTitle title={title} subtitle={subtitle} dateTitle={dateSwitcher} y={revealY} />
+            <RevealScroll.Provider value={revealY}>
+              {/* One column of cards 14 px apart, the hero a card the width of the column; each block rises into place (a block
+                  mounting mid-push slides in with the screen instead). */}
+              <View style={{ gap: 14 }}>
+                {(hero || side) && (
+                  <View style={{ gap: 14 }}>
+                    {hero && <Rise index={0}>{hero}</Rise>}
+                    {side && <Rise index={1}>{side}</Rise>}
+                  </View>
+                )}
+                {below && (summary || !hero) && insight && <Rise index={2}>{insight}</Rise>}
+                {below && primary && <Rise index={2}>{primary}</Rise>}
+                {opened && secondary && secondary.length > 0 && (
+                  <View style={{ gap: 14 }}>
+                    {secondary.map((s, i) => (
+                      <Rise key={i} index={3 + i}>
+                        {s}
+                      </Rise>
+                    ))}
+                  </View>
+                )}
+                {opened && footer && <Rise index={3 + (secondary?.length ?? 0)}>{footer}</Rise>}
+              </View>
+            </RevealScroll.Provider>
+          </Animated.ScrollView>
+        </PullToRefresh>
       </GlassTarget>
     </View>
   );

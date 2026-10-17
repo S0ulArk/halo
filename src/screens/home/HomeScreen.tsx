@@ -8,7 +8,7 @@
 // the large title's fold, the inline title, the scroll edge and the cards that rise as they scroll into view all read
 // it there, and no JS runs while the page scrolls. Pull to refresh reads the live heart rate first, then syncs.
 import * as React from "react";
-import { RefreshControl, ScrollView, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { useRouter, useScrollToTop, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CircleAlert } from "lucide-react-native";
@@ -18,10 +18,11 @@ import { dayLabel } from "@/lib/format";
 import { dayHref, useDay } from "@/lib/day";
 import { getHealthHub, getHome, getRecovery, getSleep, getStrain, getTrends } from "@/queries";
 import { prefetchQuery, useApp, useQuery, useQueryCtx, useQueryStamp, useSyncProgress } from "@/state/app";
-import { EmptyState, useTheme } from "@/ui";
+import { EmptyState } from "@/ui";
 import { useCalm } from "@/ui/calm";
 import { BAR_ROW } from "@/ui/components/DetailHeader";
 import { useBottomClearance } from "@/ui/components/PageShell";
+import { PullToRefresh } from "@/ui/components/PullToRefresh";
 import { GlassTarget } from "@/ui/glass";
 import { homeKey, useDashboardKeys } from "./dashboard";
 import { TopSlot, WeekInReview } from "./sections";
@@ -63,7 +64,6 @@ export default function HomeScreen() {
   const app = useApp();
   const syncProgress = useSyncProgress();
   const router = useRouter();
-  const { c } = useTheme();
   const calm = useCalm();
   const insets = useSafeAreaInsets();
   const clearance = useBottomClearance("tabs");
@@ -172,20 +172,20 @@ export default function HomeScreen() {
           />
         }
       >
-        <Animated.ScrollView
-          ref={setScrollRef}
-          scrollEventThrottle={16}
-          contentInsetAdjustmentBehavior="never"
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} progressViewOffset={top} tintColor={c.foregroundSecondary} colors={[calm.teal]} progressBackgroundColor={calm.card} />
-          }
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: top, paddingBottom: clearance }}
-        >
-          <TodayTitle y={scrollY} day={d} today={today} firstDay={app.sync.firstDay} loading={dayLoading} onChange={setDay} />
-          <RevealScroll.Provider value={scrollY}>
-            <View style={{ gap: 12, marginTop: 10, opacity: dayLoading ? 0.6 : 1 }}>{content}</View>
-          </RevealScroll.Provider>
-        </Animated.ScrollView>
+        <PullToRefresh refreshing={refreshing} onRefresh={onRefresh} y={scrollY} top={top}>
+          <Animated.ScrollView
+            ref={setScrollRef}
+            scrollEventThrottle={16}
+            overScrollMode="never"
+            contentInsetAdjustmentBehavior="never"
+            contentContainerStyle={{ paddingHorizontal: 16, paddingTop: top, paddingBottom: clearance }}
+          >
+            <TodayTitle y={scrollY} day={d} today={today} firstDay={app.sync.firstDay} loading={dayLoading} onChange={setDay} />
+            <RevealScroll.Provider value={scrollY}>
+              <View style={{ gap: 12, marginTop: 10, opacity: dayLoading ? 0.6 : 1 }}>{content}</View>
+            </RevealScroll.Provider>
+          </Animated.ScrollView>
+        </PullToRefresh>
         <ScrollEdge y={scrollY} />
       </GlassTarget>
     </View>
