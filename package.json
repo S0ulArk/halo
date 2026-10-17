@@ -1,6 +1,6 @@
 {
   "name": "pulse",
-  "version": "1.25.1",
+  "version": "1.25.2",
   "main": "index.ts",
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.71",
@@ -59,6 +59,7 @@
     "@vitest/coverage-v8": "^5.0.3",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.2",
+    "patch-package": "^8.0.0",
     "typescript": "~6.0.3",
     "vite": "^8.3.3",
     "vitest": "^5.0.3"
@@ -74,7 +75,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "expo lint",
-    "build:apk:bump": "scripts/build-apk.sh --bump"
+    "build:apk:bump": "scripts/build-apk.sh --bump",
+    "postinstall": "patch-package"
   },
   "private": true,
   "reanimated": {

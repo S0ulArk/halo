@@ -7,7 +7,7 @@
 // (it slides in with the screen; a second motion on top would compete with the push for frames).
 import * as React from "react";
 import { useWindowDimensions, View, type StyleProp, type ViewStyle } from "react-native";
-import Animated, { measure, useAnimatedReaction, useAnimatedRef, useAnimatedStyle, useScrollOffset, useSharedValue, withDelay, withTiming, type SharedValue } from "react-native-reanimated";
+import Animated, { measure, runOnJS, useAnimatedReaction, useAnimatedRef, useAnimatedStyle, useScrollOffset, useSharedValue, withDelay, withTiming, type SharedValue } from "react-native-reanimated";
 import { useAfterTransition } from "@/ui/components/AfterTransition";
 import { REASE } from "./easing";
 import { reduceMotionNow } from "./system";
@@ -32,6 +32,9 @@ export function Rise({ index = 0, style, children }: { index?: number; style?: S
   const p = useSharedValue(still ? 1 : 0);
   const laid = useSharedValue(0);
   const done = useSharedValue(still);
+  // While it moves, the block is one GPU texture (drawn once, then only faded and slid), as Android's
+  // View.animate().withLayer() does; the layer goes when it lands, so later changes inside draw normally.
+  const [layer, setLayer] = React.useState(!still);
   useAnimatedReaction(
     () => (scroll ? scroll.value : 0) + laid.value * 0.0001,
     () => {
@@ -44,13 +47,18 @@ export function Rise({ index = 0, style, children }: { index?: number; style?: S
       done.value = true;
       // On open the sections cascade; one that scrolls in later rises at once.
       const late = !!scroll && scroll.value > 4;
-      p.value = withDelay(late ? 0 : Math.min(index, RISE_STEPS) * RISE_STEP, withTiming(1, { duration: RISE_MS, easing: REASE.outExpo }));
+      p.value = withDelay(
+        late ? 0 : Math.min(index, RISE_STEPS) * RISE_STEP,
+        withTiming(1, { duration: RISE_MS, easing: REASE.outExpo }, (finished) => {
+          if (finished) runOnJS(setLayer)(false);
+        }),
+      );
     },
   );
   const anim = useAnimatedStyle(() => ({ opacity: p.value, transform: [{ translateY: (1 - p.value) * RISE_PX }] }));
   if (still) return <View style={style}>{children}</View>;
   return (
-    <Animated.View ref={ref} onLayout={() => laid.set(1)} style={[style, anim]}>
+    <Animated.View ref={ref} onLayout={() => laid.set(1)} renderToHardwareTextureAndroid={layer} style={[style, anim]}>
       {children}
     </Animated.View>
   );

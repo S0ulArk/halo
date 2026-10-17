@@ -1,0 +1,39 @@
+diff --git a/node_modules/react-native-reanimated/android/src/main/java/com/swmansion/reanimated/NativeProxy.kt b/node_modules/react-native-reanimated/android/src/main/java/com/swmansion/reanimated/NativeProxy.kt
+index 48e3771..eaea026 100644
+--- a/node_modules/react-native-reanimated/android/src/main/java/com/swmansion/reanimated/NativeProxy.kt
++++ b/node_modules/react-native-reanimated/android/src/main/java/com/swmansion/reanimated/NativeProxy.kt
+@@ -245,6 +245,14 @@ open class NativeProxy {
+             }.apply { isAccessible = true }
+     }
+ 
++    // Halo patch: an animation can outlive its view by a frame or two (a screen closing) or run a frame before the view
++    // is mounted (a screen opening). Updating such a view threw, and logging each failure with its stack trace on every
++    // frame (about 100 a frame on a busy screen) froze the app for seconds. Skip views that aren't mounted, quietly.
++    private val surfaceManagerForViewMethod by lazy {
++        mountingManager.javaClass.methods.firstOrNull { it.name == "getSurfaceManagerForView" && it.parameterTypes.size == 1 }
++    }
++    private var loggedSyncPropsFailure = false
++
+     @DoNotStrip
+     fun synchronouslyUpdateUIProps(
+         intBuffer: IntArray,
+@@ -253,9 +261,17 @@ open class NativeProxy {
+         SynchronousPropsBufferParser.parse(intBuffer, doubleBuffer) { viewTag, props ->
+             if (BuildConfig.IS_REACT_NATIVE_86_OR_NEWER) {
+                 try {
+-                    updatePropsSynchronouslyMethod.invoke(mountingManager, viewTag, props)
++                    val surface = surfaceManagerForViewMethod?.invoke(mountingManager, viewTag)
++                    if (surfaceManagerForViewMethod == null || surface != null) {
++                        updatePropsSynchronouslyMethod.invoke(mountingManager, viewTag, props)
++                    }
+                 } catch (e: Exception) {
+-                    Log.w("Reanimated", "synchronouslyUpdateUIProps failed for tag $viewTag", e)
++                    val cause = (e as? java.lang.reflect.InvocationTargetException)?.targetException ?: e
++                    // RetryableMountingLayerException is internal to React Native: match it by name.
++                    if (cause.javaClass.simpleName != "RetryableMountingLayerException" && !loggedSyncPropsFailure) {
++                        loggedSyncPropsFailure = true
++                        Log.w("Reanimated", "synchronouslyUpdateUIProps failed for tag $viewTag", e)
++                    }
+                 }
+             } else {
+                 mFabricUIManager.synchronouslyUpdateViewOnUIThread(viewTag, props)

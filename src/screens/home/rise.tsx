@@ -9,7 +9,7 @@
 // block under Reduce motion, shows at once.
 import * as React from "react";
 import { useWindowDimensions, View, type StyleProp, type ViewStyle } from "react-native";
-import Animated, { measure, useAnimatedReaction, useAnimatedRef, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from "react-native-reanimated";
+import Animated, { measure, runOnJS, useAnimatedReaction, useAnimatedRef, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from "react-native-reanimated";
 import { useAfterTransition } from "@/ui/components/AfterTransition";
 import { REASE } from "@/ui/motion/easing";
 import { RevealScroll } from "@/ui/motion/Rise";
@@ -37,6 +37,8 @@ export function Rise({ index = 0, style, children }: { index?: number; style?: S
   const lift = useSharedValue(still ? 0 : RISE_DP);
   const laid = useSharedValue(0);
   const done = useSharedValue(still);
+  // One GPU texture while it moves (drawn once, then only faded and slid); dropped when the lift settles.
+  const [layer, setLayer] = React.useState(!still);
   useAnimatedReaction(
     () => (scroll ? scroll.value : 0) + laid.value * 0.0001,
     () => {
@@ -50,13 +52,18 @@ export function Rise({ index = 0, style, children }: { index?: number; style?: S
       // On open the blocks cascade; one that scrolls in later rises at once.
       const delay = scroll && scroll.value > 4 ? 0 : Math.min(index, STEPS) * STEP_MS;
       fade.value = withDelay(delay, withTiming(1, { duration: FADE_MS, easing: REASE.outCubic }));
-      lift.value = withDelay(delay, withSpring(0, LIFT));
+      lift.value = withDelay(
+        delay,
+        withSpring(0, LIFT, (finished) => {
+          if (finished) runOnJS(setLayer)(false);
+        }),
+      );
     },
   );
   const anim = useAnimatedStyle(() => ({ opacity: fade.value, transform: [{ translateY: lift.value }] }));
   if (still) return <View style={style}>{children}</View>;
   return (
-    <Animated.View ref={ref} onLayout={() => laid.set(1)} style={[style, anim]}>
+    <Animated.View ref={ref} onLayout={() => laid.set(1)} renderToHardwareTextureAndroid={layer} style={[style, anim]}>
       {children}
     </Animated.View>
   );

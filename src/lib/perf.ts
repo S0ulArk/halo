@@ -3,7 +3,9 @@
 // stretch the JS thread was blocked for more than 60 ms. Read with `adb logcat | grep PulsePerf`; switch off with ON.
 import { AppState } from "react-native";
 
-const ON = true;
+// Off: the measurements are done (frame timings now come from `adb shell dumpsys gfxinfo`), and the 100 ms lag
+// monitor woke the JS thread ten times a second for nothing.
+const ON = false;
 const T0 = Date.now();
 
 export function perf(event: string, ...detail: unknown[]) {
