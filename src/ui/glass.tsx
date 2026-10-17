@@ -11,6 +11,7 @@
 // while nothing moves). Keep glass to small chrome: the tab bar, round buttons, pills, a segmented control's thumb.
 // Android 12 gets a plain blur; older phones and anything off the GPU get the stand-in.
 import * as React from "react";
+import { perfFlags } from "@/lib/perfFlags";
 import { findNodeHandle, processColor, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { NativeGlassTarget, NativeGlassView } from "../../modules/halo-glass";
 import { alpha } from "@/lib/utils";
@@ -126,6 +127,8 @@ export function LiquidGlass({
 }: LiquidGlassProps) {
   const { scheme } = useTheme();
   const target = React.useContext(Backdrop);
+  const perf = perfFlags();
+  const live = backdrop && perf.liveGlass;
   const t = tint ?? (scheme === "dark" ? "dark" : "light");
   const preset = isPreset(t) ? PRESETS[t] : null;
   const color = preset ? preset.color : t;
@@ -133,7 +136,7 @@ export function LiquidGlass({
   const dark = t === "dark" || (t !== "light" && scheme === "dark");
   const tintColor = React.useMemo(() => (processColor(color) as number | null | undefined) ?? 0, [color]);
   const radius = cornerRadius ?? 9999;
-  const lift = shadow === true ? SHADOW[dark ? "dark" : "light"] : shadow || undefined;
+  const lift = !perf.glassShadow ? undefined : shadow === true ? SHADOW[dark ? "dark" : "light"] : shadow || undefined;
   const Glass = NativeGlassView;
   return (
     <View pointerEvents={pointerEvents} style={[{ borderRadius: radius }, lift ? { boxShadow: lift } : null, style]}>
@@ -141,15 +144,15 @@ export function LiquidGlass({
         <Glass
           pointerEvents="none"
           style={StyleSheet.absoluteFill}
-          targetId={backdrop ? target : null}
+          targetId={live ? target : null}
           cornerRadius={cornerRadius ?? -1}
           tintColor={tintColor}
-          frost={amount}
+          frost={live ? amount : Math.max(amount, STAND_IN)}
           refraction={refraction}
           blurRadius={blurRadius}
           saturation={saturation}
           dark={dark}
-          backdrop={backdrop}
+          backdrop={live}
         />
       ) : (
         <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, backgroundColor: alpha(color, backdrop ? Math.max(amount, STAND_IN) : amount) }]} />

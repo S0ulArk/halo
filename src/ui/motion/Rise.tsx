@@ -6,6 +6,7 @@
 // What never animates: anything under reduce motion, and a block that mounts while its screen is still being pushed
 // (it slides in with the screen; a second motion on top would compete with the push for frames).
 import * as React from "react";
+import { perfFlags } from "@/lib/perfFlags";
 import { useWindowDimensions, View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { measure, runOnJS, useAnimatedReaction, useAnimatedRef, useAnimatedStyle, useScrollOffset, useSharedValue, withDelay, withTiming, type SharedValue } from "react-native-reanimated";
 import { useAfterTransition } from "@/ui/components/AfterTransition";
@@ -58,7 +59,7 @@ export function Rise({ index = 0, style, children }: { index?: number; style?: S
   const anim = useAnimatedStyle(() => ({ opacity: p.value, transform: [{ translateY: (1 - p.value) * RISE_PX }] }));
   if (still) return <View style={style}>{children}</View>;
   return (
-    <Animated.View ref={ref} onLayout={() => laid.set(1)} renderToHardwareTextureAndroid={layer} style={[style, anim]}>
+    <Animated.View ref={ref} onLayout={() => laid.set(1)} renderToHardwareTextureAndroid={layer && perfFlags().riseLayer} style={[style, anim]}>
       {children}
     </Animated.View>
   );

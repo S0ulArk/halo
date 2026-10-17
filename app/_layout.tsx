@@ -18,6 +18,7 @@ import { AppProvider, useApp } from "@/state/app";
 import { ScreenTransition } from "@/state/transition";
 import { CoverableContent, OverlayHost } from "@/ui/components/Overlay";
 import { UpdatePrompt } from "@/update/UpdatePrompt";
+import { usePerfVersion } from "@/lib/perfFlags";
 import { useAppFonts } from "@/ui/fonts";
 import { ThemeProvider, useTheme } from "@/ui/ThemeProvider";
 
@@ -140,6 +141,7 @@ function Gate() {
     [c.background],
   );
 
+  const perfVersion = usePerfVersion();
   const fatal = app.status === "error" && !app.profile;
   const covered = app.status === "booting" || fatal;
 
@@ -148,7 +150,8 @@ function Gate() {
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
       {/* Every screen learns when its push transition has ended (useAfterTransition): charts and queries wait for it. */}
       <CoverableContent>
-        <Stack screenOptions={screenOptions} screenLayout={screenLayout}>
+        {/* Keyed on the perf switches (src/lib/perfFlags.ts): a measurement run redraws every screen with them. */}
+        <Stack key={perfVersion} screenOptions={screenOptions} screenLayout={screenLayout}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen
             name="onboarding/profile"

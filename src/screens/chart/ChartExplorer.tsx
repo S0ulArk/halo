@@ -98,7 +98,8 @@ function paintOf(colorBy: SeriesColor, c: Tokens, k: CalmPalette, metric: string
   }
   if (colorBy === "zones") {
     const bands = zoneBands(zones.map((z) => ({ zone: z.zone, label: z.label, min: z.min, max: z.max })), c);
-    return { line: k.sub, bands: zones.length ? bands : null, barColors: [c.heart], group: () => 0, point: (v) => (zones.length ? bandColor(v, bands) : c.heart) };
+    // The line in heart pink (its zone gradient on top when the day has zones): grey read as "no data" full screen.
+    return { line: c.heart, bands: zones.length ? bands : null, barColors: [c.heart], group: () => 0, point: (v) => (zones.length ? bandColor(v, bands) : c.heart) };
   }
   const family = accentFamily(metric);
   const line = view === "sleep" || colorBy === "sleep" ? k.tintInk.lavender : colorBy === "strain" ? k.tintInk.peach : k.tintInk[family ? FAMILY_TINT[family] : "sky"];

@@ -5,12 +5,41 @@
 // shows the coach there to people with coach access), else the one check-in sheet, mounted here for every screen (the
 // web mounts it in the app layout).
 import * as React from "react";
+import { InteractionManager } from "react-native";
 import { Tabs, useRouter, type Href } from "expo-router";
 import { useHasCoachKey } from "@/coach/session";
 import { CheckInSheetHost, useCheckInAction } from "@/screens/journal/CheckInSheet";
 import { GlassTarget } from "@/ui/glass";
 import { TabBarFade } from "@/ui/components/TabBar";
 import { FloatingTabBar, TabBarBridge } from "@/ui/components/TabBarHost";
+
+/**
+ * Builds the other three tabs in the background once Today has settled, one at a time, so the first switch to each is
+ * instant (a tab otherwise builds its whole screen at the moment it is tapped, which ate the cross-fade). A prebuilt tab
+ * is then frozen like any tab out of view (freezeOnBlur), so it costs nothing until it is shown.
+ */
+function TabPreloader() {
+  const router = useRouter();
+  React.useEffect(() => {
+    let cancelled = false;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const task = InteractionManager.runAfterInteractions(() => {
+      (["/tab-sleep", "/tab-activity", "/health"] as const).forEach((href, i) => {
+        timers.push(
+          setTimeout(() => {
+            if (!cancelled) router.prefetch(href as Href);
+          }, 1500 + i * 900),
+        );
+      });
+    });
+    return () => {
+      cancelled = true;
+      task.cancel();
+      timers.forEach(clearTimeout);
+    };
+  }, [router]);
+  return null;
+}
 
 export default function TabsLayout() {
   const router = useRouter();
@@ -41,6 +70,7 @@ export default function TabsLayout() {
         <TabBarFade />
       </GlassTarget>
       <CheckInSheetHost />
+      <TabPreloader />
     </>
   );
 }

@@ -8,6 +8,7 @@
 // opacity and a transform animate, never layout. A block that mounts while its screen is still being pushed, and every
 // block under Reduce motion, shows at once.
 import * as React from "react";
+import { perfFlags } from "@/lib/perfFlags";
 import { useWindowDimensions, View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { measure, runOnJS, useAnimatedReaction, useAnimatedRef, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from "react-native-reanimated";
 import { useAfterTransition } from "@/ui/components/AfterTransition";
@@ -63,7 +64,7 @@ export function Rise({ index = 0, style, children }: { index?: number; style?: S
   const anim = useAnimatedStyle(() => ({ opacity: fade.value, transform: [{ translateY: lift.value }] }));
   if (still) return <View style={style}>{children}</View>;
   return (
-    <Animated.View ref={ref} onLayout={() => laid.set(1)} renderToHardwareTextureAndroid={layer} style={[style, anim]}>
+    <Animated.View ref={ref} onLayout={() => laid.set(1)} renderToHardwareTextureAndroid={layer && perfFlags().riseLayer} style={[style, anim]}>
       {children}
     </Animated.View>
   );
