@@ -1,5 +1,6 @@
-// Heart rate `/health/heart-rate?d=`, ported from Pulse's health/heart-rate/page.tsx, LiveHeartRate.tsx and loading.tsx:
-// the latest reading (today) or the day's average, the day's minutes and time in zones.
+// Heart rate `/health/heart-rate?d=`, ported from Pulse's health/heart-rate/page.tsx, LiveHeartRate.tsx and loading.tsx,
+// as an Apple Health detail page: the latest reading (today) or the day's average large, rolling into place, with the
+// day's range, average and resting rate under it, then the day's minutes and time in zones.
 //
 // The web polls its server every minute while today is on screen. The phone has no server to poll, but the app state's
 // foreground ticker reads the last few minutes of heart rate from Health Connect every minute (src/health/live.ts) and
@@ -24,7 +25,9 @@ import { useLiveBle, useLiveBleControl } from "@/state/liveBle";
 import { HeartPulse } from "lucide-react-native";
 import { IntradayHrChart, SectionShell, SkeletonText, useTheme, ZONE_COLOR, ZoneBars, type HrSeries } from "@/ui";
 import { useCalm } from "@/ui/calm";
-import { CalmCard, Caption, Num, Sentence } from "@/screens/detail/calmKit";
+import { Caption, Num, Sentence } from "@/screens/detail/calmKit";
+import { Card } from "@/ui/components/Card";
+import { CardHead, RollingValue } from "./kit";
 import { IntradayHrChartSkeleton } from "@/ui/components/IntradayHrChart";
 import { ZoneBarsSkeleton } from "@/ui/components/ZoneBars";
 import { DetailScreen, LoadError } from "@/screens/detail/DetailScreen";
@@ -38,14 +41,14 @@ import { useOpenChart } from "@/screens/chart/href";
 
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
-/** The stats under the reading: three columns (range, average, resting) today, two on a past day, each a number with its label under it. */
+/** Two stats a row (range, average, resting today; range and resting on a past day), each a number with its label under it. */
 function StatGrid({ stats }: { stats: { label: string; value: string | null; spoken: string }[] }) {
   const c = useCalm();
   return (
-    <View style={{ width: "100%", flexDirection: "row", gap: 12 }}>
+    <View style={{ width: "100%", flexDirection: "row", flexWrap: "wrap", rowGap: 12, paddingTop: 12, borderTopWidth: 0.5, borderTopColor: c.line }}>
       {stats.map((s) => (
-        <View key={s.label} accessible accessibilityLabel={`${s.label}: ${s.spoken}${/\d/.test(s.spoken) ? " beats per minute" : ""}`} style={{ flex: 1, minWidth: 0 }}>
-          {s.value === null ? <SkeletonText role="value" chars={4} /> : <Num value={s.value} size={22} color={s.value === MISSING ? c.faint : c.ink} />}
+        <View key={s.label} accessible accessibilityLabel={`${s.label}: ${s.spoken}${/\d/.test(s.spoken) ? " beats per minute" : ""}`} style={{ width: "50%", paddingRight: 12 }}>
+          {s.value === null ? <SkeletonText role="value" chars={4} /> : <Num value={s.value} unit={s.value === MISSING ? undefined : "bpm"} size={22} color={s.value === MISSING ? c.faint : c.ink} />}
           <Caption style={{ marginTop: 4 }}>{s.label}</Caption>
         </View>
       ))}
@@ -106,68 +109,76 @@ function LiveHero({ vm, zoneSet }: { vm: HeartRateVM | undefined; zoneSet: HrZon
     { label: "Of max", value: ofMax === null ? MISSING : `${ofMax}%`, color: undefined, caption: `Max ${zoneSet.maxHR} bpm`, spoken: ofMax === null ? "unknown" : `${ofMax} percent of max heart rate ${zoneSet.maxHR}` },
   ];
   return (
-    <CalmCard tint="rose" icon={HeartPulse} title="Live heart rate" style={{ alignSelf: "stretch" }}>
-      <View style={{ gap: 10 }}>
-        <View
-          style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
-          accessible
-          accessibilityLabel={`${lost ? "Reconnecting. Last live reading" : "Live heart rate"} ${bpm ?? "unknown"} beats per minute${live.device?.name ? ` from ${live.device.name}` : ""}`}
-        >
-          <BeatingHeart bpm={bpm ?? 60} live={!lost} color={calm.tintInk.rose} size={30} />
-          <Num value={bpm === null ? MISSING : String(bpm)} unit="bpm" size={64} color={lost ? calm.faint : calm.tintInk.rose} />
-        </View>
-        <LivePill name={live.device?.name ?? null} lost={lost} />
-        {live.contact === false && <Sentence color={calm.tintInk.rose}>No skin contact: wear the band snug.</Sentence>}
-      </View>
-      <LiveTrace history={live.history} height={88} />
-      <View style={{ flexDirection: "row", gap: 12 }}>
-        {cells.map((s) => (
-          <View key={s.label} accessible accessibilityLabel={`${s.label}: ${s.spoken}`} style={{ flex: 1, minWidth: 0 }}>
-            <Num value={s.value} size={22} color={s.color ?? calm.ink} />
-            <Caption style={{ marginTop: 4 }}>{s.label}</Caption>
-            {!!s.caption && (
-              <View style={{ marginTop: 2 }}>
-                <Sentence size={13}>{s.caption}</Sentence>
-              </View>
-            )}
+    <Card style={{ alignSelf: "stretch" }}>
+      <View style={{ gap: 16 }}>
+        <CardHead tint="rose" icon={HeartPulse} title="Live heart rate" />
+        <View style={{ gap: 10 }}>
+          <View
+            style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
+            accessible
+            accessibilityLabel={`${lost ? "Reconnecting. Last live reading" : "Live heart rate"} ${bpm ?? "unknown"} beats per minute${live.device?.name ? ` from ${live.device.name}` : ""}`}
+          >
+            <BeatingHeart bpm={bpm ?? 60} live={!lost} color={calm.tintInk.rose} size={30} />
+            <Num value={bpm === null ? MISSING : String(bpm)} unit="bpm" size={56} color={lost ? calm.faint : calm.ink} />
           </View>
-        ))}
+          <LivePill name={live.device?.name ?? null} lost={lost} />
+          {live.contact === false && <Sentence color={calm.tintInk.rose}>No skin contact: wear the band snug.</Sentence>}
+        </View>
+        <LiveTrace history={live.history} height={88} />
+        <View style={{ flexDirection: "row", flexWrap: "wrap", rowGap: 12 }}>
+          {cells.map((s) => (
+            <View key={s.label} accessible accessibilityLabel={`${s.label}: ${s.spoken}`} style={{ width: "50%", paddingRight: 12 }}>
+              <Num value={s.value} size={22} color={s.color ?? calm.ink} />
+              <Caption style={{ marginTop: 4 }}>{s.label}</Caption>
+              {!!s.caption && (
+                <View style={{ marginTop: 2 }}>
+                  <Sentence size={13}>{s.caption}</Sentence>
+                </View>
+              )}
+            </View>
+          ))}
+        </View>
+        {vm && <StatGrid stats={dayStats(vm)} />}
       </View>
-      {vm && <StatGrid stats={dayStats(vm)} />}
-    </CalmCard>
+    </Card>
   );
 }
 
-/** The lead card in the heart pastel: the latest reading (today) or the day's average (a past day), over the day's range, average and resting HR. */
+/** The hero: the latest reading (today) or the day's average (a past day) rolling into place, over the day's range, average and resting HR. */
 function Hero({ vm, onGoLive }: { vm: HeartRateVM; onGoLive: () => void }) {
-  const c = useCalm();
   const bpms = vm.points.flatMap((p) => (p.v === null ? [] : [p.v]));
   const avg = bpms.length ? Math.round(mean(bpms)) : null;
   const big = vm.isToday ? (vm.latest?.bpm ?? null) : avg;
   const stats = dayStats(vm);
   return (
-    <CalmCard tint="rose" icon={HeartPulse} title={vm.isToday ? "Latest reading" : "Day average"} style={{ alignSelf: "stretch" }}>
-      <View style={{ gap: 8 }}>
-        <View accessible accessibilityLabel={big === null ? "No reading" : `${big} beats per minute`}>
-          <Num value={big === null ? MISSING : String(big)} unit="bpm" size={64} color={big === null ? c.faint : c.tintInk.rose} />
+    <Card style={{ alignSelf: "stretch" }}>
+      <View style={{ gap: 16 }}>
+        <CardHead tint="rose" icon={HeartPulse} title={vm.isToday ? "Latest reading" : "Day average"} />
+        <View style={{ gap: 8 }}>
+          <View accessible accessibilityLabel={big === null ? "No reading" : `${big} beats per minute`}>
+            <RollingValue value={big === null ? null : String(big)} unit="bpm" size={56} />
+          </View>
+          {vm.isToday ? vm.latest ? <LastReading t={vm.latest.t} /> : <Sentence size={13}>No readings yet today</Sentence> : <Sentence size={13}>{avg === null ? "No readings on this day" : "Day average"}</Sentence>}
+          {vm.isToday && <GoLiveButton onPress={onGoLive} style={{ alignSelf: "flex-start", marginTop: 4 }} />}
         </View>
-        {vm.isToday ? vm.latest ? <LastReading t={vm.latest.t} /> : <Sentence size={13}>No readings yet today</Sentence> : <Sentence size={13}>{avg === null ? "No readings on this day" : "Day average"}</Sentence>}
-        {vm.isToday && <GoLiveButton onPress={onGoLive} style={{ alignSelf: "flex-start", marginTop: 4 }} />}
+        <StatGrid stats={stats} />
       </View>
-      <StatGrid stats={stats} />
-    </CalmCard>
+    </Card>
   );
 }
 
 function HeroSkeleton() {
   return (
-    <CalmCard tint="rose" icon={HeartPulse} title="Latest reading" style={{ alignSelf: "stretch" }}>
-      <View importantForAccessibility="no-hide-descendants" style={{ gap: 8 }}>
-        <SkeletonText role="value" size={64} lineHeight={72} chars={3} />
-        <SkeletonText role="caption" width={112} />
+    <Card style={{ alignSelf: "stretch" }}>
+      <View style={{ gap: 16 }}>
+        <CardHead tint="rose" icon={HeartPulse} title="Latest reading" />
+        <View importantForAccessibility="no-hide-descendants" style={{ gap: 8 }}>
+          <SkeletonText role="value" size={56} lineHeight={64} chars={3} />
+          <SkeletonText role="caption" width={112} />
+        </View>
+        <StatGrid stats={["Range", "Average", "Resting"].map((label) => ({ label, value: null, spoken: "" }))} />
       </View>
-      <StatGrid stats={["Range", "Average", "Resting"].map((label) => ({ label, value: null, spoken: "" }))} />
-    </CalmCard>
+    </Card>
   );
 }
 

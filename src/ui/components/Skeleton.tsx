@@ -1,41 +1,54 @@
+// Loading bars (spec §5.19): skeletons reuse the component's own box; these are only the bars inside it, in iOS's quiet
+// separator grey, breathing gently while something loads. Every bar on screen reads one shared value that one
+// Reanimated loop drives on the UI thread, started by the first bar to mount and stopped with the last; under Reduce
+// motion the bars hold still.
 import * as React from "react";
-import { Animated, Easing, View, type StyleProp, type ViewStyle } from "react-native";
+import { View, type StyleProp, type ViewStyle } from "react-native";
+import Animated, { cancelAnimation, Easing, makeMutable, useAnimatedStyle, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import { useCalm } from "@/ui/calm";
+import { reduceMotionNow, useReduceMotion } from "@/ui/motion/system";
 import { ROLES, type TextRole } from "./Text";
 
-// Skeletons reuse the component's own box (spec §5.19); these are only the bars inside it.
-
-const pulse = new Animated.Value(1);
-// One shared loop (native driver) while any skeleton is on screen, stopped when the last one goes: a loop left running
-// with nothing to draw still wakes the UI thread every frame.
+/** The bars' shared opacity: 1 → 0.5 → 1 every two seconds while any bar is mounted and motion is allowed. */
+const pulse = makeMutable(1);
 let mounted = 0;
-let loop: Animated.CompositeAnimation | null = null;
-function usePulse() {
-  React.useEffect(() => {
-    if (mounted++ === 0) {
-      pulse.setValue(1);
-      loop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulse, { toValue: 0.5, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-          Animated.timing(pulse, { toValue: 1, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        ]),
-      );
-      loop.start();
-    }
-    return () => {
-      if (--mounted === 0) {
-        loop?.stop();
-        loop = null;
-      }
-    };
-  }, []);
+let running = false;
+const BREATH = { duration: 1000, easing: Easing.inOut(Easing.ease) };
+
+/** Starts the loop when a bar is on screen and motion is allowed, and stops it (bars at full) otherwise. */
+function sync() {
+  const want = mounted > 0 && !reduceMotionNow();
+  if (want === running) return;
+  running = want;
+  if (want) {
+    pulse.set(1);
+    pulse.set(withRepeat(withSequence(withTiming(0.5, BREATH), withTiming(1, BREATH)), -1, false));
+  } else {
+    cancelAnimation(pulse);
+    pulse.set(1);
+  }
 }
 
-/** A pulsing bar in the Calm hairline grey (`calm.line`). Give it a size; the default radius is 8. */
+function usePulse() {
+  const reduce = useReduceMotion();
+  React.useEffect(() => {
+    mounted++;
+    sync();
+    return () => {
+      mounted--;
+      sync();
+    };
+  }, []);
+  // Reduce motion turned on or off while bars are showing.
+  React.useEffect(sync, [reduce]);
+}
+
+/** A breathing bar in the separator grey (`calm.line`). Give it a size; the default radius is 8. */
 export function Skeleton({ style, radius = 8 }: { style?: StyleProp<ViewStyle>; radius?: number }) {
   const c = useCalm();
   usePulse();
-  return <Animated.View style={[{ backgroundColor: c.line, borderRadius: radius, opacity: pulse }, style]} />;
+  const breathe = useAnimatedStyle(() => ({ opacity: pulse.value }));
+  return <Animated.View style={[{ backgroundColor: c.line, borderRadius: radius }, style, breathe]} />;
 }
 
 /**

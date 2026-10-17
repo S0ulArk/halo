@@ -63,7 +63,7 @@ export function MetricSheet({
         groups.map(({ group, metrics }, i) => {
           const on = group === expanded;
           return (
-            <View key={group} style={{ borderBottomWidth: i < groups.length - 1 ? 1 : 0, borderBottomColor: c.line }}>
+            <View key={group} style={{ borderBottomWidth: i < groups.length - 1 ? 0.5 : 0, borderBottomColor: c.line }}>
               <Pressable
                 onPress={() => setExpanded(group)}
                 accessibilityRole="button"
@@ -77,7 +77,7 @@ export function MetricSheet({
                   <Txt size={15} lineHeight={20} style={[font.numeric(600), { color: c.sub }]}>
                     {String(metrics.length)}
                   </Txt>
-                  <ChevronDown size={20} color={c.label} strokeWidth={1.5} style={{ transform: [{ rotate: on ? "180deg" : "0deg" }] }} />
+                  <ChevronDown size={20} color={c.tertiary} strokeWidth={2} style={{ transform: [{ rotate: on ? "180deg" : "0deg" }] }} />
                 </View>
               </Pressable>
               {on && (

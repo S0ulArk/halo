@@ -55,10 +55,10 @@ function usePullRefresh() {
   return <RefreshControl refreshing={refreshing} onRefresh={onRefresh} progressViewOffset={top} tintColor={c.foregroundSecondary} colors={[c.primary]} progressBackgroundColor={c.card} />;
 }
 
-/** Back to wherever the screen was opened from; a deep link with no history lands on Home. */
-export function useBack() {
+/** Back to wherever the screen was opened from; a deep link with no history lands on `fallback` (Home). */
+export function useBack(fallback = "/") {
   const router = useRouter();
-  return React.useCallback(() => (router.canGoBack() ? router.back() : router.replace("/" as Href)), [router]);
+  return React.useCallback(() => (router.canGoBack() ? router.back() : router.replace(fallback as Href)), [router, fallback]);
 }
 
 /** Pushes a route built at run time (dayHref, metricHref): typed routes only know literal paths. */
@@ -107,9 +107,11 @@ function HeaderSync() {
   );
 }
 
-/** A tab root (the kit's PageShell, stack layout) with the sync status and pull-to-refresh. */
-/** A tab root's page: its title, the avatar on the left (to More) or, for a page off the bar, the way back. */
-export function TabShell({ title, lead, onBack, children }: { title: string; lead?: React.ReactNode; onBack?: () => void; children: React.ReactNode }) {
+/**
+ * A tab root's page (the kit's large-title layout) with the sync status and pull-to-refresh: its title, the avatar on the
+ * left (to More) or, for a page off the bar, the way back. Each child rises into place in turn, `gap` px apart.
+ */
+export function TabShell({ title, lead, onBack, gap = 32, children }: { title: string; lead?: React.ReactNode; onBack?: () => void; gap?: number; children: React.ReactNode }) {
   const { c } = useTheme();
   const refreshControl = usePullRefresh();
   const clearance = useBottomClearance("tabs");
@@ -128,7 +130,7 @@ export function TabShell({ title, lead, onBack, children }: { title: string; lea
         <Animated.ScrollView ref={setRef} refreshControl={refreshControl} scrollEventThrottle={16} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: top, paddingBottom: clearance }} contentInsetAdjustmentBehavior="never">
           <LargeTitle title={title} y={revealY} />
           <RevealScroll.Provider value={revealY}>
-            <View style={{ gap: 32 }}>
+            <View style={{ gap }}>
               <RiseEach>{children}</RiseEach>
             </View>
           </RevealScroll.Provider>
@@ -140,7 +142,11 @@ export function TabShell({ title, lead, onBack, children }: { title: string; lea
 
 export type DetailScreenProps = {
   title: string;
+  /** A grey line under the large title ("Next update in 3 days"). */
+  subtitle?: string;
   info?: InfoContent;
+  /** Where Back goes when the screen was opened by a deep link with no history (default Home). */
+  backTo?: string;
   /** The bare day row under the header (Monitor, Stress, metric detail). */
   dateSwitcher?: DateSwitcherProps;
   hero?: React.ReactNode;
@@ -152,9 +158,9 @@ export type DetailScreenProps = {
 };
 
 /** A detail route (the kit's DetailShell: hero, summary or insight, primary, secondary, footer) with pull-to-refresh. */
-export function DetailScreen({ title, info, dateSwitcher, hero, summary, insight, primary, secondary, footer }: DetailScreenProps) {
+export function DetailScreen({ title, subtitle, info, backTo, dateSwitcher, hero, summary, insight, primary, secondary, footer }: DetailScreenProps) {
   const { c } = useTheme();
-  const onBack = useBack();
+  const onBack = useBack(backTo);
   const refreshControl = usePullRefresh();
   const side = summary || (hero ? insight : null);
   // The slide runs over the hero and its summary alone; everything under them mounts once the screen has opened.
@@ -168,8 +174,8 @@ export function DetailScreen({ title, info, dateSwitcher, hero, summary, insight
       <Ground />
       <GlassTarget style={{ flex: 1 }} overlay={<DetailHeader title={title} info={info} onBack={onBack} scrollY={revealY} />}>
         <Animated.ScrollView ref={setRef} refreshControl={refreshControl} scrollEventThrottle={16} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: top, paddingBottom: clearance }} contentInsetAdjustmentBehavior="never">
-          {/* The large title, with the day under it (Monitor, Stress, metric detail). */}
-          <DetailLargeTitle title={title} dateTitle={dateSwitcher} y={revealY} />
+          {/* The large title, its subtitle and the day under them (Monitor, Stress, Halo Age, metric detail). */}
+          <DetailLargeTitle title={title} subtitle={subtitle} dateTitle={dateSwitcher} y={revealY} />
           <RevealScroll.Provider value={revealY}>
             {/* One column of cards 14 px apart, the hero a card the width of the column; each block rises into place (a block
                 mounting mid-push slides in with the screen instead). */}

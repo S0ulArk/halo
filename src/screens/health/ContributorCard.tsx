@@ -1,18 +1,21 @@
-// One Healthspan group card ("Sleep", "Strain", "Fitness"), ported from Pulse's health/healthspan/ContributorCard.tsx:
-// each row opens its contributor sheet (journey 5). The web deep-links the sheet with `?contributor=`; here the card
-// holds it, and Back closes it. Calm: one grouped list per card; each row's years ("+0.5 y") in rose when they add
-// to your Pulse Age and mint when they take years off.
+// One Healthspan group ("Sleep", "Strain", "Fitness") as an iOS grouped list under its caps header, the design's "What
+// moves it" (ported from Pulse's health/healthspan/ContributorCard.tsx): each input a row with its coloured icon square,
+// its name, its value and the target for your age under it, the years it adds or takes off on the right (red when it
+// adds years, green when it takes them off) and a thin chevron. A row opens the input's sheet (journey 5; the web
+// deep-links it with `?contributor=`, here the list holds it and Back closes it): the value large, where it sits between
+// its ends and the target, the years in words, what it means and where the evidence comes from.
 import * as React from "react";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 import { CircleGauge, Dumbbell, Footprints, Heart, Moon, PersonStanding, Timer, type LucideIcon } from "lucide-react-native";
 import { formatValue, isSymbolUnit, NBSP, spoken, type FormatKey } from "@/lib/format";
 import { alpha } from "@/lib/utils";
 import type { HealthspanContributor } from "@/queries";
-import { BottomSheet, MetricTags, SectionShell, Skeleton, SkeletonText } from "@/ui";
+import { BottomSheet, MetricTags, Skeleton, SkeletonText, Txt } from "@/ui";
 import { useCalm, type CalmTint } from "@/ui/calm";
-import { ChevronSlot, onBand } from "@/ui/components/calmKit";
 import { RangeTrack } from "@/ui/components/Meter";
-import { Grouped, IconTile, Num, Sentence, Title } from "@/screens/detail/calmKit";
+import { font } from "@/ui/fonts";
+import { Num, Sentence } from "@/screens/detail/calmKit";
+import { GroupList, Hairline, LIST_RADIUS, SectionLabel, type GroupRowProps } from "@/screens/settings/calmKit";
 
 const ICON: Record<string, LucideIcon> = {
   sleepHours: Moon,
@@ -40,7 +43,7 @@ const SHOW: Record<string, { format: FormatKey; unit?: string; scale?: number }>
   leanMass: { format: "decimal1", unit: "%" },
 };
 
-/** Each group's family pastel: sleep lavender, strain peach, fitness sky. */
+/** Each group's system colour for its icon squares: sleep indigo, strain orange, fitness blue. */
 const GROUP_TINT: Record<HealthspanContributor["group"], CalmTint> = { sleep: "lavender", strain: "peach", fitness: "sky" };
 
 const withUnit = (text: string, unit?: string) => (unit ? `${text}${isSymbolUnit(unit) ? "" : NBSP}${unit}` : text);
@@ -54,67 +57,54 @@ function yearsLine(years: number | null) {
   return v === "0.0" ? "No change from your age" : `${v}${NBSP}years ${years < 0 ? "younger" : "older"} than your age`;
 }
 
-/** An input row's band: its name (20) and the number or caption under it (2 + 19). */
-const ITEM_BAND = 41;
+/** An input's value scaled for display (sleep hours to minutes), or null without one. */
+function shownValue(x: HealthspanContributor) {
+  const k = SHOW[x.key]?.scale ?? 1;
+  return x.metric.value === null ? null : x.metric.value * k;
+}
 
-/**
- * One input: its icon, name and value, the years it adds or takes off on the right, then its value on the axis against
- * the target for your age (the good side faintly shaded, the target a tick, you the dot).
- */
-function ContributorItem({ x, tint, onPress }: { x: HealthspanContributor; tint: CalmTint; onPress: () => void }) {
+/** The years an input adds (red) or takes off (green), signed, with a small "y"; grey at no change. */
+function Years({ years }: { years: number }) {
   const c = useCalm();
+  const ink = years === 0 ? c.sub : years > 0 ? c.tintInk.rose : c.tintInk.mint;
+  return (
+    <Txt size={17} lineHeight={22} style={[font.numberAt(17), { color: ink }]}>
+      {years === 0 ? "0.0" : formatValue("signed1", years)}
+      <Txt size={13} lineHeight={18} weight={600} style={{ color: ink }}>
+        {" y"}
+      </Txt>
+    </Txt>
+  );
+}
+
+/** The input's row: its icon square, name, "value · target" under it (or why there is none), the years and a chevron. */
+function rowOf(x: HealthspanContributor, tint: CalmTint, open: () => void): GroupRowProps {
   const s = SHOW[x.key] ?? { format: "decimal1" as const };
   const k = s.scale ?? 1;
-  const Icon = ICON[x.key];
-  const value = x.metric.value === null ? null : x.metric.value * k;
+  const value = shownValue(x);
   const years = value === null ? null : roundYears(x.years);
-  const [lo, hi] = [x.domain[0] * k, x.domain[1] * k];
   const target = x.target * k;
-  const t = frac(target, lo, hi);
-  const yearsInk = years === null || years === 0 ? c.sub : years > 0 ? c.tintInk.rose : c.tintInk.mint;
-  const dot = years === null || years === 0 ? c.ink : years < 0 ? c.tintInk.mint : c.tintInk.rose;
+  const parts =
+    value === null
+      ? [x.caption ?? "No data"]
+      : [`${withUnit(formatValue(s.format, value), s.unit)} · target ${withUnit(formatValue(s.format, target), s.unit)}`, x.metric.provisional ? "Provisional" : null, x.caption ?? null];
   const sentence =
     value === null
       ? `${x.label}: ${x.caption ?? "No data"}`
       : `${x.label} ${spoken(formatValue(s.format, value), s.unit)}, target ${formatValue(s.format, target)}${years === null ? "" : years === 0 ? ", no change in years" : `, ${formatValue("decimal1", Math.abs(years))} years ${years < 0 ? "younger" : "older"}`}`;
-  const captioned = !!x.caption && value !== null;
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={sentence} style={({ pressed }) => ({ flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 14, opacity: pressed ? 0.6 : 1 })}>
-      {/* The tile on the name and the number under it (20 + 2 + 19); a row without an icon keeps the tile's column. */}
-      <View style={{ width: 36, marginTop: onBand(ITEM_BAND, 36) }}>{Icon && <IconTile icon={Icon} color={c.tintInk[tint]} bg={c.tint[tint]} size={36} />}</View>
-      <View style={{ flex: 1, minWidth: 0, gap: 8 }}>
-        <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
-          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-            <Title size={15}>{x.label}</Title>
-            {value !== null ? <Num value={formatValue(s.format, value)} unit={s.unit} size={17} /> : <Sentence size={13}>{x.caption ?? "No data"}</Sentence>}
-          </View>
-          {/* The years and the chevron on the name's line. */}
-          {years !== null && (
-            <View style={{ marginTop: -1 }}>
-              <Num value={years === 0 ? "0.0" : formatValue("signed1", years)} unit="y" size={20} color={yearsInk} unitColor={yearsInk} />
-            </View>
-          )}
-          <ChevronSlot shown size={18} style={{ marginTop: onBand(20, 18), marginLeft: 4 }} />
-        </View>
-        <RangeTrack value={value === null ? null : frac(value, lo, hi)} color={dot} range={x.higherIsBetter ? [t, 1] : [0, t]} rangeColor={alpha(c.tintInk.mint, 0.22)} tick={t} height={8} style={{ marginVertical: 3 }} />
-        <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
-          <Num value={formatValue(s.format, lo)} size={12} color={c.faint} />
-          {value !== null && (
-            <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4, flexShrink: 1 }}>
-              <Sentence size={13}>Target</Sentence>
-              <Num value={withUnit(formatValue(s.format, target), s.unit)} size={13} color={c.sub} />
-            </View>
-          )}
-          <Num value={formatValue(s.format, hi)} size={12} color={c.faint} />
-        </View>
-        {value !== null && <MetricTags provisional={x.metric.provisional} tags={x.metric.tags} align="flex-start" />}
-        {captioned && <Sentence size={13}>{x.caption}</Sentence>}
-      </View>
-    </Pressable>
-  );
+  return {
+    label: x.label,
+    icon: ICON[x.key] ?? Timer,
+    tint,
+    description: parts.filter(Boolean).join("\n"),
+    aside: years === null ? undefined : <Years years={years} />,
+    onPress: open,
+    accessibilityLabel: sentence,
+  };
 }
 
-export function ContributorCard({ title, items }: { title: string; items: HealthspanContributor[] }) {
+/** A group of inputs as one grouped list with its caps header; each row opens its sheet. */
+export function ContributorList({ title, items }: { title: string; items: HealthspanContributor[] }) {
   const c = useCalm();
   const [open, setOpen] = React.useState<string | null>(null);
   // The last opened row stays in the sheet while it slides out.
@@ -123,33 +113,45 @@ export function ContributorCard({ title, items }: { title: string; items: Health
   const item = current ?? last;
   const show = item ? (SHOW[item.key] ?? { format: "decimal1" as const }) : null;
   const scale = (v: number) => v * (show?.scale ?? 1);
+  const value = item ? shownValue(item) : null;
   const years = item && item.metric.value !== null ? item.years : null;
   const line = yearsLine(years);
   const tint = GROUP_TINT[items[0]?.group ?? "sleep"];
+  const rows = items.map((x) =>
+    rowOf(x, tint, () => {
+      setOpen(x.key);
+      setLast(x);
+    }),
+  );
+  const lo = item && show ? scale(item.domain[0]) : 0;
+  const hi = item && show ? scale(item.domain[1]) : 1;
+  const t = item ? frac(scale(item.target), lo, hi) : 0;
+  const dot = years === null || Math.abs(years) < 0.05 ? c.ink : years < 0 ? c.tintInk.mint : c.tintInk.rose;
 
   return (
-    <SectionShell variant="card" title={title}>
-      <Grouped inset={48}>
-        {items.map((x) => (
-          <ContributorItem
-            key={x.key}
-            x={x}
-            tint={tint}
-            onPress={() => {
-              setOpen(x.key);
-              setLast(x);
-            }}
-          />
-        ))}
-      </Grouped>
+    <>
+      <GroupList title={title} rows={rows} />
       <BottomSheet open={!!current} onClose={() => setOpen(null)} title={item?.label ?? title}>
         {item && show ? (
           <View style={{ gap: 16 }}>
-            <Num value={formatValue(show.format, item.metric.value === null ? null : scale(item.metric.value))} unit={show.unit} size={36} />
+            <Num value={formatValue(show.format, value)} unit={show.unit} size={36} />
+            {/* Where the value sits between the input's ends, the good side of the target shaded, the target a tick. */}
+            <View style={{ gap: 8 }}>
+              <RangeTrack value={value === null ? null : frac(value, lo, hi)} color={dot} range={item.higherIsBetter ? [t, 1] : [0, t]} rangeColor={alpha(c.tintInk.mint, 0.22)} tick={t} height={8} style={{ marginVertical: 3 }} />
+              <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+                <Num value={formatValue(show.format, lo)} size={12} color={c.faint} />
+                <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4, flexShrink: 1 }}>
+                  <Sentence size={13}>Target</Sentence>
+                  <Num value={withUnit(formatValue(show.format, scale(item.target)), show.unit)} size={13} color={c.sub} />
+                </View>
+                <Num value={formatValue(show.format, hi)} size={12} color={c.faint} />
+              </View>
+            </View>
+            {value !== null && <MetricTags provisional={item.metric.provisional} tags={item.metric.tags} align="flex-start" />}
             <View style={{ gap: 4 }}>
               <Sentence>{`Target for your age: ${withUnit(formatValue(show.format, scale(item.target)), show.unit)}`}</Sentence>
               {line && <Sentence color={years! < 0 ? c.tintInk.mint : years! > 0 ? c.tintInk.rose : undefined}>{line}</Sentence>}
-              {item.metric.value === null && item.caption && <Sentence>{item.caption}</Sentence>}
+              {item.caption && <Sentence>{item.caption}</Sentence>}
             </View>
             <Sentence color={c.ink} weight={400}>
               {item.explanation}
@@ -160,40 +162,30 @@ export function ContributorCard({ title, items }: { title: string; items: Health
           <View />
         )}
       </BottomSheet>
-    </SectionShell>
+    </>
   );
 }
 
-/** One input row's loading shape in ContributorItem's box: the tile, bars for the name and its number, the chevron, the track. */
-function ContributorItemSkeleton() {
+/** A group's loading shape: its caps header over `n` rows with bars for the name and the value line. */
+export function ContributorListSkeleton({ title, n }: { title: string; n: number }) {
   const c = useCalm();
   return (
-    <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 14 }}>
-      <Skeleton radius={12} style={{ width: 36, height: 36, marginTop: onBand(ITEM_BAND, 36) }} />
-      <View style={{ flex: 1, minWidth: 0, gap: 8 }}>
-        <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
-          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-            <SkeletonText size={15} lineHeight={20} width={144} />
-            <SkeletonText size={17} lineHeight={19} width={72} />
-          </View>
-          <ChevronSlot shown size={18} style={{ marginTop: onBand(20, 18), marginLeft: 4 }} />
-        </View>
-        <View style={{ height: 8, borderRadius: 4, marginVertical: 3, backgroundColor: c.line }} />
-        <SkeletonText size={13} lineHeight={16} />
+    <View importantForAccessibility="no-hide-descendants" style={{ gap: 7 }}>
+      <SectionLabel>{title}</SectionLabel>
+      <View style={{ borderRadius: LIST_RADIUS, backgroundColor: c.card, overflow: "hidden" }}>
+        {Array.from({ length: n }, (_, i) => (
+          <React.Fragment key={i}>
+            {i > 0 ? <Hairline inset={57} /> : null}
+            <View style={{ minHeight: 60, flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 10 }}>
+              <Skeleton radius={7} style={{ width: 29, height: 29 }} />
+              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                <SkeletonText size={16} lineHeight={21} width={144} />
+                <SkeletonText size={13} lineHeight={18} width={112} />
+              </View>
+            </View>
+          </React.Fragment>
+        ))}
       </View>
     </View>
-  );
-}
-
-/** A contributor card's loading shape: `n` input rows. */
-export function ContributorCardSkeleton({ title, n }: { title: string; n: number }) {
-  return (
-    <SectionShell variant="card" title={title}>
-      <Grouped inset={48}>
-        {Array.from({ length: n }, (_, i) => (
-          <ContributorItemSkeleton key={i} />
-        ))}
-      </Grouped>
-    </SectionShell>
   );
 }

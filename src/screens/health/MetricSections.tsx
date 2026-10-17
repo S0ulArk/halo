@@ -1,5 +1,6 @@
 // The per-metric sections of `/metric/[key]` (spec §11 MD1), one component per Section kind of the view model,
-// ported from Pulse's metric/[key]/sections.tsx and RangeStats.tsx.
+// ported from Pulse's metric/[key]/sections.tsx and RangeStats.tsx, as Apple Health cards: the columns charts, the
+// week's minutes against the WHO's target (the total rolling in, the capsule filling once), and the rows of numbers.
 import * as React from "react";
 import { View } from "react-native";
 import { clock, DAY, durationWords, formatDay, formatValue, hmm, type FormatKey } from "@/lib/format";
@@ -10,6 +11,7 @@ import { EmptyState, KeyStatRow, MetricState, SectionShell } from "@/ui";
 import { useCalm } from "@/ui/calm";
 import { Num, Sentence, Title } from "@/screens/detail/calmKit";
 import { ColumnChart, ColumnChartSkeleton } from "./ColumnChart";
+import { Grow, RollingValue } from "./kit";
 import { usePush } from "./shells";
 import { Rows, statProps } from "./view";
 
@@ -224,16 +226,18 @@ function Weekly({ s, vm }: { s: Extract<Section, { kind: "weekly" }>; vm: Metric
   return (
     <SectionShell variant="card" title="This week">
       <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", columnGap: 6 }}>
-        <Num value={hmm(s.week.total)} size={28} color={c.tintInk.sky} />
+        <RollingValue value={hmm(s.week.total)} size={28} color={c.tintInk.sky} />
         <Sentence>{`of ${hmm(s.target)}`}</Sentence>
       </View>
       <View
         accessibilityRole="progressbar"
         accessibilityLabel={`${vm.label} this week`}
         accessibilityValue={{ min: 0, max: s.target, now: Math.round(s.week.total) }}
-        style={{ marginTop: 8, marginBottom: 6, height: 8, borderRadius: 4, overflow: "hidden", backgroundColor: c.line }}
+        style={{ marginTop: 8, marginBottom: 6, height: 8, borderRadius: 4, overflow: "hidden", backgroundColor: c.fill }}
       >
-        <View style={{ height: "100%", width: `${pct}%`, borderRadius: 4, backgroundColor: c.tintInk.mint }} />
+        <Grow mode="wipe" style={{ height: 8 }}>
+          <View style={{ height: 8, width: `${pct}%`, borderRadius: 4, backgroundColor: c.tintInk.mint }} />
+        </Grow>
       </View>
       <View style={{ marginBottom: 16 }}>
         <Sentence size={13}>{`${formatDay(s.week.from, DAY.monthDay)} - ${formatDay(s.week.to, DAY.monthDay)}, toward the ${s.target} minutes a week the WHO recommends`}</Sentence>

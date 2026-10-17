@@ -1,3 +1,8 @@
+// Stress through the day (spec §5.10), in the Apple Health chart language: one smooth line whose colour follows the
+// level (low blue, medium green, high amber) over a fill that fades to nothing, the still minutes only (movement,
+// workouts and sleep are gaps, workouts and sleep shaded), dashed hairline rows at each level, the 0-3 axis on the right,
+// the latest minute ringed in the card colour and a dashed "now" line. A finger scrubs a solid hairline with the
+// minute's readout card (UI thread). `spark` is the same line, 44 px tall, with no axes, for a card.
 import * as React from "react";
 import { View } from "react-native";
 import { Circle, Group, Path } from "@shopify/react-native-skia";
@@ -10,7 +15,7 @@ import { clock, formatValue } from "@/lib/format";
 import type { Metric } from "@/lib/reasons";
 import { alpha } from "@/lib/utils";
 import { EmptyState, MetricState, ReasonPlaceholder, Skeleton, Txt, useTheme, type ChartSpan } from "@/ui";
-import { AXIS, BandShader, bandPaint, ChartFigure, clockLabels, FadeShader, Grid, GuideLine, LINE, measure, PointMark, ScrubCursor, ScrubLabel, sp, SText, useChartFonts, useChartInk, type Scrub } from "@/ui/components/ChartFrame";
+import { AXIS, BandShader, bandPaint, ChartFigure, clockLabels, FadeShader, Grid, GuideLine, LINE, measure, PointMark, RightAxis, ScrubCursor, ScrubLabel, sp, SText, useChartFonts, useChartInk, type Scrub } from "@/ui/components/ChartFrame";
 import { spanAreas } from "@/ui/components/IntradayHrChart";
 
 export type StressSeries = {
@@ -32,6 +37,9 @@ export type StressChartProps = {
 
 const FULL_H = 200;
 const SPARK_H = 44;
+/** The full chart's left edge and the room on its right for the 0-3 axis (one digit, the gap and air). */
+const LEFT = 4;
+const RIGHT = 22;
 
 function Chart({ s, variant, tz, onPress }: { s: StressSeries; variant: "full" | "spark"; tz?: string; onPress?: () => void }) {
   const { c } = useTheme();
@@ -80,8 +88,8 @@ function Chart({ s, variant, tz, onPress }: { s: StressSeries; variant: "full" |
   const toIndex = React.useCallback(
     (px: number, width: number) => {
       "worklet";
-      const x0 = 24;
-      const x1 = width - 8;
+      const x0 = LEFT;
+      const x1 = width - RIGHT;
       if (x1 <= x0 || last <= first) return -1;
       return nearestValued(ts, vs, first + ((px - x0) / (x1 - x0)) * (last - first));
     },
@@ -90,8 +98,8 @@ function Chart({ s, variant, tz, onPress }: { s: StressSeries; variant: "full" |
   const scrub = React.useMemo<Scrub>(() => ({ active, toIndex }), [active, toIndex]);
 
   const frame = (width: number) => {
-    const x0 = full ? 24 : 4;
-    const x1 = width - (full ? 8 : 4);
+    const x0 = full ? LEFT : 4;
+    const x1 = width - (full ? RIGHT : 4);
     const plotTop = full ? 16 : 4;
     const plotBottom = full ? H - AXIS.xAxisHeight : H - 4;
     return { x0, x1, plotTop, plotBottom, x: scaleLinear([first, Math.max(last, first + 1)], [x0, x1]), y: scaleLinear([0, 3], [plotBottom, plotTop]) };
@@ -121,13 +129,19 @@ function Chart({ s, variant, tz, onPress }: { s: StressSeries; variant: "full" |
         const { x0, x1, plotTop, plotBottom, x, y } = frame(width);
         const pts: (XY | null)[] = downsample(shown, (p) => p.value, 2 * (x1 - x0)).map((p) => (p.value === null ? null : { x: x(p.t), y: y(p.value) }));
         const lineRuns = runs(pts);
-        const axis = f.num(500, 12);
+        const axis = f.num(500, AXIS.fontSize);
         return (
           <Group>
-            {full && <Grid ys={[1, 2, 3].map(y)} x1={x0} x2={x1} />}
+            {full && <Grid ys={[0, 1, 2, 3].map(y)} x1={x0} x2={x1} />}
             {full && spanAreas(s.spans, x, x0, x1, plotTop, plotBottom, calm)}
-            {full && hourTicks(first, last, 4, tz).map((t) => <SText key={t} x={x(t)} y={plotBottom + AXIS.tickMargin + 12} text={clock(t, tz)} font={axis} color={k.axis} anchor="middle" />)}
-            {full && [0, 1, 2, 3].map((v) => <SText key={v} x={x0 - 4} y={y(v) + 12 * 0.32} text={String(v)} font={axis} color={k.axis} anchor="end" />)}
+            {full &&
+              hourTicks(first, last, 4, tz).map((t) => {
+                // Centred on its tick, kept on the canvas at both ends.
+                const text = clock(t, tz);
+                const half = measure(axis, text) / 2;
+                return <SText key={t} x={Math.min(width - half - 1, Math.max(half + 1, x(t)))} y={plotBottom + AXIS.tickMargin + AXIS.fontSize} text={text} font={axis} color={k.axis} anchor="middle" />;
+              })}
+            {full && <RightAxis x={x1} ys={[0, 1, 2, 3].map(y)} texts={["0", "1", "2", "3"]} font={axis} />}
             <Group>
               {lineRuns.map((run, j) => {
                 const d = monotonePath(run);
