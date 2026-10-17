@@ -114,15 +114,9 @@ function Drop({ slot, slotW, dark }: { slot: number; slotW: number; dark: boolea
   }));
   return (
     <Animated.View pointerEvents="none" style={[{ position: "absolute", left: PAD + DROP_INSET, top: (BAR_H - DROP_H) / 2, width: slotW - DROP_INSET * 2, height: DROP_H }, style]}>
-      <LiquidGlass
-        essential
-        backdrop={false}
-        style={StyleSheet.absoluteFill}
-        cornerRadius={DROP_H / 2}
-        tint={dark ? "#ffffff" : "#787880"}
-        frost={dark ? 0.12 : 0.14}
-        shadow={false}
-      />
+      {/* A quiet pill, as iOS marks the selected tab: a plain translucent fill, no glass rim or sheen (which read as a
+          white blob). */}
+      <View style={[StyleSheet.absoluteFill, { borderRadius: DROP_H / 2, backgroundColor: dark ? "rgba(255,255,255,0.12)" : "rgba(118,118,128,0.14)" }]} />
     </Animated.View>
   );
 }

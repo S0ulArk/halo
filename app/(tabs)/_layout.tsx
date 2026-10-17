@@ -15,7 +15,7 @@ import { FloatingTabBar, TabBarBridge } from "@/ui/components/TabBarHost";
 /**
  * Builds the other three tabs in the background once Today has settled and the launch sync has run, one at a time, so the first switch to each is
  * instant (a tab otherwise builds its whole screen at the moment it is tapped, which ate the cross-fade). A prebuilt tab
- * is then frozen like any tab out of view (freezeOnBlur), so it costs nothing until it is shown.
+ * stays live out of view, so showing it later costs nothing.
  */
 function TabPreloader() {
   const router = useRouter();
@@ -49,10 +49,11 @@ export default function TabsLayout() {
     <>
       {/* The pages are the glass's backdrop; the bar floats over them at the foot as the target's overlay. */}
       <GlassTarget style={{ flex: 1 }} overlay={<FloatingTabBar {...action} />}>
-        {/* freezeOnBlur: a tab out of view stops re-rendering on app-state ticks (the live heart rate, sync progress). */}
+        {/* No freezeOnBlur: a frozen tab redrew everything that had changed the moment it was tapped, which was the lag
+            on switching. The tabs stay live (and prebuilt), so a switch only shows one and hides another. */}
         <Tabs
           // A short cross-fade between tabs (native driver), so a switch reads as a move rather than a cut.
-          screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: "transparent" }, freezeOnBlur: true, animation: "fade" }}
+          screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: "transparent" }, freezeOnBlur: false, animation: "fade" }}
           // Back returns to the tab you came from (the journal and More go back to where they were opened).
           backBehavior="history"
           tabBar={(props) => <TabBarBridge {...props} />}
