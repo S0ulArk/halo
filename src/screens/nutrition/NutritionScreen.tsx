@@ -31,6 +31,7 @@ import { useNutritionTargets } from "@/state/nutrition";
 import { BottomSheet, Skeleton, SkeletonText, TrendChart, Txt, type TrendPoint } from "@/ui";
 import { CapsuleMeter } from "@/ui/components/CapsuleMeter";
 import { HaloRing, RING_LAND_MS, RollingNumber } from "@/ui/components/Halo";
+import { alpha } from "@/lib/utils";
 import { font } from "@/ui/fonts";
 import type { CalmTint } from "@/ui/calm";
 import { FoodSheet, foodRequest, type FoodRequest } from "./FoodSheet";
@@ -91,7 +92,7 @@ function TodayCard({ vm }: { vm: NutritionVM }) {
     <HomeCard icon={Utensils} iconTint="sand" title={t.kcal === null ? "Nothing logged today" : "Today so far"} gap={16} style={{ alignSelf: "stretch" }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
         <View accessible accessibilityLabel={`${show(t.kcal, grouped)} of ${grouped(kcal)} kcal`}>
-          <HaloRing size={RING} stroke={14} progress={progressOf(t.kcal, kcal)} track={c.tint.sand} color={c.tintInk.sand} colors={c.vivid.sand} delay={120}>
+          <HaloRing size={RING} stroke={14} progress={progressOf(t.kcal, kcal)} track={alpha(c.tintInk.sand, 0.2)} color={c.tintInk.sand} colors={c.vivid.sand} delay={120}>
             <View style={{ alignItems: "center" }}>
               {t.kcal === null ? (
                 <Txt size={26} lineHeight={30} style={[font.numberAt(26), { color: c.faint }]}>

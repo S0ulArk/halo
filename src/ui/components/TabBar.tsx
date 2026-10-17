@@ -15,6 +15,7 @@ import { useCalm } from "@/ui/calm";
 import { LiquidGlass } from "@/ui/glass";
 import { reduceMotionNow } from "@/ui/motion/system";
 import { Mark } from "./Mark";
+import { ScrollEdgeFade } from "./ScrollEdgeFade";
 import { useTheme } from "@/ui/ThemeProvider";
 import { TAB_BAR_HEIGHT } from "./PageShell";
 import { Txt } from "./Text";
@@ -241,6 +242,12 @@ function actionItem(label: string | undefined): { label: string; icon: LucideIco
 const haptic = () => {
   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 };
+
+/** The scroll edge under the bar: the page fades into the ground toward the foot (see ScrollEdgeFade). */
+export function TabBarFade() {
+  const insets = useSafeAreaInsets();
+  return <ScrollEdgeFade height={insets.bottom + LIFT + BAR_H + 44} />;
+}
 
 /**
  * Phone navigation bar: a glass capsule of four tabs and a round glass action button, floating 16 dp from the sides

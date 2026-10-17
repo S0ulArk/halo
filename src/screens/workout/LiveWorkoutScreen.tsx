@@ -44,6 +44,7 @@ import { GoLiveButton, GoLiveSheet, LivePill } from "@/screens/settings/liveHr";
 import { font, TABULAR } from "@/ui/fonts";
 import { KeepAwake } from "@/live/KeepAwake";
 import { CONTROLS_CLEARANCE, FloatingControls, GlassRound } from "./controls";
+import { ScrollEdgeFade } from "@/ui/components/ScrollEdgeFade";
 
 /** A workout shorter than this is not kept. */
 const MIN_SAVE_MS = 60_000;
@@ -276,6 +277,8 @@ export default function LiveWorkoutScreen() {
       {/* The page is the controls' backdrop: the round glass buttons bend what scrolls under them. */}
       <GlassTarget style={{ flex: 1 }} overlay={<FloatingControls>{controls}</FloatingControls>}>
         <DetailShell title="Live workout" info={INFO} onBack={onBack} hero={hero} summary={summary} primary={primary} secondary={running ? undefined : secondary} bottomInset={clearance + CONTROLS_CLEARANCE} />
+        {/* The page fades out under the floating buttons. */}
+        <ScrollEdgeFade height={clearance + CONTROLS_CLEARANCE - 24} />
       </GlassTarget>
       {running && <KeepAwake tag="workout" />}
       <GoLiveSheet open={sheet} onClose={() => setSheet(false)} />

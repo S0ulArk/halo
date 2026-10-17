@@ -1,7 +1,8 @@
 // A score in every size the app shows one: the detail screen's hero (one big Apple Activity ring with the number in its
 // middle), Home's tile, the small centred block and the inline form (a number over a capsule meter).
 import * as React from "react";
-import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
 import Animated from "react-native-reanimated";
 import { ChevronRight, Flame, Gauge, HeartPulse, Moon, type LucideIcon } from "lucide-react-native";
 import { BAND_WORD, DATA_COLORS, dialColor, recoveryBand, STRESS_COLOR, STRESS_WORD, stressLevel, type DataColor, type RecoveryBand, type StressLevel } from "@/lib/bands";
@@ -243,8 +244,8 @@ export function ScoreDial(props: ScoreDialProps) {
   if (lg) {
     const ReasonIcon = reason ? REASON_ICON[reason.code] : null;
     const headline = reason ? (reason.code === "no_data" ? reason.long : reason.short) : null;
-    // The hero is a soft card in its family's pastel (recovery by band) holding one big ring in the score's colour,
-    // the number in its middle rolling into place as the ring sweeps in, with a slow breathing light across the card.
+    // The hero is the plain card lit from the top by a soft pool of the score's colour (as Recovery's and Strain's
+    // heroes are), holding one big ring in that colour, the number in its middle rolling into place as the ring sweeps.
     const ink = calm.tintInk[tint];
     const HeroIcon = ICON[variant];
     // The ring's track is its own hue at 18 %; the value's band zone and the Strain Target are stronger stretches of it.
@@ -252,7 +253,8 @@ export function ScoreDial(props: ScoreDialProps) {
     const body = (
       // One height for every hero (Sleep, Activity, Recovery), with room for the tags row whether or not it's there, so
       // the tabs' first cards match: 20 + header 44 + 16 + ring 172 + 16 + tags 26 + 20.
-      <CalmSurface tint={tint} watermark={HeroIcon} gap={16} breathe style={[{ alignSelf: "stretch", width: "100%", minHeight: HERO_CARD_MIN }, !onPress && props.style]}>
+      <CalmSurface gap={16} style={[{ alignSelf: "stretch", width: "100%", minHeight: HERO_CARD_MIN }, !onPress && props.style]}>
+        <HeroGlow color={r.fill} />
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
           <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: calm.chip, alignItems: "center", justifyContent: "center" }}>
             <HeroIcon size={22} color={ink} strokeWidth={1.75} />
@@ -432,3 +434,21 @@ export function ScoreDialSkeleton({ size, variant = "stat", label }: { size: Dia
   return <ScoreDial variant={variant} size={size} value={null} label={label} loading />;
 }
 ScoreDial.Skeleton = ScoreDialSkeleton;
+
+/** The hero card's light: a soft radial pool of the score's colour from the top edge, drawn once (no animation). */
+function HeroGlow({ color }: { color: string }) {
+  const dark = useTheme().scheme === "dark";
+  const id = React.useId().replace(/:/g, "");
+  return (
+    <Svg pointerEvents="none" style={StyleSheet.absoluteFill} width="100%" height="100%">
+      <Defs>
+        <RadialGradient id={id} cx="50%" cy="0%" rx="62%" ry="78%" fx="50%" fy="0%">
+          <Stop offset="0" stopColor={color} stopOpacity={dark ? 0.3 : 0.2} />
+          <Stop offset="0.55" stopColor={color} stopOpacity={dark ? 0.1 : 0.06} />
+          <Stop offset="1" stopColor={color} stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
+    </Svg>
+  );
+}

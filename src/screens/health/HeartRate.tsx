@@ -223,7 +223,7 @@ export default function HeartRateScreen() {
   const q = useQuery((ctx) => getHeartRate(d, { ...ctx, now: Math.floor(Date.now() / 1000) }), [d, d === today ? liveVersion : 0]);
   // A query for another day is still in flight: show the loading shape, not the previous day.
   const vm = q.data && q.data.day === d ? withLive(q.data, liveHr.latest) : undefined;
-  const common = { title: "Heart rate", info: HEART_RATE_INFO, onBack, refreshing, onRefresh, dateSwitcher: { ...dateSwitcher, loading: q.loading && !vm && !!q.data } } as const;
+  const common = { title: "Heart rate", info: HEART_RATE_INFO, onBack, refreshing, onRefresh, dateSwitcher: { ...dateSwitcher, placement: "header", loading: q.loading && !vm && !!q.data } } as const;
   const chartTitle = d === today ? "Today" : dayLabel(d, today);
   // Today, while the band is live: the Live section replaces the reading hero.
   const isLive = d === today && (liveStatus === "live" || liveStatus === "lost");

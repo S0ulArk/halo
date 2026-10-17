@@ -634,7 +634,7 @@ export function ExplorerChart(p: ExplorerChartProps) {
   const compareColor = p.compareColor;
   const compareColors = p.readout.compareColors;
   const dot2Color = useDerivedValue(() => (cOn.value < 0 || !compareColors ? compareColor : (compareColors[cOn.value] ?? compareColor)));
-  // The inspected day's bar at full ink over the dimmed ones (the latest is already; today's running total stays outlined).
+  // The inspected day's bar drawn again on top (the latest is its own group; today's running total stays outlined).
   const barColors = p.barColors;
   const selBar = useDerivedValue(() => {
     const i = idx.value;
@@ -823,10 +823,10 @@ export function ExplorerChart(p: ExplorerChartProps) {
                 </Group>
                 {isBar && (
                   <Group opacity={barW8}>
-                    {/* Past days dimmed, the latest (and an inspected day) at full ink, today's "so far" outlined lighter. */}
-                    <Group opacity={k.dim}>
-                      {[bar0, bar1, bar2].map((b, j) => (p.barColors[j] ? <Path key={j} path={b} color={p.barColors[j]} /> : null))}
-                    </Group>
+                    {/* Every day at full colour, as Apple Health's detail charts draw it (dimmed bars read as grey here, where
+                        nearly every bar is a past one), with today's "so far" outlined lighter. No translucent group: that
+                        put the bars through an offscreen layer on every frame of a pan or pinch. */}
+                    {[bar0, bar1, bar2].map((b, j) => (p.barColors[j] ? <Path key={j} path={b} color={p.barColors[j]} /> : null))}
                     {[bar4, bar5, bar6].map((b, j) => (p.barColors[j] ? <Path key={j} path={b} color={p.barColors[j]} /> : null))}
                     <Path path={selBar} color={selColor} />
                     {p.partialColor && (

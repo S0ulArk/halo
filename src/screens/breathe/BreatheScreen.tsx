@@ -32,6 +32,7 @@ import { useBack } from "@/screens/detail/nav";
 import { GlassSegmented, ListGroup, ListRow } from "@/screens/detail/ios";
 import { GoLiveButton, GoLiveSheet, LivePill, rmssdLine } from "@/screens/settings/liveHr";
 import { CONTROLS_CLEARANCE, FloatingControls, GlassRound } from "@/screens/workout/controls";
+import { ScrollEdgeFade } from "@/ui/components/ScrollEdgeFade";
 import { BreathCircle } from "./BreathCircle";
 import { KeepAwake } from "@/live/KeepAwake";
 
@@ -283,6 +284,8 @@ export default function BreatheScreen() {
       {/* The page is the controls' backdrop: the round glass buttons bend what scrolls under them. */}
       <GlassTarget style={{ flex: 1 }} overlay={<FloatingControls>{controls}</FloatingControls>}>
         <DetailShell title="Breathe" info={INFO} onBack={onBack} hero={hero} heroGlow={null} primary={primary} secondary={running ? undefined : secondary} bottomInset={clearance + CONTROLS_CLEARANCE} />
+        {/* The page fades out under the floating buttons, so the list never shows through behind "Start". */}
+        <ScrollEdgeFade height={clearance + CONTROLS_CLEARANCE - 24} />
       </GlassTarget>
       {running && <KeepAwake tag="breathe" />}
       <GoLiveSheet open={sheet} onClose={() => setSheet(false)} />
