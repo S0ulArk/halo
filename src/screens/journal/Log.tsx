@@ -354,8 +354,8 @@ export function Log({ vm }: LogProps) {
                 ))}
               </View>
               <View accessible accessibilityLabel={`Today: ${grouped(waterToday)} ${waterUnit}`} accessibilityLiveRegion="polite" style={{ flexDirection: "row", alignItems: "baseline", gap: 8, paddingHorizontal: 4 }}>
-                <Txt size={11} lineHeight={15} weight={600} style={{ color: c.faint, letterSpacing: 1.4 }}>
-                  TODAY
+                <Txt size={15} lineHeight={20} style={{ color: c.sub }}>
+                  Today
                 </Txt>
                 <Num value={grouped(waterToday)} unit={waterUnit} size={18} color={c.tintInk.sky} />
               </View>
