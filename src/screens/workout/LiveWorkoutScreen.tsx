@@ -1,16 +1,20 @@
 // Live Workout `/workout-live`: Strain Coach on the band's live Bluetooth heart rate, from Home's activities card and
 // Activities. While it runs: Day Strain building beat by beat on the app's Strain math (src/live/liveStrain.ts) on
-// the dial against today's Strain Target, the current heart-rate zone, the elapsed time, and a "push" / "ease off"
+// a ring against today's Strain Target, the current heart-rate zone, the elapsed time, and a "push" / "ease off"
 // line from the target and the Recovery-gated heart-rate band (src/live/coach.ts), with optional haptic cues. Without
 // a live band it shows how to connect (the Go-live sheet).
 //
 // Nothing is written to the Store or Health Connect: the real workout arrives later through the Fitbit sync and is
-// scored then. A short summary stays on the phone (src/live/storage.ts). Calm: Day Strain is the kit's peach hero card,
-// the running numbers sit in the numeric face over small caps labels, the coach's line on its tone's pastel, and the
-// controls are white cards with teal actions.
+// scored then. A short summary stays on the phone (src/live/storage.ts). In the look of Apple's Workout app: the
+// running numbers big and coloured on one card (the elapsed time in yellow, the heart rate in its zone's colour with a
+// beating heart, the workout's Strain in orange, Day Strain on its ring), the zones as five capsules with the current
+// one lit, the coach's line on its tone's soft fill, and the session's controls as large round glass buttons floating
+// at the foot of the screen (green to start, red to end). The heart beats on the UI thread; the numbers change once a
+// second with the clock.
 import * as React from "react";
 import { View } from "react-native";
-import { Activity, HeartPulse } from "lucide-react-native";
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
+import { Activity, Check, Heart, HeartPulse, Play, RotateCcw, Square } from "lucide-react-native";
 import { zoneNumber, zones } from "@/core/scoring/zones";
 import type { LiveSample } from "@/health/ble";
 import { DATA_COLORS } from "@/lib/bands";
@@ -27,13 +31,19 @@ import { workoutSetup, type WorkoutSetup } from "@/live/workoutSetup";
 import { loadDays, maxHrOf } from "@/queries/common";
 import { useApp, useQuery } from "@/state/app";
 import { showsLive, useLiveBle, useLiveBleControl } from "@/state/liveBle";
-import { DetailShell, ScoreDial, Txt, useTheme, ZONE_COLOR, type InfoContent, type Tokens } from "@/ui";
+import { DetailShell, Txt, useTheme, ZONE_COLOR, type InfoContent, type Tokens } from "@/ui";
 import type { CalmPalette } from "@/ui/calm";
-import { CalmButton, CalmSwitch, Caption, Hairline, IconTile, Num, Sentence, Surface, Title, useCalm, type CalmTint } from "@/screens/settings/calmKit";
+import { ActivityRings } from "@/ui/components/Halo";
+import { useBottomClearance } from "@/ui/components/PageShell";
+import { GlassTarget } from "@/ui/glass";
+import { reduceMotionNow, useAppActive } from "@/ui/motion/system";
+import { CalmSwitch, Caption, Hairline, IconTile, Num, Sentence, Surface, Title, useCalm, type CalmTint } from "@/screens/settings/calmKit";
 import { useBack } from "@/screens/detail/nav";
+import { ScoreHero } from "@/screens/detail/ScoreHero";
 import { GoLiveButton, GoLiveSheet, LivePill } from "@/screens/settings/liveHr";
-import { font } from "@/ui/fonts";
+import { font, TABULAR } from "@/ui/fonts";
 import { KeepAwake } from "@/live/KeepAwake";
+import { CONTROLS_CLEARANCE, FloatingControls, GlassRound } from "./controls";
 
 /** A workout shorter than this is not kept. */
 const MIN_SAVE_MS = 60_000;
@@ -97,16 +107,18 @@ function record(s: Session, end: number): WorkoutRecord {
 }
 
 const zoneColor = (c: Tokens, zone: number | null) => (zone && ZONE_COLOR[zone] ? c[DATA_COLORS[ZONE_COLOR[zone]].fill] : c.mutedForeground);
-/** The coach's tone as a pastel: push peach (strain), steady mint, ease off sand, anything else sky. */
+/** The coach's tone as a soft fill: push orange (strain), steady green, ease off yellow, anything else blue. */
 const toneTint = (tone: GuidanceTone): CalmTint => (tone === "push" ? "peach" : tone === "steady" ? "mint" : tone === "ease" ? "sand" : "sky");
 const toneInk = (k: CalmPalette, tone: GuidanceTone) => (tone === "push" || tone === "steady" || tone === "ease" ? k.tintInk[toneTint(tone)] : k.sub);
 const f1 = (x: number) => x.toFixed(1);
 
 export default function LiveWorkoutScreen() {
   const { timeZone, today } = useApp();
+  const k = useCalm();
   const onBack = useBack("/activities");
   const ctl = useLiveBleControl();
   const isLive = ctl.status === "live";
+  const clearance = useBottomClearance("detail");
   const q = useQuery(async (ctx) => workoutSetup(await loadDays(ctx, addDays(ctx.today, -7), ctx.today), ctx.today, maxHrOf(ctx), ctx.profile.sex), []);
   const setup = q.data;
   const log = useWorkoutLog();
@@ -196,57 +208,49 @@ export default function LiveWorkoutScreen() {
 
   const target = (active?.setup ?? setup)?.target ?? null;
   const dayValue = snap ? snap.day : setup ? strainOfTrimp(effortToTrimp(setup.baseEffort)) : null;
-  const hero = (
-    <ScoreDial
-      variant="strain"
-      size="lg"
-      label="Day strain"
-      // Tenths, so the dial sweeps only when the shown number changes.
-      value={result ? Math.round(result.dayEnd * 10) / 10 : dayValue === null ? null : Math.round(dayValue * 10) / 10}
-      loading={!setup && !result}
-      target={target}
-      extraTags={running ? ["so_far"] : undefined}
-    />
-  );
 
+  let hero: React.ReactNode;
   let summary: React.ReactNode = null;
   let primary: React.ReactNode;
+  let controls: React.ReactNode;
   if (active && snap) {
     const a = active.setup;
     const coach = snap.out ?? { status: "warmup" as const, position: "inBand" as const, band: coachBand({ restingHr: a.restingHr, maxHr: a.maxHr, recovery: a.recovery }) };
     const g = guidance({ strain: snap.day, target: a.target, coach, minutesToLow: snap.minutesToLow });
+    hero = <RunningHero snap={snap} start={active.start} target={a.target} />;
     summary = <GuidanceCard tone={g.tone} title={g.title} body={g.body} />;
-    primary = (
-      <View style={{ gap: 12 }}>
-        <RunningStats snap={snap} start={active.start} lost={ctl.status !== "live"} name={ctl.device?.name ?? null} />
-        <CalmButton variant="secondary" onPress={() => finish()}>
-          End workout
-        </CalmButton>
-      </View>
-    );
-  } else if (result) {
-    summary = <WorkoutSummary rec={result} />;
-    primary = (
-      <View style={{ gap: 12 }}>
-        <CalmButton onPress={start} disabled={!isLive || !setup}>
-          Start another
-        </CalmButton>
-        <CalmButton variant="secondary" onPress={onBack}>
-          Done
-        </CalmButton>
-      </View>
-    );
+    primary = <ZonesCard snap={snap} lost={ctl.status !== "live"} name={ctl.device?.name ?? null} />;
+    controls = <GlassRound icon={Square} label="End" color={k.system.red} onPress={() => finish()} accessibilityLabel="End workout" />;
   } else {
-    summary = <TodayCard setup={setup} error={q.error} />;
-    primary = (
-      <View style={{ gap: 12 }}>
-        <BandCard onGoLive={() => setSheet(true)} setup={setup} />
-        <HapticsCard value={haptics} onChange={setHaptics} />
-        <CalmButton onPress={start} disabled={!isLive || !setup}>
-          Start workout
-        </CalmButton>
-      </View>
+    hero = (
+      <ScoreHero
+        variant="strain"
+        label="Day strain"
+        // Tenths, so the ring sweeps only when the shown number changes.
+        value={result ? Math.round(result.dayEnd * 10) / 10 : dayValue === null ? null : Math.round(dayValue * 10) / 10}
+        loading={!setup && !result}
+        target={target}
+      />
     );
+    if (result) {
+      summary = <WorkoutSummary rec={result} />;
+      primary = null;
+      controls = (
+        <>
+          <GlassRound icon={RotateCcw} label="Start another" color={k.system.green} onPress={start} disabled={!isLive || !setup} />
+          <GlassRound icon={Check} label="Done" color={k.teal} onPress={onBack} />
+        </>
+      );
+    } else {
+      summary = <TodayCard setup={setup} error={q.error} />;
+      primary = (
+        <View style={{ gap: 12 }}>
+          <BandCard onGoLive={() => setSheet(true)} setup={setup} />
+          <HapticsCard value={haptics} onChange={setHaptics} />
+        </View>
+      );
+      controls = <GlassRound icon={Play} label="Start" color={k.system.green} onPress={start} disabled={!isLive || !setup} accessibilityLabel="Start workout" />;
+    }
   }
 
   const secondary = [
@@ -269,21 +273,110 @@ export default function LiveWorkoutScreen() {
 
   return (
     <>
-      <DetailShell title="Live workout" info={INFO} onBack={onBack} hero={hero} summary={summary} primary={primary} secondary={running ? undefined : secondary} />
+      {/* The page is the controls' backdrop: the round glass buttons bend what scrolls under them. */}
+      <GlassTarget style={{ flex: 1 }} overlay={<FloatingControls>{controls}</FloatingControls>}>
+        <DetailShell title="Live workout" info={INFO} onBack={onBack} hero={hero} summary={summary} primary={primary} secondary={running ? undefined : secondary} bottomInset={clearance + CONTROLS_CLEARANCE} />
+      </GlassTarget>
       {running && <KeepAwake tag="workout" />}
       <GoLiveSheet open={sheet} onClose={() => setSheet(false)} />
     </>
   );
 }
 
-/** Haptic cues on or off, on a white card. */
+/** A heart that beats once a second while there is a live reading (a scale on the UI thread); still otherwise. */
+function BeatingHeart({ color, beating }: { color: string; beating: boolean }) {
+  const active = useAppActive();
+  const s = useSharedValue(1);
+  const run = beating && active && !reduceMotionNow();
+  React.useEffect(() => {
+    if (!run) {
+      cancelAnimation(s);
+      s.set(1);
+      return;
+    }
+    s.set(withRepeat(withSequence(withTiming(1.18, { duration: 140, easing: Easing.out(Easing.quad) }), withTiming(1, { duration: 300, easing: Easing.inOut(Easing.quad) }), withTiming(1, { duration: 560 })), -1, false));
+    return () => cancelAnimation(s);
+  }, [run, s]);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
+  return (
+    <Animated.View style={style}>
+      <Heart size={26} color={color} fill={color} strokeWidth={2} />
+    </Animated.View>
+  );
+}
+
+/**
+ * The running numbers, as the Workout app stacks them: the elapsed time large in yellow, the heart rate in its zone's
+ * colour beside a beating heart, then the workout's Strain in orange and Day Strain on its ring against the target.
+ */
+function RunningHero({ snap, start, target }: { snap: Snapshot; start: number; target: readonly [number, number] | null }) {
+  const { c, scheme } = useTheme();
+  const k = useCalm();
+  const zc = zoneColor(c, snap.zone);
+  const yellow = scheme === "dark" ? k.system.yellow : k.tintInk.sand;
+  const elapsed = clockDuration(snap.now - start);
+  const segments = target ? [{ from: Math.min(target[0], 21) / 21, to: Math.min(target[1], 21) / 21, color: alpha(c.strain, 0.42) }] : undefined;
+  return (
+    <View style={{ alignSelf: "stretch", borderRadius: 20, backgroundColor: k.card, paddingHorizontal: 18, paddingVertical: 16, gap: 10 }}>
+      <View accessible accessibilityLabel={`Elapsed ${elapsed}`}>
+        <Caption>Elapsed</Caption>
+        <Txt size={64} lineHeight={70} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[font.numberAt(64, 800), { color: yellow }]}>
+          {elapsed}
+        </Txt>
+      </View>
+      <View accessible accessibilityLabel={snap.bpm === null ? "Heart rate: no reading" : `Heart rate ${snap.bpm} beats per minute${snap.zone ? `, zone ${snap.zone}` : ""}`} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        <BeatingHeart color={snap.bpm === null ? k.faint : zc} beating={snap.bpm !== null} />
+        <View style={{ flexDirection: "row", alignItems: "baseline" }}>
+          <Txt size={44} lineHeight={50} style={[font.numberAt(44, 800), { color: snap.bpm === null ? k.faint : zc }]}>
+            {snap.bpm === null ? MISSING : String(snap.bpm)}
+          </Txt>
+          <Txt size={17} lineHeight={22} weight={600} style={{ color: k.sub, marginLeft: 4 }}>
+            BPM
+          </Txt>
+        </View>
+        <View style={{ flex: 1 }} />
+        {snap.zone !== null && (
+          <View style={{ height: 26, borderRadius: 13, paddingHorizontal: 10, justifyContent: "center", backgroundColor: alpha(snap.zone ? zc : k.sub, 0.16) }}>
+            <Txt size={13} lineHeight={17} weight={700} style={[TABULAR, { color: snap.zone ? zc : k.sub }]}>
+              {snap.zone === 0 ? "Below Zone 1" : `Zone ${snap.zone}`}
+            </Txt>
+          </View>
+        )}
+      </View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 16, borderTopWidth: 0.5, borderTopColor: k.line, paddingTop: 12 }}>
+        <View accessible accessibilityLabel={`Workout strain ${f1(snap.session)}`} style={{ flex: 1, minWidth: 0 }}>
+          <Caption>Workout strain</Caption>
+          <Txt size={40} lineHeight={46} style={[font.numberAt(40, 800), { color: k.tintInk.peach }]}>
+            {f1(snap.session)}
+          </Txt>
+        </View>
+        <View accessible accessibilityLabel={`Day strain ${f1(snap.day)} of 21 so far${target ? `, target ${f1(target[0])} to ${f1(target[1])}` : ""}`} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <ActivityRings size={64} stroke={8} rings={[{ progress: Math.min(snap.day, 21) / 21, color: c.strain, segments }]} />
+          <View>
+            <Caption>Day strain</Caption>
+            <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}>
+              <Txt size={22} lineHeight={26} style={[font.numberAt(22, 800), { color: k.ink }]}>
+                {f1(snap.day)}
+              </Txt>
+              <Txt size={12} lineHeight={16} weight={600} style={{ color: k.sub }}>
+                so far
+              </Txt>
+            </View>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/** Haptic cues on or off, as an inset list's switch row. */
 function HapticsCard({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   const k = useCalm();
   return (
-    <Surface padding={18}>
+    <Surface padding={16} radius={16}>
       <View style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 12 }}>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Txt size={15} lineHeight={20} weight={600} style={{ color: k.ink }}>
+          <Txt size={16} lineHeight={21} style={{ color: k.ink }}>
             Haptic cues
           </Txt>
           <Sentence size={13}>A tap to push, two to ease off, a buzz at your target</Sentence>
@@ -294,12 +387,12 @@ function HapticsCard({ value, onChange }: { value: boolean; onChange: (v: boolea
   );
 }
 
-/** The coach's line on its tone's pastel: the ask in the tone's ink, the reason under it. */
+/** The coach's line on its tone's soft fill: the ask in the tone's colour, the reason under it. */
 function GuidanceCard({ tone, title, body }: { tone: GuidanceTone; title: string; body: string }) {
   const k = useCalm();
   return (
-    <View accessible accessibilityLiveRegion="polite" accessibilityLabel={`${title}. ${body}`} style={{ borderRadius: 20, borderWidth: 1, borderColor: k.tintEdge[toneTint(tone)], backgroundColor: k.tint[toneTint(tone)], padding: 20, gap: 4 }}>
-      <Txt size={17} lineHeight={22} weight={600} style={{ color: toneInk(k, tone) }}>
+    <View accessible accessibilityLiveRegion="polite" accessibilityLabel={`${title}. ${body}`} style={{ borderRadius: 20, backgroundColor: k.tint[toneTint(tone)], padding: 18, gap: 4 }}>
+      <Txt size={20} lineHeight={25} weight={700} style={{ color: toneInk(k, tone) }}>
         {title}
       </Txt>
       <Txt size={15} lineHeight={21} style={{ color: k.ink }}>
@@ -309,43 +402,23 @@ function GuidanceCard({ tone, title, body }: { tone: GuidanceTone; title: string
   );
 }
 
-/** Elapsed, heart rate and the workout's own Strain, then the zones with the current one lit. */
-function RunningStats({ snap, start, lost, name }: { snap: Snapshot; start: number; lost: boolean; name: string | null }) {
+/** The zones as five capsules with the current one lit in its colour, each with its time; the band and the link under them. */
+function ZonesCard({ snap, lost, name }: { snap: Snapshot; lost: boolean; name: string | null }) {
   const { c } = useTheme();
   const k = useCalm();
-  const zc = zoneColor(c, snap.zone);
-  const cells = [
-    { label: "Elapsed", value: clockDuration(snap.now - start), color: undefined, spoken: clockDuration(snap.now - start) },
-    { label: "Heart rate", value: snap.bpm === null ? MISSING : String(snap.bpm), color: snap.bpm === null ? undefined : zc, spoken: snap.bpm === null ? "no reading" : `${snap.bpm} beats per minute` },
-    { label: "Workout", value: f1(snap.session), color: k.tintInk.peach, spoken: `workout strain ${f1(snap.session)}` },
-  ];
   const band = snap.out?.band;
   return (
-    <Surface gap={16}>
-      <View style={{ flexDirection: "row", gap: 12 }}>
-        {cells.map((x) => (
-          <View key={x.label} accessible accessibilityLabel={`${x.label}: ${x.spoken}`} style={{ flex: 1, minWidth: 0, alignItems: "center", gap: 2 }}>
-            <Txt size={30} lineHeight={34} align="center" numberOfLines={1} style={[font.numberAt(30), { color: x.color ?? k.ink }]}>
-              {x.value}
-            </Txt>
-            <Caption align="center">{x.label}</Caption>
-          </View>
-        ))}
-      </View>
-      <View style={{ flexDirection: "row", gap: 4 }}>
+    <Surface gap={14}>
+      <View style={{ flexDirection: "row", gap: 6 }}>
         {[1, 2, 3, 4, 5].map((z) => {
           const on = snap.zone === z;
           const col = zoneColor(c, z);
           const secs = snap.zoneSeconds[z] ?? 0;
           return (
-            <View
-              key={z}
-              accessible
-              accessibilityLabel={`Zone ${z}${on ? ", current" : ""}: ${clockDuration(secs * 1000)}`}
-              style={{ flex: 1, minWidth: 0, alignItems: "center", gap: 4, borderRadius: 14, paddingVertical: 10, backgroundColor: on ? alpha(col, 0.2) : k.ground }}
-            >
-              <Txt size={12} lineHeight={16} weight={700} style={{ color: on ? col : k.faint, letterSpacing: 0.6 }}>{`Z${z}`}</Txt>
-              <Txt size={13} lineHeight={18} style={[font.numeric(600), { color: on ? k.ink : k.sub }]}>
+            <View key={z} accessible accessibilityLabel={`Zone ${z}${on ? ", current" : ""}: ${clockDuration(secs * 1000)}`} style={{ flex: 1, minWidth: 0, alignItems: "center", gap: 6 }}>
+              <View style={{ alignSelf: "stretch", height: 8, borderRadius: 4, backgroundColor: on ? col : alpha(col, 0.22) }} />
+              <Txt size={12} lineHeight={16} weight={700} style={{ color: on ? col : k.sub }}>{`Z${z}`}</Txt>
+              <Txt size={13} lineHeight={18} style={[font.numeric(on ? 700 : 500), { color: on ? k.ink : k.sub }]}>
                 {clockDuration(secs * 1000)}
               </Txt>
             </View>
@@ -382,7 +455,7 @@ function TodayCard({ setup, error }: { setup: WorkoutSetup | undefined; error: E
   ].filter(Boolean);
   return (
     <Surface>
-      <Txt size={15} lineHeight={22} style={{ color: k.ink }}>
+      <Txt size={15} lineHeight={21} style={{ color: k.ink }}>
         {lines.join(" ")}
       </Txt>
     </Surface>
@@ -399,7 +472,7 @@ function BandCard({ onGoLive, setup }: { onGoLive: () => void; setup: WorkoutSet
     return (
       <Surface gap={12}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-          <IconTile icon={Activity} tint="peach" size={40} />
+          <IconTile icon={Activity} tint="peach" size={36} />
           <Title header style={{ flex: 1 }}>
             Connect your band
           </Title>
@@ -412,7 +485,7 @@ function BandCard({ onGoLive, setup }: { onGoLive: () => void; setup: WorkoutSet
   return (
     <Surface gap={12}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-        <IconTile icon={HeartPulse} tint="rose" size={40} />
+        <IconTile icon={HeartPulse} tint="rose" size={36} />
         <Title header style={{ flex: 1 }}>
           Heart rate
         </Title>
@@ -454,15 +527,15 @@ function WorkoutSummary({ rec }: { rec: WorkoutRecord }) {
   const t = rec.target;
   const verdict = !t ? null : rec.dayEnd >= t[1] ? "Past today’s target: prioritise sleep tonight." : rec.dayEnd >= t[0] ? "Inside today’s target." : `${f1(t[0] - rec.dayEnd)} below today’s target.`;
   return (
-    <Surface tint="peach" gap={4}>
-      <Title header style={{ marginBottom: 4 }}>
+    <Surface gap={2}>
+      <Title header style={{ marginBottom: 6 }}>
         Workout summary
       </Title>
       {rows.map((r, i) => (
         <React.Fragment key={r.label}>
-          {i > 0 && <Hairline color={k.chip} />}
-          <View accessible accessibilityLabel={`${r.label}: ${r.value.replace("→", "to")}`} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingVertical: 10 }}>
-            <Txt size={15} lineHeight={20} weight={600} style={{ color: k.ink, flexShrink: 1 }}>
+          {i > 0 && <Hairline />}
+          <View accessible accessibilityLabel={`${r.label}: ${r.value.replace("→", "to")}`} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingVertical: 11 }}>
+            <Txt size={16} lineHeight={21} style={{ color: k.ink, flexShrink: 1 }}>
               {r.label}
             </Txt>
             {r.node}
@@ -470,8 +543,8 @@ function WorkoutSummary({ rec }: { rec: WorkoutRecord }) {
         </React.Fragment>
       ))}
       {total > 0 && (
-        <View accessible accessibilityLabel="Time in zones" style={{ flexDirection: "row", height: 8, borderRadius: 4, overflow: "hidden", gap: 2, marginTop: 8 }}>
-          {rec.zoneSeconds.map((sec, z) => (sec > 0 ? <View key={z} style={{ flexGrow: sec, backgroundColor: z ? zoneColor(c, z) : k.chip }} /> : null))}
+        <View accessible accessibilityLabel="Time in zones" style={{ flexDirection: "row", height: 8, borderRadius: 4, overflow: "hidden", gap: 2, marginTop: 10 }}>
+          {rec.zoneSeconds.map((sec, z) => (sec > 0 ? <View key={z} style={{ flexGrow: sec, backgroundColor: z ? zoneColor(c, z) : k.fill }} /> : null))}
         </View>
       )}
       <Sentence size={13} style={{ marginTop: 12 }}>
@@ -487,7 +560,7 @@ function RecentRow({ rec, timeZone, today }: { rec: WorkoutRecord; timeZone: str
   return (
     <View accessible accessibilityLabel={`${when}: ${clockDuration(rec.ms)}, workout strain ${f1(rec.strain)}`} style={{ minHeight: 56, flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 }}>
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Txt size={15} lineHeight={20} weight={600} style={{ color: k.ink }}>
+        <Txt size={16} lineHeight={21} style={{ color: k.ink }}>
           {when}
         </Txt>
         <Sentence size={13} style={{ fontVariant: ["tabular-nums"] }}>{`${clockDuration(rec.ms)}${rec.avgHr !== null ? ` · ${rec.avgHr} bpm avg` : ""}`}</Sentence>

@@ -1,16 +1,21 @@
+// One input to a score as a row: Recovery's contributors as Apple Health's "What shaped it" rows (an inset grouped list
+// row with a coloured icon square, today's reading against your normal, a slim range track and the points it moved the
+// score), and Healthspan's inputs against their targets.
 import * as React from "react";
 import { placeTarget } from "@/lib/labels";
 import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
-import { deltaTone, type GoodDirection, type Tone } from "@/lib/bands";
+import Animated from "react-native-reanimated";
+import { deltaTone, type GoodDirection } from "@/lib/bands";
 import { formatValue, isSymbolUnit, NBSP, spoken, type FormatKey } from "@/lib/format";
 import type { Metric } from "@/lib/reasons";
 import { alpha } from "@/lib/utils";
 import { accentFamily, type AccentFamily } from "@/ui/accents";
-import { useCalm, type CalmPalette } from "@/ui/calm";
-import { ChevronSlot, onBand, softFill } from "./calmKit";
+import { useCalm } from "@/ui/calm";
+import { ChevronSlot, iconRadius, onBand, recolorIcon, softFill } from "./calmKit";
 import { RangeTrack, TonePill } from "./Meter";
 import { MetricState, type MetricMeta } from "./MetricState";
 import { AccentIcon, MetricTags, ValueUnit } from "./primitives";
+import { usePress, usePressStyle } from "./press";
 import { Skeleton, SkeletonText } from "./Skeleton";
 import { Txt } from "./Text";
 
@@ -28,6 +33,8 @@ type Common = {
   style?: StyleProp<ViewStyle>;
   /** Opens the contributor's own detail (Recovery: its chart; Healthspan: its sheet). */
   onPress?: () => void;
+  /** Recovery: the icon square's colour (a system colour); default the Recovery green. */
+  color?: string;
 };
 
 export type ContributorRowProps =
@@ -50,14 +57,16 @@ export type ContributorRowProps =
     });
 
 const frac = (v: number, lo: number, hi: number) => Math.min(1, Math.max(0, (v - lo) / (hi - lo)));
-/** The reading's dot: good mint, bad sand, in line the ink. */
-const MARKER = (c: CalmPalette): Record<Tone, string> => ({ good: c.tintInk.mint, bad: c.tintInk.sand, neutral: c.ink });
 
 /** The icon tile's size; the row's lead band (icon, name's first line, value, chevron) is as tall. */
 const TILE = 44;
 const LABEL_LINE = 20;
 const VALUE_LINE = 26;
 const CHEVRON = 18;
+/** Recovery's row: the icon square, iOS Settings' 29 px. */
+const SQUARE = 29;
+
+const PressableView = Animated.createAnimatedComponent(Pressable);
 /** Where the lines under the head start: the name's column, past the icon tile. */
 const textInset = (p: Common) => (p.icon ? TILE + 12 : 0);
 
@@ -93,50 +102,87 @@ function Header({ p, value, pill, trailing }: { p: Common; value: number | null;
   );
 }
 
+/**
+ * Recovery's row, as an inset grouped list row in Apple Health's "What shaped it": the coloured icon square (`color`,
+ * a system colour, the glyph white), the name with today's reading against your normal under it in the tone's colour
+ * (green when it helps or sits in range, orange when it costs), the value with its small grey unit and the chevron.
+ * Under the name, a slim range track (your normal shaded, today the dot) and the normal range with the points it moved
+ * Recovery. A wrapped name keeps the value on its first line; a press settles and dims the row on the UI thread.
+ */
 function RecoveryRow({ p, value, meta }: { p: Extract<ContributorRowProps, { variant: "recovery" }>; value: number | null; meta?: MetricMeta }) {
   const c = useCalm();
+  const press = usePress(0.985);
+  const pressed = usePressStyle(press, { dim: 0.55 });
   const { mean, sd } = p.baseline;
   const lo = mean - 3 * sd;
   const hi = mean + 3 * sd;
-  const tone = value === null ? "neutral" : deltaTone(p.direction, value, mean, sd).tone;
+  const t = value === null ? null : deltaTone(p.direction, value, mean, sd);
   const pts = value === null ? null : p.points;
+  const unit = p.unit ? (isSymbolUnit(p.unit) ? p.unit : `${NBSP}${p.unit}`) : "";
   const unitSpoken = (v: number) => spoken(formatValue(p.format, v), p.unit);
+  const span = (v: number) => formatValue(p.format, v).replace(/^\+/, "");
+  // Today against the normal, in words: inside ±1 σ "In your normal range", else how far above or below the mean.
+  const diff = value === null ? 0 : value - mean;
+  const away = value === null ? "" : `${formatValue(p.format, Math.abs(diff)).replace(/^[+−-]/, "")}${unit} ${diff > 0 ? "above" : "below"} your normal`;
+  const said = value === null ? (p.reasonCopy ?? "Not measured: left out of today’s score") : t?.dir === "flat" ? "In your normal range" : away;
+  // Green when it helps or sits in range, orange when it costs; outside the range of a signal with no good direction
+  // (breathing rate), the plain grey (the dot in ink).
+  const tone = value === null ? c.sub : t?.tone === "bad" ? c.system.orange : t?.tone === "good" || t?.dir === "flat" ? c.tintInk.mint : c.sub;
+  const dot = tone === c.sub ? c.ink : tone;
+  const normal = `Normal ${span(mean - sd)}–${span(mean + sd)}${unit}`;
+  const moved = pts === null ? "" : pts === 0 ? " · no change" : ` · ${formatValue("signedInt", pts)}${NBSP}pts`;
   const sentence =
     value === null
-      ? `${p.label}: ${p.reasonCopy ?? "Not measured: left out of today’s score"}`
+      ? `${p.label}: ${said}`
       : `${p.label} ${unitSpoken(value)}, ${value > mean + sd ? "above" : value < mean - sd ? "below" : "within"} your normal range of ${formatValue(p.format, mean - sd)} to ${formatValue(p.format, mean + sd)}${pts === null ? "" : pts === 0 ? ", no change" : `, ${pts > 0 ? "added" : "took off"} ${Math.abs(Math.round(pts))} points`}`;
+  const square = p.color ?? c.tintInk.mint;
   const body = (
     <>
-      <Header p={p} value={value} pill={pts !== null && <TonePill tone={pts > 0 ? "good" : pts < 0 ? "bad" : "neutral"}>{`${formatValue("signedInt", pts)}${NBSP}pts`}</TonePill>} />
-      {/* In the name's column, as the pill is: the track spans mean ± 3 σ; your normal (± 1 σ) is the faint segment,
-          today the dot in its tone. */}
-      <View style={{ marginLeft: textInset(p), gap: 12 }}>
-        <RangeTrack value={value === null ? null : frac(value, lo, hi)} color={MARKER(c)[tone]} range={[frac(mean - sd, lo, hi), frac(mean + sd, lo, hi)]} height={8} />
-        <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-          <Txt size={13} lineHeight={18} style={{ color: c.sub, fontVariant: ["tabular-nums"] }}>
-            {value === null
-              ? (p.reasonCopy ?? "Not measured: left out of today’s score")
-              : `Baseline ${formatValue(p.format, mean)} ± ${formatValue(p.format, sd).replace(/^\+/, "")}${p.unit ? (isSymbolUnit(p.unit) ? p.unit : `${NBSP}${p.unit}`) : ""}`}
-          </Txt>
-          {meta && value !== null && <MetricTags provisional={meta.provisional} tags={meta.tags} />}
+      {p.icon && (
+        <View style={{ width: SQUARE, height: SQUARE, borderRadius: iconRadius(SQUARE), backgroundColor: square, alignItems: "center", justifyContent: "center", marginTop: onBand(LABEL_LINE, SQUARE) + 1 }}>
+          {recolorIcon(p.icon, "#ffffff", 18)}
         </View>
+      )}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
+          <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+            {/* Wraps, never clamps: "Respiratory rate" keeps its value beside its first line. */}
+            <Txt size={16} lineHeight={LABEL_LINE} style={{ color: c.ink }}>
+              {p.label}
+            </Txt>
+            <Txt size={13} lineHeight={18} weight={value === null ? 400 : 500} style={{ color: tone, fontVariant: ["tabular-nums"] }}>
+              {said}
+            </Txt>
+          </View>
+          <View style={{ flexShrink: 0, maxWidth: "45%", flexDirection: "row", alignItems: "center", gap: 6, marginTop: onBand(LABEL_LINE, VALUE_LINE) + 6 }}>
+            <ValueUnit value={formatValue(p.format, value)} unit={p.unit} role="value" size={20} lineHeight={VALUE_LINE} color={value === null ? c.faint : c.ink} style={{ textAlign: "right" }} />
+            <ChevronSlot shown={!!p.onPress} size={CHEVRON} />
+          </View>
+        </View>
+        {value !== null && (
+          <View style={{ marginTop: 9, marginRight: CHEVRON + 6, gap: 7 }}>
+            <RangeTrack value={frac(value, lo, hi)} color={dot} range={[frac(mean - sd, lo, hi), frac(mean + sd, lo, hi)]} rangeColor={alpha(c.ink, 0.13)} height={4} />
+            <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+              <Txt size={12} lineHeight={16} style={{ color: c.sub, fontVariant: ["tabular-nums"] }}>
+                {`${normal}${moved}`}
+              </Txt>
+              {meta && <MetricTags provisional={meta.provisional} tags={meta.tags} />}
+            </View>
+          </View>
+        )}
       </View>
     </>
   );
-  // With a detail to open, the whole row is the button; a press tints it with the quiet fill.
+  const box = [{ flexDirection: "row" as const, alignItems: "flex-start" as const, gap: 12, paddingLeft: 16, paddingRight: 14, paddingVertical: 12 }, p.style];
+  // With a detail to open, the whole row is the button.
   if (p.onPress)
     return (
-      <Pressable
-        onPress={p.onPress}
-        accessibilityRole="button"
-        accessibilityLabel={`${sentence}. Opens its history`}
-        style={({ pressed }) => [{ gap: 12, paddingVertical: 14, marginHorizontal: -8, paddingHorizontal: 8, borderRadius: 16, backgroundColor: pressed ? softFill(c, "card") : "transparent" }, p.style]}
-      >
+      <PressableView onPress={p.onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut} accessibilityRole="button" accessibilityLabel={`${sentence}. Opens its history`} style={[box, pressed]}>
         {body}
-      </Pressable>
+      </PressableView>
     );
   return (
-    <View accessibilityLabel={sentence} style={[{ gap: 12, paddingVertical: 14 }, p.style]}>
+    <View accessible accessibilityLabel={sentence} style={box}>
       {body}
     </View>
   );
@@ -219,9 +265,26 @@ export function ContributorRow(p: ContributorRowProps) {
   );
 }
 
-/** The row's loading shape in its real box: `icon` is the icon tile's size (none: no tile), the lines under it in the name's column. */
+/** The row's loading shape in its real box: `icon` is the icon's size (none: no icon), the lines under it in the name's column. */
 export function ContributorRowSkeleton({ variant = "recovery", icon }: { variant?: ContributorRowProps["variant"]; icon?: number }) {
   const c = useCalm();
+  if (variant === "recovery")
+    return (
+      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, paddingLeft: 16, paddingRight: 14, paddingVertical: 12 }}>
+        {icon ? <Skeleton radius={iconRadius(SQUARE)} style={{ width: SQUARE, height: SQUARE, marginTop: onBand(LABEL_LINE, SQUARE) + 1 }} /> : null}
+        <View style={{ flex: 1, minWidth: 0, gap: 9 }}>
+          <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
+            <View style={{ flex: 1, gap: 1 }}>
+              <SkeletonText role="body" size={16} lineHeight={LABEL_LINE} width={144} />
+              <SkeletonText role="caption" size={13} lineHeight={18} width={120} />
+            </View>
+            <SkeletonText role="value" size={20} lineHeight={VALUE_LINE} chars={5} style={{ marginTop: onBand(LABEL_LINE, VALUE_LINE) + 6 }} />
+          </View>
+          <View style={{ height: 4, borderRadius: 2, backgroundColor: c.line, marginRight: CHEVRON + 6 }} />
+          <SkeletonText role="caption" size={12} lineHeight={16} width={112} />
+        </View>
+      </View>
+    );
   const band = icon ?? VALUE_LINE;
   const track = <View style={{ height: 8, borderRadius: 4, backgroundColor: c.line }} />;
   return (
@@ -232,8 +295,8 @@ export function ContributorRowSkeleton({ variant = "recovery", icon }: { variant
         <SkeletonText role="value" size={22} lineHeight={VALUE_LINE} chars={6} style={{ marginTop: onBand(band, VALUE_LINE) }} />
       </View>
       <View style={{ marginLeft: icon ? icon + 12 : 0, gap: 10 }}>
-        {variant === "healthspan" ? <View style={{ marginVertical: 3 }}>{track}</View> : track}
-        <SkeletonText role="caption" width={variant === "healthspan" ? undefined : 112} />
+        <View style={{ marginVertical: 3 }}>{track}</View>
+        <SkeletonText role="caption" />
       </View>
     </View>
   );

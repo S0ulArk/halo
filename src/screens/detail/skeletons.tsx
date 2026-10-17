@@ -1,283 +1,222 @@
-// Loading states for the detail screens (spec §5.19), ported from the web's src/app/(app)/_lib/skeletons.tsx: the real
-// shell and each section's own box with its static titles and labels; only values are bars, so nothing moves when data
-// arrives. Headers never skeleton. Each returns the DetailScreen slots the screen spreads in.
+// Loading states for the detail screens (spec §5.19), ported from the web's src/app/(app)/_lib/skeletons.tsx and drawn
+// in the screens' own iOS shapes: the real shell, each card or grouped list in its final box with its static titles
+// and row names; only values are bars, so nothing moves when data arrives. Headers never skeleton. Each returns the
+// DetailScreen slots the screen spreads in.
 import * as React from "react";
 import { View } from "react-native";
-import { Flame } from "lucide-react-native";
 import { alpha } from "@/lib/utils";
-import {
-  ContributorRowSkeleton,
-  DriverListSkeleton,
-  InsightCard,
-  IntradayHrChart,
-  KeyStatRow,
-  KeyStatRowSkeleton,
-  ScoreDialSkeleton,
-  SectionShell,
-  Skeleton,
-  SkeletonText,
-  SleepStages,
-  TileRow,
-  TimelineSkeleton,
-  TrendChartSkeleton,
-  Txt,
-  useTheme,
-  ZoneBars,
-} from "@/ui";
+import { ContributorRowSkeleton, DriverListSkeleton, InsightCard, IntradayHrChart, SectionShell, Skeleton, SkeletonText, TrendChartSkeleton, Txt, ZoneBars } from "@/ui";
 import { useCalm } from "@/ui/calm";
-import { Caption } from "./calmKit";
+import { iconRadius } from "@/ui/components/calmKit";
+import { SleepHrChartSkeleton } from "@/ui/components/SleepHrChart";
+import { TimelineSkeleton } from "@/ui/components/ActivityCard";
 import type { DetailScreenProps } from "./DetailScreen";
-import { TONIGHT_INFO } from "./info";
-import { Aside, Divided, LegendText, statIcon, SummaryCard } from "./view";
+import { ListGroup, ROW_ICON } from "./ios";
+import { ScoreHeroSkeleton } from "./ScoreHero";
+import { StagesCardsSkeleton, TimeAsleepSkeleton } from "./SleepNight";
 
 export type Slots = Pick<DetailScreenProps, "hero" | "summary" | "insight" | "primary" | "secondary" | "footer">;
 
-/** The summary rows' keys (for their icon tiles, as the loaded rows draw them) and names. */
-const SUMMARY: Record<"strain" | "sleep", [key: string, label: string][]> = {
-  strain: [
-    ["target", "Strain Target"],
-    ["zones13", "Heart rate zones 1-3"],
-    ["zones45", "Heart rate zones 4-5"],
-    ["strength", "Strength activity time"],
-    ["steps", "Steps"],
-  ],
-  sleep: [
-    ["hours", "Hours vs. needed"],
-    ["consistency", "Sleep consistency"],
-    ["efficiency", "Sleep efficiency"],
-    ["restorative", "Restorative sleep"],
-  ],
-};
-
-/** Rows with no icon (`labels`), or with their icon tiles (`[key, label]`), so the names sit where the loaded rows' do. */
-function StatRows({ rows }: { rows: (string | [key: string, label: string])[] }) {
-  const { c } = useTheme();
+/** A grouped list row with its real name, an icon square's place when the loaded row has one, and a bar for the value. */
+function RowSkeleton({ label, icon = false, detail = true }: { label: string; icon?: boolean; detail?: boolean }) {
+  const c = useCalm();
   return (
-    <Divided>
-      {rows.map((r) => {
-        const [key, label] = typeof r === "string" ? [null, r] : r;
-        const icon = key === "target" ? <Flame size={20} color={c.mutedForeground} strokeWidth={1.75} /> : key ? statIcon(key, c.mutedForeground) : undefined;
-        return <KeyStatRowSkeleton key={label} variant="row" label={label} icon={icon} />;
-      })}
-    </Divided>
+    <View style={{ minHeight: 48, flexDirection: "row", alignItems: "center", gap: 12, paddingLeft: 16, paddingRight: 14, paddingVertical: 10 }}>
+      {icon && <Skeleton radius={iconRadius(ROW_ICON)} style={{ width: ROW_ICON, height: ROW_ICON }} />}
+      <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+        <Txt size={16} lineHeight={21} style={{ color: c.ink }}>
+          {label}
+        </Txt>
+        {detail && <SkeletonText role="caption" size={13} lineHeight={18} width={120} />}
+      </View>
+      <SkeletonText role="value" size={20} lineHeight={24} chars={4} />
+    </View>
   );
 }
-const statRows = (rows: (string | [key: string, label: string])[]) => <StatRows rows={rows} />;
 
-/** Recovery, Strain and Sleep: the dial with the notched summary card, then the insight. */
-function dialDetail(dial: "recovery" | "strain" | "sleep", summary: React.ReactNode, legend: React.ReactNode, action: boolean): Slots {
-  return {
-    hero: <ScoreDialSkeleton size="lg" variant={dial} />,
-    summary: <SummaryCard legend={legend}>{summary}</SummaryCard>,
-    insight: <InsightCard.Skeleton action={action} />,
-  };
+/** A card with a section's title over a box the size of its chart. */
+function ChartCard({ title, height, accent }: { title: string; height: number; accent?: "sleep" | "strain" | "recovery" | "heart" }) {
+  const c = useCalm();
+  return (
+    <SectionShell variant="card" title={title} accent={accent}>
+      <Skeleton style={{ height, backgroundColor: alpha(c.line, 0.6) }} />
+    </SectionShell>
+  );
 }
 
 export function recoverySkeleton(): Slots {
   return {
-    ...dialDetail(
-      "recovery",
-      Array.from({ length: 5 }, (_, i) => <ContributorRowSkeleton key={i} icon={44} />),
-      <LegendText>Dot: today. Shaded: your normal range.</LegendText>,
-      true,
+    hero: <ScoreHeroSkeleton variant="recovery" />,
+    summary: (
+      <ListGroup title="What shaped it" footer="Dot: today. Shaded: your normal range.">
+        {Array.from({ length: 5 }, (_, i) => (
+          <ContributorRowSkeleton key={i} icon={ROW_ICON} />
+        ))}
+      </ListGroup>
     ),
-    primary: (
-      <SectionShell variant="card" title="Recovery trend">
-        <TrendChartSkeleton chip />
-      </SectionShell>
-    ),
+    primary: <WeekSkeleton />,
     secondary: [
-      <SectionShell key="drivers" variant="card" title="What shaped it">
+      <SectionShell key="effect" variant="card" title="Effect on Recovery" accent="recovery">
         <DriverListSkeleton variant="recovery" unit="pts" rows={5} inCard />
       </SectionShell>,
-      <SectionShell key="forecast" variant="card" title="Tomorrow’s forecast" fill>
-        <View style={{ gap: 12 }}>
-          <View>
-            <SkeletonText role="valueXl" size={34} lineHeight={38} chars={3} />
-            <Caption style={{ marginTop: 4 }}>Tomorrow</Caption>
+      <SectionShell key="trend" variant="card" title="Recovery trend">
+        <TrendChartSkeleton chip />
+      </SectionShell>,
+      <SectionShell key="forecast" variant="card" title="Tomorrow’s forecast" accent="recovery">
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+          <Skeleton radius={38} style={{ width: 76, height: 76 }} />
+          <View style={{ flex: 1, gap: 6 }}>
+            <SkeletonText role="headline" size={17} lineHeight={22} width={120} />
+            <SkeletonText role="caption" width="80%" />
           </View>
-          <Skeleton radius={4} style={{ height: 8 }} />
-          <SkeletonText role="caption" width="80%" />
         </View>
       </SectionShell>,
     ],
   };
 }
 
+/** Recovery's week card: its title, the plot's box and the weekday row. */
+function WeekSkeleton() {
+  const c = useCalm();
+  return (
+    <View style={{ borderRadius: 20, backgroundColor: c.card, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12, gap: 14 }}>
+      <Txt size={17} lineHeight={22} weight={600} style={{ color: c.ink }}>
+        This week
+      </Txt>
+      <Skeleton style={{ height: 146, backgroundColor: alpha(c.line, 0.6) }} />
+    </View>
+  );
+}
+
+/** Strain's summary rows by their names (the target, then the day's parts), each with its icon square. */
+const STRAIN_ROWS = ["Strain Target", "Heart rate zones 1-3", "Heart rate zones 4-5", "Strength activity time", "Steps"];
+
 export function strainSkeleton(): Slots {
   return {
-    ...dialDetail("strain", statRows(SUMMARY.strain), <LegendText>Today vs. prior 30 days</LegendText>, true),
+    hero: <ScoreHeroSkeleton variant="strain" />,
+    summary: (
+      <ListGroup footer="Each part against your prior 30 days: green better, orange worse.">
+        {STRAIN_ROWS.map((l) => (
+          <RowSkeleton key={l} label={l} icon />
+        ))}
+      </ListGroup>
+    ),
+    insight: <InsightCard.Skeleton action />,
     primary: (
       <SectionShell variant="card" title="Heart rate">
         <IntradayHrChart.Skeleton />
       </SectionShell>
     ),
     secondary: [
-      <SectionShell key="zones" variant="card" title="Time in zones" fill>
+      <SectionShell key="zones" variant="card" title="Time in zones" accent="heart" fill>
         <ZoneBars.Skeleton variant="rows" />
         <SkeletonText role="caption" width={224} style={{ marginTop: 12 }} />
       </SectionShell>,
-      <SectionShell key="activities" variant="card" title="Activities">
+      <SectionShell key="activities" variant="card" title="Workouts" accent="strain">
         <TimelineSkeleton rows={1} />
       </SectionShell>,
-      <SectionShell key="trend" variant="card" title="Strain trend">
+      <SectionShell key="trend" variant="card" title="Strain trend" accent="strain">
         <TrendChartSkeleton chip caption />
       </SectionShell>,
-      <SectionShell key="calories" variant="card" title="Calories burned">
+      <SectionShell key="calories" variant="card" title="Calories burned" accent="strain">
         <TrendChartSkeleton ranges={["w", "m"]} day legend />
       </SectionShell>,
-      <SectionShell key="workouts" variant="card" title="Workout duration">
+      <SectionShell key="workouts" variant="card" title="Workout duration" accent="strain">
         <TrendChartSkeleton ranges={["w", "m"]} chip />
       </SectionShell>,
     ],
   };
 }
 
-/** A measure card's shape (hours vs. needed): the percentage, a bar, then its legend rows. */
-function MeasureSkeleton({ rows }: { rows: string[] }) {
-  const c = useCalm();
-  return (
-    <View>
-      <SkeletonText role="valueXl" size={36} lineHeight={40} width={96} />
-      <Skeleton radius={7} style={{ marginTop: 16, height: 14 }} />
-      <View style={{ marginTop: 16 }}>
-        <Divided>
-          {rows.map((l) => (
-            <View key={l} style={{ minHeight: 40, flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 }}>
-              <View style={{ width: 12, height: 12, borderRadius: 4, backgroundColor: c.line }} />
-              <Txt size={14} lineHeight={19} style={{ flex: 1, color: c.sub }}>
-                {l}
-              </Txt>
-              <SkeletonText role="numericCaption" chars={5} />
-            </View>
-          ))}
-        </Divided>
-      </View>
-    </View>
-  );
-}
-
-function PlannerSkeleton() {
-  return (
-    <View style={{ gap: 8 }}>
-      <Divided>
-        {Array.from({ length: 4 }, (_, i) => (
-          <View key={i} style={{ minHeight: 52, flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 }}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <SkeletonText role="label" width={80} />
-              <SkeletonText role="caption" width={96} style={{ marginTop: 2 }} />
-            </View>
-            <SkeletonText role="value" chars={5} />
-          </View>
-        ))}
-      </Divided>
-      <SkeletonText role="caption" width={112} />
-    </View>
-  );
-}
+/** Sleep Performance's parts by their names. */
+const PERFORMANCE_ROWS = ["Hours vs. needed", "Sleep consistency", "Sleep efficiency", "Restorative sleep", "Sleep stress"];
 
 export function sleepSkeleton(): Slots {
   return {
-    ...dialDetail("sleep", statRows(SUMMARY.sleep), <SkeletonText role="caption" lineHeight={20} width={192} />, false),
+    hero: <TimeAsleepSkeleton />,
+    summary: <StagesCardsSkeleton />,
+    insight: <InsightCard.Skeleton />,
     primary: (
-      <SectionShell variant="card" title="Last night’s sleep" aside={<Aside>vs. prior 30 days</Aside>}>
-        <SleepStages.Skeleton />
-      </SectionShell>
+      <ListGroup title="Sleep performance" inset={16}>
+        {PERFORMANCE_ROWS.map((l) => (
+          <RowSkeleton key={l} label={l} />
+        ))}
+      </ListGroup>
     ),
     secondary: [
-      <SectionShell key="need" variant="card" title="Hours vs. needed">
-        <MeasureSkeleton rows={["Healthy minimum", "Recent strain", "Sleep debt"]} />
+      <SectionShell key="hr" variant="card" title="Heart rate" accent="heart">
+        <SleepHrChartSkeleton />
       </SectionShell>,
-      <SectionShell key="consistency" variant="card" title="Sleep consistency">
-        <View style={{ gap: 16 }}>
-          <SkeletonText role="valueXl" size={36} lineHeight={40} width={96} />
-          <Skeleton style={{ height: 208 }} />
-        </View>
-      </SectionShell>,
-      <SectionShell key="restorative" variant="card" title="Restorative sleep">
+      <ListGroup key="planner" title="Tonight’s sleep" inset={16}>
+        {["Peak", "Perform", "Get by", "Typical wake"].map((l) => (
+          <RowSkeleton key={l} label={l} />
+        ))}
+      </ListGroup>,
+      <ChartCard key="need" title="Hours vs. needed" height={200} accent="sleep" />,
+      <ChartCard key="consistency" title="Sleep consistency" height={268} accent="sleep" />,
+      <SectionShell key="restorative" variant="card" title="Restorative sleep" accent="sleep">
         <TrendChartSkeleton ranges={["w", "m"]} day legend />
       </SectionShell>,
-      <SectionShell key="efficiency" variant="card" title="Sleep efficiency">
+      <SectionShell key="efficiency" variant="card" title="Sleep efficiency" accent="sleep">
         <TrendChartSkeleton chip />
       </SectionShell>,
-      <SectionShell key="details" variant="card" title="Details">
-        {statRows(["Time in bed", "Wake events", "Respiratory rate", "Sleep debt"])}
-      </SectionShell>,
-      <SectionShell key="debt" variant="card" title="Sleep debt">
+      <ListGroup key="details" title="Details" inset={16}>
+        {["Time in bed", "Wake events", "Respiratory rate", "Sleep debt"].map((l) => (
+          <RowSkeleton key={l} label={l} />
+        ))}
+      </ListGroup>,
+      <SectionShell key="debt" variant="card" title="Sleep debt" accent="sleep">
         <TrendChartSkeleton chip />
-      </SectionShell>,
-      <SectionShell key="planner" variant="card" title="Tonight’s sleep" info={TONIGHT_INFO}>
-        <PlannerSkeleton />
       </SectionShell>,
     ],
   };
 }
 
-/** The activity hero's pastel card with bars for the numbers. */
-function ActivityHeroSkeleton() {
+/** The workout's details card: its title and the grid of numbers with their real labels, bars for the numbers. */
+function WorkoutDetailsSkeleton() {
   const c = useCalm();
+  const rows = [
+    ["Activity strain", "Duration"],
+    ["Average heart rate", "Max heart rate"],
+    ["Calories"],
+  ];
   return (
-    <View style={{ alignSelf: "stretch", gap: 14, borderRadius: 20, borderWidth: 1, borderColor: c.tintEdge.peach, backgroundColor: c.tint.peach, padding: 20 }}>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "flex-end", columnGap: 32, rowGap: 12 }}>
-        {(
-          [
-            ["Activity strain", 52],
-            ["Duration", 34],
-          ] as const
-        ).map(([l, size]) => (
-          <View key={l}>
-            <SkeletonText role="valueXl" size={size} lineHeight={Math.round(size * 1.12)} chars={3} />
-            <Caption style={{ marginTop: 4 }}>{l}</Caption>
-          </View>
-        ))}
-      </View>
-      <SkeletonText role="caption" width={96} />
-    </View>
-  );
-}
-
-function ActivityTilesSkeleton() {
-  const { c } = useTheme();
-  const tile = (k: string, l: string, wide = false) => <KeyStatRow key={k} variant="tile" wide={wide} label={l} icon={statIcon(k, c.mutedForeground, 1.5)} metric={undefined} format="int" direction="none" />;
-  // Two a row, the odd last tile spanning the row on a phone, as the loaded grid draws it.
-  return (
-    <View style={{ gap: 12 }}>
-      <TileRow gap={12}>
-        {tile("avgHr", "Average heart rate")}
-        {tile("maxHr", "Max heart rate")}
-      </TileRow>
-      <TileRow gap={12}>{tile("calories", "Calories", true)}</TileRow>
+    <View style={{ alignSelf: "stretch", borderRadius: 20, backgroundColor: c.card, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4 }}>
+      <Txt size={17} lineHeight={22} weight={600} style={{ color: c.ink }}>
+        Workout details
+      </Txt>
+      {rows.map((row, i) => (
+        <View key={row[0]} style={[{ flexDirection: "row", gap: 16 }, i > 0 && { borderTopWidth: 0.5, borderTopColor: c.line }]}>
+          {row.map((l) => (
+            <View key={l} style={{ flex: 1, gap: 4, paddingVertical: 12 }}>
+              <Txt size={13} lineHeight={18} style={{ color: c.sub }}>
+                {l}
+              </Txt>
+              <SkeletonText role="valueXl" size={28} lineHeight={32} chars={3} />
+            </View>
+          ))}
+          {row.length === 1 && <View style={{ flex: 1 }} />}
+        </View>
+      ))}
     </View>
   );
 }
 
 export function activitySkeleton(): Slots {
   return {
-    hero: <ActivityHeroSkeleton />,
+    hero: <WorkoutDetailsSkeleton />,
     primary: (
       <View style={{ gap: 14 }}>
         <SectionShell variant="card" title="Heart rate">
           <IntradayHrChart.Skeleton variant="activity" />
         </SectionShell>
-        <SectionShell variant="card" title="Time in zones">
+        <SectionShell variant="card" title="Time in zones" accent="heart">
           <ZoneBars.Skeleton variant="rows" />
           <SkeletonText role="caption" width={224} style={{ marginTop: 12 }} />
         </SectionShell>
       </View>
     ),
-    secondary: [
-      <SectionShell key="stats" variant="section" title="Key statistics" aside={<Aside>vs. 30-day average</Aside>}>
-        <ActivityTilesSkeleton />
-      </SectionShell>,
-      <SectionShell key="hrr" variant="card" title="Heart rate recovery">
-        <HrrSkeleton />
-      </SectionShell>,
-    ],
+    secondary: [<ChartCard key="hrr" title="Heart rate recovery" height={96} />],
     footer: <InsightCard.Skeleton />,
   };
-}
-
-function HrrSkeleton() {
-  const c = useCalm();
-  return <Skeleton style={{ height: 96, backgroundColor: alpha(c.line, 0.6) }} />;
 }
