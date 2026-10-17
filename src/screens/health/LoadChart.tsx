@@ -1,6 +1,8 @@
 // Fitness (CTL), fatigue (ATL) and form (TSB) over 90 days (spec §7.10), ported from Pulse's health/fitness/LoadChart.tsx
-// (a Recharts ComposedChart) onto the kit's Skia chart pieces: form as thin bars around a zero line, fitness as a line
-// with a fading area, fatigue as a thinner line. A finger over the plot shows that day's three values (UI thread).
+// (a Recharts ComposedChart) onto the kit's Skia chart pieces in the Apple Health language: form as thin capsules around
+// a dashed zero line (past days at 35 %, today in full), fitness as a smooth line over a fill that fades to nothing with
+// today's point ringed, fatigue as a thinner line; dashed hairline rows, the value axis on the right, the months under
+// the plot. A finger scrubs a solid hairline with the day's readout card beside it (UI thread).
 import * as React from "react";
 import { View } from "react-native";
 import { Canvas, Group, Path, RoundedRect, Shadow, Text as SkText } from "@shopify/react-native-skia";
@@ -10,9 +12,12 @@ import { DAY, formatDay, formatValue } from "@/lib/format";
 import type { FitnessVM } from "@/queries";
 import { Txt, useTheme } from "@/ui";
 import { useCalm, type CalmPalette } from "@/ui/calm";
-import { AXIS, barPath, ChartFigure, FadeShader, Grid, GuideLine, LINE, PointMark, ScrubCursor, sp, SText, useBandScrub, useChartInk, useScrubArmed, type ChartFonts } from "@/ui/components/ChartFrame";
+import { AXIS, barPath, ChartFigure, FadeShader, Grid, GuideLine, LINE, measure, PointMark, RightAxis, ScrubCursor, sp, SText, useBandScrub, useChartInk, useScrubArmed, type ChartFonts } from "@/ui/components/ChartFrame";
 
 const H = 220;
+/** The plot's left edge, and the room on its right for the value axis (three digits and a sign, the gap and air). */
+const X0 = 4;
+const RIGHT = 34;
 const LABEL = { ctl: "Fitness", atl: "Fatigue", tsb: "Form" } as const;
 const TIP_W = 112;
 
@@ -108,12 +113,11 @@ export function LoadChart({ load }: { load: Load }) {
     return { ticks, yTicks, lo, hi, lines };
   }, [load]);
   const { ticks, yTicks, lo, hi, lines } = m;
-  const x0 = 4 + 32;
-  // The same 8 px right edge as the other charts, so the latest day never sits flush with the card.
-  const scrub = useBandScrub(x0, 8, load.length);
+  const x0 = X0;
+  const scrub = useBandScrub(x0, RIGHT, load.length);
 
   const frame = (width: number) => {
-    const x1 = width - 8;
+    const x1 = width - RIGHT;
     const plotTop = 8;
     const plotBottom = H - AXIS.xAxisHeight;
     const band = (x1 - x0) / Math.max(1, load.length);
@@ -146,17 +150,18 @@ export function LoadChart({ load }: { load: Load }) {
         {({ width, fonts }) => {
           const { x1, plotTop, plotBottom, band, cx, y, ctl, atl } = frame(width);
           const barW = Math.min(4, band * 0.8);
-          const axis = fonts.num(500, 12);
+          const axis = fonts.num(500, AXIS.fontSize);
           const lastI = load.length - 1;
           return (
             <Group>
               <Grid ys={yTicks.map(y)} x1={x0} x2={x1} />
-              {yTicks.map((v) => (
-                <SText key={v} x={x0 - AXIS.tickMargin} y={y(v) + 12 * 0.32} text={formatValue("int", v)} font={axis} color={k.axis} anchor="end" />
-              ))}
-              {ticks.map((i) => (
-                <SText key={i} x={cx(i)} y={plotBottom + AXIS.tickMargin + 12} text={formatDay(load[i].day, { month: "short" })} font={axis} color={k.axis} anchor="middle" />
-              ))}
+              <RightAxis x={x1} ys={yTicks.map(y)} texts={yTicks.map((v) => formatValue("int", v))} font={axis} />
+              {ticks.map((i) => {
+                // Centred on the month's first day, kept on the canvas at both ends.
+                const text = formatDay(load[i].day, { month: "short" });
+                const half = measure(axis, text) / 2;
+                return <SText key={i} x={Math.min(width - half - 1, Math.max(half + 1, cx(i)))} y={plotBottom + AXIS.tickMargin + AXIS.fontSize} text={text} font={axis} color={k.axis} anchor="middle" />;
+              })}
               <GuideLine x1={x0} x2={x1} y1={y(0)} y2={y(0)} />
               <Group>
                 {/* Form: thin capsules, sand below zero (fatigue above fitness), else mint; past days dimmed, today at full ink. */}

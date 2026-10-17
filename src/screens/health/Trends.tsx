@@ -1,5 +1,7 @@
 // Trends `/trends?metric=&r=` (More, U21), ported from Pulse's trends/page.tsx, parts.tsx, MetricSheet.tsx and
-// loading.tsx: one daily metric over up to a year, each range against the one before.
+// loading.tsx, as an Apple Health detail page: the metric on show as a card (its area's coloured icon square, the area
+// in small capitals over the metric's name, the up-down chevrons that open the picker), the chart with its headline and
+// range control (W / M / 6M / 1Y), then each range's average against the one before as a grouped list.
 import * as React from "react";
 import { Pressable, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -9,9 +11,11 @@ import { localizeDef } from "@/queries/units";
 import { useApp, useQuery } from "@/state/app";
 import { trendGoal, useGoals } from "@/state/goals";
 import { useUnits } from "@/state/units";
-import { BottomSheet, KeyStatRow, KeyStatRowSkeleton, SectionShell, TrendChart, TrendChartSkeleton, Txt } from "@/ui";
+import { BottomSheet, KeyStatRow, KeyStatRowSkeleton, SectionShell, TrendChart, TrendChartSkeleton } from "@/ui";
 import { useCalm, type CalmTint } from "@/ui/calm";
-import { Caption, IconTile, Num, Title } from "@/screens/detail/calmKit";
+import { Caption, Num, Title } from "@/screens/detail/calmKit";
+import { CalmChip, IconTile } from "@/screens/settings/calmKit";
+import { Card } from "@/ui/components/Card";
 import { ExpandButton } from "@/ui/components/ChartFrame";
 import { useOpenChart } from "@/screens/chart/href";
 import { DetailScreen, ErrorState, usePush } from "./shells";
@@ -26,13 +30,13 @@ export const PERIOD: Record<TrendRange, { label: string; prior: string }> = {
 
 const GROUPS = TREND_GROUPS.map((g) => ({ group: g, metrics: TREND_METRICS.filter((m) => m.group === g) }));
 
-/** Each section's pastel: recovery and sleep mint, activity sky, body sand, nutrition peach, vitals rose. */
+/** Each section's system colour: recovery and sleep green, activity blue, body yellow, nutrition orange, vitals pink. */
 const GROUP_TINT: Record<TrendGroup, CalmTint> = { "Recovery & sleep": "mint", Activity: "sky", Body: "sand", Nutrition: "peach", Vitals: "rose" };
 
 /**
- * The metric picker (spec §7.17): the lead card, in the section's pastel, naming the section and the metric on show. A
- * tap opens a bottom sheet of the sections, the current one open, its metrics as wrapping chips (one section at a time,
- * so the sheet stays about a screen tall). A tap on a metric switches and closes; the range stays.
+ * The metric picker (spec §7.17): the lead card naming the section and the metric on show. A tap opens a bottom sheet of
+ * the sections, the current one open, its metrics as wrapping chips (one section at a time, so the sheet stays about a
+ * screen tall). A tap on a metric switches and closes; the range stays.
  */
 function MetricPicker({ current, onPick }: { current: TrendMetricKey; onPick: (key: TrendMetricKey) => void }) {
   const c = useCalm();
@@ -42,37 +46,40 @@ function MetricPicker({ current, onPick }: { current: TrendMetricKey; onPick: (k
   const tint = GROUP_TINT[metric.group];
   return (
     <>
-      <Pressable
-        accessibilityRole="button"
+      <Card
         accessibilityLabel={`Metric: ${metric.label}, ${metric.group}. Change metric`}
         onPress={() => {
           setExpanded(metric.group);
           setOpen(true);
         }}
-        style={({ pressed }) => ({ minHeight: 72, flexDirection: "row", alignItems: "center", gap: 14, borderRadius: 20, borderWidth: 1, borderColor: c.tintEdge[tint], backgroundColor: c.tint[tint], ...(c.shadow ? { boxShadow: c.shadow } : null), paddingHorizontal: 18, paddingVertical: 14, opacity: pressed ? 0.92 : 1 })}
+        padding={14}
       >
-        <IconTile icon={ChartLine} color={c.tintInk[tint]} bg={c.chip} size={40} />
-        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Caption>{metric.group}</Caption>
-          <Title>{metric.label}</Title>
+        <View style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <IconTile icon={ChartLine} tint={tint} size={36} />
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <Caption>{metric.group}</Caption>
+            <Title>{metric.label}</Title>
+          </View>
+          <ChevronsUpDown size={20} color={c.tertiary} strokeWidth={2} />
         </View>
-        <ChevronsUpDown size={20} color={c.sub} strokeWidth={1.75} />
-      </Pressable>
+      </Card>
       <BottomSheet open={open} onClose={() => setOpen(false)} title="Metric">
         {GROUPS.map(({ group, metrics }, i) => {
           const on = group === expanded;
           return (
-            <View key={group} style={{ borderBottomWidth: i < GROUPS.length - 1 ? 1 : 0, borderBottomColor: c.line }}>
+            <View key={group} style={{ borderBottomWidth: i < GROUPS.length - 1 ? 0.5 : 0, borderBottomColor: c.line }}>
               <Pressable
                 onPress={() => setExpanded(group)}
                 accessibilityRole="button"
                 accessibilityState={{ expanded: on }}
                 style={{ minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}
               >
-                <Title size={16}>{group}</Title>
+                <Title size={16} color={on ? c.teal : undefined}>
+                  {group}
+                </Title>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                   <Num value={String(metrics.length)} size={15} color={c.sub} />
-                  <ChevronDown size={20} color={c.sub} strokeWidth={1.75} style={{ transform: [{ rotate: on ? "180deg" : "0deg" }] }} />
+                  <ChevronDown size={20} color={c.tertiary} strokeWidth={2} style={{ transform: [{ rotate: on ? "180deg" : "0deg" }] }} />
                 </View>
               </Pressable>
               {on && (
@@ -80,28 +87,16 @@ function MetricPicker({ current, onPick }: { current: TrendMetricKey; onPick: (k
                   {metrics.map((m) => {
                     const selected = m.key === metric.key;
                     return (
-                      <Pressable
+                      <CalmChip
                         key={m.key}
+                        label={m.label}
+                        selected={selected}
+                        role="button"
                         onPress={() => {
                           setOpen(false);
                           if (!selected) onPick(m.key);
                         }}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected }}
-                        style={({ pressed }) => ({
-                          minHeight: 40,
-                          borderRadius: 20,
-                          paddingHorizontal: 16,
-                          paddingVertical: 8,
-                          justifyContent: "center",
-                          backgroundColor: selected ? c.teal : c.tint[GROUP_TINT[group]],
-                          opacity: pressed ? 0.8 : 1,
-                        })}
-                      >
-                        <Txt size={14} lineHeight={20} weight={600} style={{ color: selected ? c.card : c.ink }}>
-                          {m.label}
-                        </Txt>
-                      </Pressable>
+                      />
                     );
                   })}
                 </View>

@@ -1,4 +1,7 @@
-// Stress Monitor `/health/stress?d=` (spec §7.9), ported from Pulse's health/stress/page.tsx and its loading.tsx.
+// Stress Monitor `/health/stress?d=` (spec §7.9), ported from Pulse's health/stress/page.tsx and its loading.tsx, as an
+// Apple Health detail page: the large title with the day under it, the gauge ring (it sweeps to the latest score as the
+// number rolls in), the insight, the day's line, the day's minutes per level as one capsule over the typical same
+// weekday's (dimmed) with each level's time in a grouped list, the breathing entry, then the 30-day trend.
 import * as React from "react";
 import { View } from "react-native";
 import { clock, dayLabel, durationWords, hmm } from "@/lib/format";
@@ -6,9 +9,11 @@ import { useDay } from "@/lib/day";
 import { alpha } from "@/lib/utils";
 import { getStress, type StressVM } from "@/queries";
 import { useApp, useQuery } from "@/state/app";
-import { EmptyState, InsightCard, MetricState, ScoreDial, ScoreDialSkeleton, SectionShell, Skeleton, SkeletonText, TrendChart, TrendChartSkeleton, useTheme } from "@/ui";
+import { EmptyState, InsightCard, MetricState, ScoreDial, ScoreDialSkeleton, SectionShell, Skeleton, SkeletonText, TrendChart, TrendChartSkeleton, Txt, useTheme } from "@/ui";
 import { useCalm } from "@/ui/calm";
-import { Caption, Num, Sentence, Title } from "@/screens/detail/calmKit";
+import { Num, Sentence, Title } from "@/screens/detail/calmKit";
+import { Hairline } from "@/screens/settings/calmKit";
+import { Grow } from "./kit";
 import type { ColorToken } from "@/ui/theme";
 import { STRESS_INFO } from "./info";
 import { DetailScreen, ErrorState, useDaySwitcher } from "./shells";
@@ -27,13 +32,15 @@ const LEVEL_KEYS: { key: "lowMin" | "mediumMin" | "highMin"; word: string; color
 
 type Levels = NonNullable<StressVM["levels"]["value"]>;
 
-/** One three-segment bar, each level as wide as its share of the day's scored minutes. */
+/** One capsule split in three, each level as wide as its share of the day's scored minutes, wiping in once. */
 function LevelBar({ m, height, dim }: { m: { lowMin: number; mediumMin: number; highMin: number }; height: number; dim?: boolean }) {
   const { c } = useTheme();
   return (
-    <View style={{ height, flexDirection: "row", gap: 2, borderRadius: 4, overflow: "hidden", opacity: dim ? 0.5 : 1 }}>
-      {LEVEL_KEYS.map((k) => (m[k.key] > 0 ? <View key={k.key} style={{ flexGrow: m[k.key], backgroundColor: c[k.color] }} /> : null))}
-    </View>
+    <Grow mode="wipe" style={{ height }}>
+      <View style={{ height, flexDirection: "row", gap: 2, opacity: dim ? 0.35 : 1 }}>
+        {LEVEL_KEYS.map((k) => (m[k.key] > 0 ? <View key={k.key} style={{ flexGrow: m[k.key], borderRadius: height / 2, backgroundColor: c[k.color] }} /> : null))}
+      </View>
+    </Grow>
   );
 }
 
@@ -64,23 +71,26 @@ function TotalDay({ l, day }: { l: Levels; day: string }) {
         <LevelBar m={l} height={12} />
         {l.typical && <LevelBar m={l.typical} height={8} dim />}
       </View>
-      <View style={{ flexDirection: "row", gap: 12 }}>
-        {LEVEL_KEYS.map((k) => (
-          <View
-            key={k.key}
-            accessible
-            accessibilityLabel={`${k.word}: ${durationWords(Math.round(l[k.key]))}${l.typical ? `, typical ${durationWords(Math.round(l.typical[k.key]))}` : ""}`}
-            style={{ flex: 1, minWidth: 0 }}
-          >
-            <Num value={hmm(l[k.key])} size={24} color={c[k.color]} />
-            <Caption style={{ marginTop: 4 }}>{k.word}</Caption>
-            {l.typical && (
-              <View style={{ marginTop: 4, flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", columnGap: 4 }}>
-                <Num value={hmm(l.typical[k.key])} size={14} color={calm.sub} />
-                <Sentence size={13}>typical</Sentence>
+      {/* Each level as a row: its colour, its name, the typical time under it, its time on the day on the right. */}
+      <View>
+        {LEVEL_KEYS.map((k, i) => (
+          <React.Fragment key={k.key}>
+            {i > 0 ? <Hairline inset={20} /> : null}
+            <View
+              accessible
+              accessibilityLabel={`${k.word}: ${durationWords(Math.round(l[k.key]))}${l.typical ? `, typical ${durationWords(Math.round(l.typical[k.key]))}` : ""}`}
+              style={{ minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 }}
+            >
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: c[k.color] }} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Txt size={16} lineHeight={21} style={{ color: calm.ink }}>
+                  {k.word}
+                </Txt>
+                {l.typical && <Sentence size={13}>{`Typical ${hmm(l.typical[k.key])}`}</Sentence>}
               </View>
-            )}
-          </View>
+              <Num value={hmm(l[k.key])} size={20} color={c[k.color]} />
+            </View>
+          </React.Fragment>
         ))}
       </View>
       {line && <Sentence size={13}>{line}</Sentence>}
@@ -96,13 +106,18 @@ function TotalDaySkeleton() {
         <Skeleton radius={4} style={{ height: 12 }} />
         <Skeleton radius={4} style={{ height: 8 }} />
       </View>
-      <View style={{ flexDirection: "row", gap: 12 }}>
-        {["Low", "Medium", "High"].map((w) => (
-          <View key={w} style={{ flex: 1 }}>
-            <SkeletonText role="value" chars={4} />
-            <Caption style={{ marginTop: 4 }}>{w}</Caption>
-            <SkeletonText role="caption" width={80} style={{ marginTop: 4 }} />
-          </View>
+      <View>
+        {["Low", "Medium", "High"].map((w, i) => (
+          <React.Fragment key={w}>
+            {i > 0 ? <Hairline inset={20} /> : null}
+            <View style={{ minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 }}>
+              <Skeleton radius={5} style={{ width: 10, height: 10 }} />
+              <View style={{ flex: 1 }}>
+                <SkeletonText size={16} lineHeight={21} width={72} />
+              </View>
+              <SkeletonText role="value" chars={4} />
+            </View>
+          </React.Fragment>
         ))}
       </View>
       <SkeletonText role="caption" width={224} />

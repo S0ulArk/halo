@@ -64,7 +64,7 @@ function ArchiveSkeleton() {
   const c = useCalm();
   return (
     <View style={{ gap: MORE_COLUMN_GAP }}>
-      <Skeleton radius={18} style={{ height: 52, backgroundColor: c.card }} />
+      <Skeleton radius={9} style={{ height: 32, backgroundColor: c.fill }} />
       <LinkListSkeleton title="" rows={4} />
       <LinkListSkeleton title="" rows={4} />
     </View>

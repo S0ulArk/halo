@@ -1,115 +1,115 @@
-// Pulse Age against your real age, on a ruler of years: a teal dot for the age you are, the Pulse Age marker in the
-// card's ink, and the stretch between them filled (rose-ish sand when older, mint when younger). When the value
-// arrives the fill grows from your age to the Pulse Age and the marker settles there; then the marker breathes slowly.
-// Everything moves on the UI thread and stops while the screen is out of view.
+// Halo Age against your real age on one scale of years, as the design draws it: a thin capsule that runs green (younger)
+// through yellow to red (older), every fifth year labelled under it, your age a small ringed dot and the Halo Age a
+// larger white knob ringed in its colour, a dotted line over the track between the two, and a legend naming both. When
+// the value arrives the knob springs from your age to the Halo Age (the gap it measures, drawn as motion) and the dotted
+// line fades in behind it. All on the UI thread; Reduce motion places everything at once.
 import * as React from "react";
 import { View, type LayoutChangeEvent } from "react-native";
-import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
-import { useIsFocused } from "expo-router";
+import Animated, { cancelAnimation, interpolate, Extrapolation, useAnimatedStyle, useSharedValue, withDelay, withSpring } from "react-native-reanimated";
+import { LinearGradient } from "expo-linear-gradient";
 import { formatValue } from "@/lib/format";
+import { alpha } from "@/lib/utils";
 import { Txt } from "@/ui";
 import { useCalm } from "@/ui/calm";
-import { font } from "@/ui/fonts";
+import { iosSpring } from "@/ui/motion/springs";
 import { reduceMotionNow } from "@/ui/motion/system";
+import { ageSpan } from "./format";
 
-const TRACK = 10;
-const DOT = 14;
-const MARK = 22;
+const TRACK = 8;
+const KNOB = 20;
+const DOT = 12;
+/** The lane over the markers that holds the dotted gap line, and the marker row the track runs through. */
+const LANE = 6;
+const ROW = 24;
+/** The knob's travel: a soft spring with the faintest settle (0.65 s, 0.8). */
+const KNOB_SPRING = iosSpring(0.65, 0.8);
 
-/** The ruler's span: whole fives around both ages, with a few years of air either side. */
-function span(a: number, b: number): [number, number] {
-  const lo = Math.floor((Math.min(a, b) - 4) / 5) * 5;
-  const hi = Math.ceil((Math.max(a, b) + 4) / 5) * 5;
-  return [lo, Math.max(hi, lo + 10)];
-}
-
-export function AgeRuler({ age, pulseAge, ink }: { age: number; pulseAge: number; ink: string }) {
+/**
+ * The scale: `age` (your real age) and `pulseAge` (the Halo Age) in years; `color` rings the Halo Age's knob. `spoken`
+ * false when a button around it already says both ages.
+ */
+export function AgeRuler({ age, pulseAge, color, spoken = true }: { age: number; pulseAge: number; color: string; spoken?: boolean }) {
   const c = useCalm();
-  const focused = useIsFocused();
   const [w, setW] = React.useState(0);
-  const [lo, hi] = span(age, pulseAge);
+  const [lo, hi] = ageSpan(age, pulseAge);
   const x = (v: number) => ((v - lo) / (hi - lo)) * w;
-  const grow = useSharedValue(reduceMotionNow() ? 1 : 0);
-  const breathe = useSharedValue(0);
-
-  React.useEffect(() => {
-    if (reduceMotionNow()) return;
-    grow.value = 0;
-    grow.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.cubic) });
-  }, [age, pulseAge, grow]);
-  React.useEffect(() => {
-    if (!focused || reduceMotionNow()) {
-      cancelAnimation(breathe);
-      return;
-    }
-    breathe.value = withRepeat(withTiming(1, { duration: 1600, easing: Easing.inOut(Easing.sin) }), -1, true);
-    return () => cancelAnimation(breathe);
-  }, [focused, breathe]);
-
   const from = x(age);
   const to = x(pulseAge);
-  const fill = useAnimatedStyle(() => {
-    const end = from + (to - from) * grow.value;
-    return { left: Math.min(from, end), width: Math.abs(end - from) };
-  });
-  const marker = useAnimatedStyle(() => ({ transform: [{ translateX: from + (to - from) * grow.value - MARK / 2 }, { scale: 1 + 0.12 * breathe.value }] }));
-  const ticks = Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
+  // 0: the knob on your age; 1: on the Halo Age.
+  const p = useSharedValue(reduceMotionNow() ? 1 : 0);
+  const laid = w > 0;
+  React.useEffect(() => {
+    if (!laid) return;
+    if (reduceMotionNow()) {
+      p.set(1);
+      return;
+    }
+    p.set(0);
+    p.set(withDelay(260, withSpring(1, KNOB_SPRING)));
+    return () => cancelAnimation(p);
+  }, [laid, age, pulseAge, p]);
+  const knob = useAnimatedStyle(() => ({ transform: [{ translateX: from + (to - from) * p.value - KNOB / 2 }] }), [from, to]);
+  const gap = useAnimatedStyle(() => ({ opacity: interpolate(p.value, [0.55, 1], [0, 1], Extrapolation.CLAMP) }));
+  const ticks: number[] = [];
+  for (let t = lo; t <= hi; t += 5) ticks.push(t);
+  const left = Math.min(from, to);
+  const span = Math.abs(to - from);
+  const dots = Math.max(0, Math.floor(span / 5));
 
   return (
-    <View onLayout={(e: LayoutChangeEvent) => setW(Math.round(e.nativeEvent.layout.width))} style={{ gap: 8 }}>
-      {w > 0 && (
-        <>
-          {/* The two ages named above their marks. */}
-          <View style={{ height: 34 }}>
-            <View style={{ position: "absolute", left: Math.min(Math.max(from - 40, 0), w - 80), width: 80, alignItems: "center" }}>
-              <Txt size={11} lineHeight={14} weight={700} style={{ color: c.faint, letterSpacing: 1 }}>
-                YOU
-              </Txt>
-              <Txt size={15} lineHeight={18} style={[font.numeric(700), { color: c.teal }]}>
-                {formatValue("decimal1", age)}
-              </Txt>
-            </View>
-            <View style={{ position: "absolute", left: Math.min(Math.max(to - 40, 0), w - 80), width: 80, alignItems: "center", opacity: Math.abs(to - from) < 44 ? 0 : 1 }}>
-              <Txt size={11} lineHeight={14} weight={700} style={{ color: c.faint, letterSpacing: 1 }}>
-                HALO
-              </Txt>
-              <Txt size={15} lineHeight={18} style={[font.numeric(700), { color: ink }]}>
-                {formatValue("decimal1", pulseAge)}
-              </Txt>
-            </View>
-          </View>
-          <View style={{ height: MARK, justifyContent: "center" }}>
-            <View style={{ height: TRACK, borderRadius: TRACK / 2, backgroundColor: c.chip }} />
-            <Animated.View style={[{ position: "absolute", height: TRACK, borderRadius: TRACK / 2, backgroundColor: ink, opacity: 0.45 }, fill]} />
-            <View style={{ position: "absolute", left: from - DOT / 2, width: DOT, height: DOT, borderRadius: DOT / 2, backgroundColor: c.teal, borderWidth: 2, borderColor: c.chip }} />
-            <Animated.View style={[{ position: "absolute", left: 0, width: MARK, height: MARK, borderRadius: MARK / 2, backgroundColor: ink, borderWidth: 3, borderColor: c.chip }, marker]} />
-          </View>
-          {/* A year per tick, labelled every five. */}
-          <View style={{ height: 22 }}>
-            {ticks.map((t) => (
-              <View key={t} style={{ position: "absolute", left: x(t) - 0.5, top: 0, width: 1, height: t % 5 === 0 ? 8 : 4, backgroundColor: c.faint, opacity: t % 5 === 0 ? 0.8 : 0.4 }} />
-            ))}
-            {ticks
-              .filter((t) => t % 5 === 0)
-              .map((t) => (
-                <Txt key={`l${t}`} size={11} lineHeight={14} style={[font.numeric(600), { position: "absolute", top: 9, left: Math.min(Math.max(x(t) - 12, 0), w - 24), width: 24, textAlign: "center", color: c.faint }]}>
-                  {String(t)}
-                </Txt>
+    <View
+      accessible={spoken}
+      importantForAccessibility={spoken ? "auto" : "no-hide-descendants"}
+      accessibilityLabel={`Halo Age ${formatValue("decimal1", pulseAge)} on a scale of ${lo} to ${hi} years, your age ${formatValue("decimal1", age)}`}
+      style={{ gap: 8 }}
+    >
+      <View onLayout={(e: LayoutChangeEvent) => setW(Math.round(e.nativeEvent.layout.width))} style={{ height: LANE + ROW + 20 }}>
+        {laid && (
+          <>
+            {/* The gap between the two ages: a dotted line just over the markers, from one centre to the other. */}
+            <Animated.View pointerEvents="none" style={[{ position: "absolute", top: LANE - 4, left, width: span, height: 2, flexDirection: "row", justifyContent: "space-between" }, gap]}>
+              {Array.from({ length: dots }, (_, i) => (
+                <View key={i} style={{ width: 2, height: 2, borderRadius: 1, backgroundColor: alpha(c.ink, 0.25) }} />
               ))}
-          </View>
-        </>
-      )}
-    </View>
-  );
-}
-
-/** The collapsed header's Pulse Age: a small pill with the age in the card's ink. */
-export function AgeBadge({ age, ink, bg }: { age: number | null; ink: string; bg: string }) {
-  return (
-    <View style={{ minWidth: 56, height: 32, paddingHorizontal: 12, borderRadius: 16, backgroundColor: bg, alignItems: "center", justifyContent: "center" }}>
-      <Txt size={16} lineHeight={20} style={[font.numeric(700), { color: ink }]}>
-        {age === null ? "—" : formatValue("decimal1", age)}
-      </Txt>
+            </Animated.View>
+            <LinearGradient
+              colors={[c.system.green, c.system.yellow, c.system.red]}
+              locations={[0, 0.55, 1]}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={{ position: "absolute", left: 0, right: 0, top: LANE + (ROW - TRACK) / 2, height: TRACK, borderRadius: TRACK / 2, opacity: 0.9 }}
+            />
+            {/* Your age: a small dot in the card colour ringed in grey. */}
+            <View style={{ position: "absolute", left: from - DOT / 2, top: LANE + (ROW - DOT) / 2, width: DOT, height: DOT, borderRadius: DOT / 2, backgroundColor: c.card, borderWidth: 2.5, borderColor: c.sub }} />
+            {/* The Halo Age: a white knob ringed in its colour, springing from your age to its own. */}
+            <Animated.View
+              style={[
+                { position: "absolute", left: 0, top: LANE + (ROW - KNOB) / 2, width: KNOB, height: KNOB, borderRadius: KNOB / 2, backgroundColor: "#ffffff", borderWidth: 3.5, borderColor: color, boxShadow: "0 1px 3px rgba(0,0,0,0.18)" },
+                knob,
+              ]}
+            />
+            {ticks.map((t) => (
+              <Txt key={t} size={11} lineHeight={14} align="center" style={{ position: "absolute", top: LANE + ROW + 4, left: x(t) - 16, width: 32, color: c.sub, fontVariant: ["tabular-nums"] }}>
+                {String(t)}
+              </Txt>
+            ))}
+          </>
+        )}
+      </View>
+      <View importantForAccessibility="no-hide-descendants" style={{ flexDirection: "row", flexWrap: "wrap", columnGap: 16, rowGap: 4 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: color }} />
+          <Txt size={13} lineHeight={18} style={{ color: c.sub }}>
+            Halo Age
+          </Txt>
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <View style={{ width: 9, height: 9, borderRadius: 4.5, borderWidth: 1.5, borderColor: c.sub }} />
+          <Txt size={13} lineHeight={18} style={{ color: c.sub, fontVariant: ["tabular-nums"] }}>
+            {`Your age, ${formatValue("decimal1", age)}`}
+          </Txt>
+        </View>
+      </View>
     </View>
   );
 }
