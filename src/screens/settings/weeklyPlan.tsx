@@ -1,20 +1,20 @@
 // Settings › Goals › "Weekly plan" (a phone addition, after WHOOP's Weekly Plan): a switch and a whole-number target for
-// each weekly habit Home's "Weekly plan" row (in Today's goals) tracks, with the evidence behind each default, and
-// "Reset weekly plan".
-// Saved as typed (src/state/weeklyPlan.ts); an out-of-range number is shown in red and not saved.
+// each weekly habit Home's "Weekly plan" row (in Today's goals) tracks, with the evidence behind each default under its
+// field, as one inset grouped list, and "Reset weekly plan" in its own group. Saved as typed (src/state/weeklyPlan.ts);
+// an out-of-range number is shown in red and not saved.
 import * as React from "react";
-import { View } from "react-native";
 import { CalendarCheck, Dumbbell, Flame, Footprints, HeartPulse, Moon, type LucideIcon } from "lucide-react-native";
 import { isDefaultPlan, parsePlanTarget, PLAN_DEFAULTS, PLAN_KEYS, PLAN_LIMITS, withPlanEnabled, withPlanTarget, type PlanKey } from "@/core/algorithms/weeklyPlan";
 import { PLAN_META } from "@/queries/weeklyPlan";
 import { useWeeklyPlan } from "@/state/weeklyPlan";
-import { Group, type CalmTint } from "./calmKit";
+import { RiseEach } from "@/ui/motion/Rise";
+import type { CalmTint } from "./calmKit";
 import { NumberField, TargetField } from "./goals";
-import { Body, Divided, OutlineButton } from "./parts";
+import { ButtonRow, InsetGroup } from "./list";
 import { toast } from "./toast";
 
 const ICON: Record<PlanKey, LucideIcon> = { zone13: HeartPulse, zone45: Flame, strength: Dumbbell, steps: Footprints, consistency: CalendarCheck, sleepNeed: Moon };
-/** Each habit's family: heart rose, strain peach, activity sky, sleep lavender. */
+/** Each habit's family: heart pink, strain orange, activity blue, sleep indigo. */
 const TINT: Record<PlanKey, CalmTint> = { zone13: "rose", zone45: "peach", strength: "peach", steps: "sky", consistency: "lavender", sleepNeed: "lavender" };
 
 /** Where each default comes from, under its field. */
@@ -72,9 +72,12 @@ export function WeeklyPlanSection() {
   };
 
   return (
-    <Group title="Weekly plan" padding={20} gap={4}>
-      <Body style={{ paddingBottom: 8 }}>Weekly targets for the habits Halo Age scores, tracked on Home as “Weekly plan” in Today’s goals, Monday to Sunday, with a streak for every week you meet them.</Body>
-      <Divided top>
+    <RiseEach>
+      <InsetGroup
+        title="Weekly plan"
+        inset="icon"
+        footer="Weekly targets for the habits Halo Age scores, tracked on Home as “Weekly plan” in Today’s goals, Monday to Sunday, with a streak for every week you meet them."
+      >
         {PLAN_KEYS.map((k) => (
           <PlanField
             key={k}
@@ -87,12 +90,10 @@ export function WeeklyPlanSection() {
             onBlur={blur(k)}
           />
         ))}
-      </Divided>
-      <View style={{ alignItems: "center", paddingTop: 12 }}>
-        <OutlineButton onPress={() => void doReset()} disabled={isDefaultPlan(plan)}>
-          Reset weekly plan
-        </OutlineButton>
-      </View>
-    </Group>
+      </InsetGroup>
+      <InsetGroup>
+        <ButtonRow label="Reset weekly plan" center onPress={() => void doReset()} disabled={isDefaultPlan(plan)} />
+      </InsetGroup>
+    </RiseEach>
   );
 }

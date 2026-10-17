@@ -1,18 +1,24 @@
-// The coach's chats, ported from Pulse's coach/ChatList.tsx: New chat on top, then the chats grouped by recency (in the
-// person's zone), 30 at a time with "Show older chats". In the Calm style each group is a small caps header over one
-// white card of rows; each row opens its chat, and its "…" menu deletes it, after a confirm.
+// The coach's chats, ported from Pulse's coach/ChatList.tsx, as an iOS list: New chat on top, then the chats grouped by
+// recency (in the person's zone), each group an inset grouped list, 30 at a time with "Show older chats". A row opens
+// its chat; swiping it left reveals the red Delete (Gesture Handler's Reanimated swipeable, so the row follows the
+// finger on the UI thread), a long press offers Delete in an action sheet, and screen readers get a Delete action.
+// Every delete is confirmed first.
 import * as React from "react";
-import { Platform, Pressable, StyleSheet, ToastAndroid, useWindowDimensions, View } from "react-native";
-import { OverlayModal } from "@/ui/components/Overlay";
+import { Platform, Pressable, ToastAndroid, View } from "react-native";
+import Animated, { Extrapolation, interpolate, useAnimatedStyle, type SharedValue } from "react-native-reanimated";
+import ReanimatedSwipeable, { type SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useRouter, type Href } from "expo-router";
-import { Ellipsis, MessageSquarePlus } from "lucide-react-native";
+import { MessageSquarePlus, Trash2 } from "lucide-react-native";
 import { generateId } from "ai";
 import { groupChats, mergeGroups, type ChatCursor, type ChatGroup, type ChatRow } from "@/coach/chats";
 import { deleteChat, listChats, subscribe } from "@/coach/storage";
-import { alpha } from "@/lib/utils";
 import { useApp } from "@/state/app";
-import { Button, Txt } from "@/ui";
-import { CalmButton, Hairline, IconTile, SectionLabel, Sentence, useCalm } from "@/screens/settings/calmKit";
+import { Txt } from "@/ui";
+import { ActionSheet } from "@/ui/components/Alert";
+import { usePress, usePressStyle } from "@/ui/components/press";
+import { haptic } from "@/ui/motion/haptics";
+import { CalmButton, SectionFooter, Sentence, useCalm } from "@/screens/settings/calmKit";
+import { ButtonRow, InsetGroup } from "@/screens/settings/list";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 /** A short confirmation (the web's toast). */
@@ -26,54 +32,44 @@ export function useNewChat() {
   return React.useCallback(() => router.dismissTo(`/coach?n=${generateId()}` as Href), [router]);
 }
 
-/** A chat's "…": a small menu under the button with its one action. */
-function RowMenu({ title, onDelete }: { title: string; onDelete: () => void }) {
+/** The red Delete behind a row: its width, and how far a swipe must go before it stays open. */
+const DELETE_W = 88;
+
+/** The red Delete revealed by the swipe: it grows into place as the row slides over. */
+function DeleteAction({ progress, onPress }: { progress: SharedValue<number>; onPress: () => void }) {
   const c = useCalm();
-  const { width } = useWindowDimensions();
-  const anchor = React.useRef<View>(null);
-  const [at, setAt] = React.useState<{ top: number; right: number } | null>(null);
-  const open = () => anchor.current?.measureInWindow((x, y, w, h) => setAt({ top: y + h + 4, right: Math.max(8, width - (x + w)) }));
+  const style = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 0.4, 1], [0, 0.6, 1], Extrapolation.CLAMP),
+    transform: [{ scale: interpolate(progress.value, [0, 1], [0.8, 1], Extrapolation.CLAMP) }],
+  }));
   return (
-    <>
-      <Pressable
-        ref={anchor}
-        onPress={open}
-        accessibilityRole="button"
-        accessibilityLabel={`Options for “${title}”`}
-        accessibilityState={{ expanded: !!at }}
-        style={({ pressed }) => ({ position: "absolute", top: 8, right: 8, width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: pressed || at ? c.ground : "transparent" })}
-      >
-        <Ellipsis size={18} color={c.sub} strokeWidth={2} />
-      </Pressable>
-      {at && (
-        <OverlayModal fade onRequestClose={() => setAt(null)}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setAt(null)} accessibilityLabel="Close menu" />
-          {/* One floating menu (not a repeated card): a white 18 px panel with a hairline so it reads over the list. */}
-          <View style={{ position: "absolute", top: at.top, right: at.right, minWidth: 160, padding: 6, borderRadius: 18, backgroundColor: c.card, borderWidth: 1, borderColor: c.line, elevation: 6 }}>
-            <Pressable
-              onPress={() => {
-                setAt(null);
-                onDelete();
-              }}
-              accessibilityRole="menuitem"
-              style={({ pressed }) => ({ minHeight: 44, justifyContent: "center", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: pressed ? c.tint.rose : "transparent" })}
-            >
-              <Txt size={15} lineHeight={20} weight={600} style={{ color: c.tintInk.rose }}>
-                Delete chat
-              </Txt>
-            </Pressable>
-          </View>
-        </OverlayModal>
-      )}
-    </>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="Delete chat" style={{ width: DELETE_W, backgroundColor: c.system.red, alignItems: "center", justifyContent: "center" }}>
+      <Animated.View style={[{ alignItems: "center", gap: 2 }, style]}>
+        <Trash2 size={19} color="#ffffff" strokeWidth={2.2} />
+        <Txt size={13} lineHeight={17} weight={600} style={{ color: "#ffffff" }}>
+          Delete
+        </Txt>
+      </Animated.View>
+    </Pressable>
   );
 }
 
-/** One chat: the row opens it; its menu (Delete) is always shown on a touch screen. */
-function ChatItem({ chat, current, onOpen }: { chat: ChatRow; current: boolean; onOpen: (id: string) => void }) {
+/**
+ * One chat: the row opens it (its title in ink, the open chat's in blue); a swipe left reveals Delete, a long press
+ * offers it in an action sheet. Opening one row's Delete closes any other (`onSwipeOpen`).
+ */
+function ChatItem({ chat, current, onOpen, onSwipeOpen }: { chat: ChatRow; current: boolean; onOpen: (id: string) => void; onSwipeOpen: (row: SwipeableMethods | null) => void }) {
   const c = useCalm();
+  const swipe = React.useRef<SwipeableMethods>(null);
+  const press = usePress(0.985);
+  const pressed = usePressStyle(press, { dim: 0.55 });
+  const [sheet, setSheet] = React.useState(false);
   const [confirm, setConfirm] = React.useState(false);
   const [pending, setPending] = React.useState(false);
+  const ask = () => {
+    swipe.current?.close();
+    setConfirm(true);
+  };
   const remove = async () => {
     setPending(true);
     try {
@@ -87,18 +83,41 @@ function ChatItem({ chat, current, onOpen }: { chat: ChatRow; current: boolean; 
     }
   };
   return (
-    <View>
-      <Pressable
-        onPress={() => onOpen(chat.id)}
-        accessibilityRole="link"
-        accessibilityState={{ selected: current }}
-        style={({ pressed }) => ({ minHeight: 60, justifyContent: "center", paddingVertical: 12, paddingLeft: 18, paddingRight: 60, backgroundColor: current ? alpha(c.teal, 0.1) : pressed ? c.ground : "transparent" })}
+    <>
+      <ReanimatedSwipeable
+        ref={swipe}
+        friction={2}
+        rightThreshold={40}
+        overshootRight={false}
+        renderRightActions={(progress) => <DeleteAction progress={progress} onPress={ask} />}
+        onSwipeableWillOpen={() => {
+          haptic.select();
+          onSwipeOpen(swipe.current);
+        }}
       >
-        <Txt size={15} lineHeight={20} weight={current ? 600 : 500} style={{ color: current ? c.teal : c.ink }}>
-          {chat.title}
-        </Txt>
-      </Pressable>
-      <RowMenu title={chat.title} onDelete={() => setConfirm(true)} />
+        <Pressable
+          onPress={() => onOpen(chat.id)}
+          onLongPress={() => {
+            haptic.select();
+            setSheet(true);
+          }}
+          onPressIn={press.onPressIn}
+          onPressOut={press.onPressOut}
+          accessibilityRole="link"
+          accessibilityState={{ selected: current }}
+          accessibilityLabel={chat.title}
+          accessibilityActions={[{ name: "delete", label: "Delete chat" }]}
+          onAccessibilityAction={(e) => e.nativeEvent.actionName === "delete" && setConfirm(true)}
+          style={{ backgroundColor: c.card }}
+        >
+          <Animated.View style={[{ minHeight: 48, justifyContent: "center", paddingHorizontal: 16, paddingVertical: 12 }, pressed]}>
+            <Txt size={16} lineHeight={21} weight={current ? 600 : 400} style={{ color: current ? c.teal : c.ink }}>
+              {chat.title}
+            </Txt>
+          </Animated.View>
+        </Pressable>
+      </ReanimatedSwipeable>
+      <ActionSheet open={sheet} onClose={() => setSheet(false)} title={chat.title} actions={[{ label: "Delete chat", destructive: true, onPress: () => setConfirm(true) }]} />
       <ConfirmDialog
         open={confirm}
         title="Delete this chat?"
@@ -109,26 +128,17 @@ function ChatItem({ chat, current, onOpen }: { chat: ChatRow; current: boolean; 
         onConfirm={() => void remove()}
         onClose={() => setConfirm(false)}
       />
-    </View>
+    </>
   );
 }
 
-/** Starts a fresh chat: a nav row with the label, or a 44 px icon button. */
-export function NewChatButton({ label, onPress }: { label?: boolean; onPress: () => void }) {
+/** Starts a fresh chat: a group with the blue New chat row. */
+export function NewChatButton({ onPress }: { onPress: () => void }) {
   const c = useCalm();
-  if (!label)
-    return (
-      <Button variant="ghost" size="icon-touch" onPress={onPress} accessibilityLabel="New chat">
-        <MessageSquarePlus size={20} color={c.ink} strokeWidth={1.75} />
-      </Button>
-    );
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => ({ minHeight: 64, flexDirection: "row", alignItems: "center", gap: 14, borderRadius: 28, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: c.card, opacity: pressed ? 0.85 : 1 })}>
-      <IconTile icon={MessageSquarePlus} tint="mint" size={40} />
-      <Txt size={16} lineHeight={21} weight={600} style={{ color: c.teal, flex: 1 }}>
-        New chat
-      </Txt>
-    </Pressable>
+    <InsetGroup>
+      <ButtonRow label="New chat" leading={<MessageSquarePlus size={20} color={c.teal} strokeWidth={2} />} onPress={onPress} />
+    </InsetGroup>
   );
 }
 
@@ -169,35 +179,37 @@ function useChats() {
 
 /**
  * The coach's chats (spec §7.21): New chat on top, then the chats grouped by recency, 30 at a time with "Show older
- * chats" for the next page.
+ * chats" for the next page. One row's Delete is open at a time.
  */
 export function ChatList({ current, onOpen, onNew }: { current: string | null; onOpen: (id: string) => void; onNew: () => void }) {
   const c = useCalm();
   const { groups, next, loadMore, error } = useChats();
   const [pending, setPending] = React.useState(false);
+  const open = React.useRef<SwipeableMethods | null>(null);
+  const onSwipeOpen = React.useCallback((row: SwipeableMethods | null) => {
+    if (open.current && open.current !== row) open.current.close();
+    open.current = row;
+  }, []);
   return (
     <View accessibilityLabel="Chats" style={{ gap: 24 }}>
-      <NewChatButton label onPress={onNew} />
+      <NewChatButton onPress={onNew} />
       {error ? (
-        <Sentence color={c.tintInk.rose} accessibilityRole="alert" style={{ paddingHorizontal: 6 }}>
+        <Sentence color={c.system.red} accessibilityRole="alert" style={{ paddingHorizontal: 16 }}>
           Couldn’t read your chats. Try again.
         </Sentence>
       ) : groups === null ? null : groups.length === 0 ? (
-        <Sentence style={{ paddingHorizontal: 6 }}>Your chats appear here. They’re saved on this phone, visible only to you.</Sentence>
+        <Sentence style={{ paddingHorizontal: 16 }}>Your chats appear here. They’re saved on this phone, visible only to you.</Sentence>
       ) : (
-        groups.map((g, i) => (
-          <View key={`${g.label}-${i}`} accessibilityLabel={g.label} style={{ gap: 10 }}>
-            <SectionLabel>{g.label}</SectionLabel>
-            <View style={{ borderRadius: 20, borderWidth: 1, borderColor: c.edge, backgroundColor: c.card, ...(c.shadow ? { boxShadow: c.shadow } : null), overflow: "hidden", paddingVertical: 4 }}>
-              {g.chats.map((chat, k) => (
-                <React.Fragment key={chat.id}>
-                  {k > 0 && <Hairline inset={18} />}
-                  <ChatItem chat={chat} current={chat.id === current} onOpen={onOpen} />
-                </React.Fragment>
+        <>
+          {groups.map((g, i) => (
+            <InsetGroup key={`${g.label}-${i}`} title={g.label}>
+              {g.chats.map((chat) => (
+                <ChatItem key={chat.id} chat={chat} current={chat.id === current} onOpen={onOpen} onSwipeOpen={onSwipeOpen} />
               ))}
-            </View>
-          </View>
-        ))
+            </InsetGroup>
+          ))}
+          <SectionFooter>Swipe left on a chat to delete it, or touch and hold it.</SectionFooter>
+        </>
       )}
       {next && (
         <CalmButton

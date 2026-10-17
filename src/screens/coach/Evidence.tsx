@@ -1,20 +1,25 @@
-// The cards under a coach answer, ported from Pulse's coach/Evidence.tsx and Coach.tsx (DayCard, Stat): each tool's
-// result as Pulse's own components on a white Calm card, and a teal "Based on …" link to the screen the numbers come
-// from. The day's three scores sit on their families' pastels (Recovery mint, Sleep lavender, Strain peach). The tools
-// return metric; the cards show the numbers in the person's units (Settings › Units).
+// The cards under a coach answer, ported from Pulse's coach/Evidence.tsx and Coach.tsx (DayCard, Stat), in Apple
+// Health's language: each tool's result on a flat card whose small header is the family's glyph and title in the
+// family's system colour (as Health heads "Heart Rate"), Pulse's own rows inside it, and a blue "Based on …" capsule
+// that opens the screen the numbers come from. The day's three scores sit on their families' soft fills (Recovery
+// green, Sleep indigo, Strain orange), the numbers in the system colours. The tools return metric; the cards show the
+// numbers in the person's units (Settings › Units). Every card is memoised on its tool output, so a streaming answer
+// above or below it never re-renders it.
 import * as React from "react";
 import { Pressable, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { useRouter, type Href } from "expo-router";
-import { ArrowUpRight } from "lucide-react-native";
+import { ArrowUpRight, CalendarRange, Dumbbell, Flame, HeartPulse, ListChecks, Moon, TrendingUp, type LucideIcon } from "lucide-react-native";
 import type { CoachOutputs, dayDigest } from "@/coach/tools";
 import { recoveryBand } from "@/lib/bands";
 import { normalizeReason, type Metric } from "@/lib/reasons";
+import { alpha } from "@/lib/utils";
 import { conversionFor, shown, type Units } from "@/lib/units";
 import { useUnits } from "@/state/units";
 import { KeyStatRow, MetricState, Sparkline, Txt, ZoneBars, type MiniRingVariant } from "@/ui";
+import { usePress, usePressStyle } from "@/ui/components/press";
 import { font } from "@/ui/fonts";
-import { Caption, Hairline, Num, Surface, useCalm, type CalmTint } from "@/screens/settings/calmKit";
-import { Rows } from "@/screens/health/view";
+import { Caption, Hairline, Num, Rows, Surface, useCalm, type CalmTint } from "@/screens/settings/calmKit";
 
 type DayDigest = Awaited<ReturnType<typeof dayDigest>>;
 type Score = { value: number | null; reason?: string | null };
@@ -62,9 +67,9 @@ function time(ms: number, timeZone: string) {
 }
 
 /**
- * One score as a tile on its family's pastel: the value in the numeric face (the Recovery band's ink: mint, sand or
- * rose), its label in small capitals under it (or the reason there is no value), and a bar filled to where the value
- * sits on its scale.
+ * One score as a tile on its family's soft fill: the value in the family's system colour (Recovery in its band's:
+ * green, yellow or red), its label in small capitals under it (or the reason there is no value, which wraps), and a
+ * thin bar filled to where the value sits on its scale.
  */
 function Stat({ variant, label, m, unit }: { variant: MiniRingVariant; label: string; m: Score; unit?: string }) {
   const c = useCalm();
@@ -72,7 +77,7 @@ function Stat({ variant, label, m, unit }: { variant: MiniRingVariant; label: st
   const band = variant === "recovery" && m.value !== null ? recoveryBand(m.value) : null;
   const ink = band === "yellow" ? c.tintInk.sand : band === "red" ? c.tintInk.rose : c.tintInk[tint];
   return (
-    <View style={{ flex: 1, minWidth: 0, borderRadius: 20, backgroundColor: c.tint[tint], padding: 12, gap: 4 }}>
+    <View style={{ flex: 1, minWidth: 0, borderRadius: 16, backgroundColor: c.tint[tint], padding: 12, gap: 4 }}>
       {m.value === null ? (
         <Txt size={14} lineHeight={19} weight={600} style={{ color: c.sub, minHeight: 28, textAlignVertical: "center" }}>
           {REASON[m.reason ?? "no_data"] ?? REASON.no_data}
@@ -89,7 +94,7 @@ function Stat({ variant, label, m, unit }: { variant: MiniRingVariant; label: st
 }
 
 /** get_day's result as Pulse's own numbers, so the answer can point at them: three scores, then what moved Recovery. */
-export function DayCard({ d }: { d: DayDigest }) {
+export const DayCard = React.memo(function DayCard({ d }: { d: DayDigest }) {
   const c = useCalm();
   const movers = d.recovery.contributors
     .filter((x) => x.points !== null && Math.abs(x.points) >= 1)
@@ -103,15 +108,15 @@ export function DayCard({ d }: { d: DayDigest }) {
         <Stat variant="strain" label="Strain" m={d.strain} />
       </View>
       {movers.length > 0 && (
-        <View style={{ paddingHorizontal: 8, paddingTop: 14, paddingBottom: 4 }}>
+        <View style={{ paddingHorizontal: 8, paddingTop: 14, paddingBottom: 2 }}>
           <Caption>What moved Recovery</Caption>
-          <View style={{ marginTop: 6 }}>
+          <View style={{ marginTop: 4 }}>
             {movers.map((x, i) => (
               <React.Fragment key={x.label}>
                 {i > 0 && <Hairline />}
                 {/* The points on the name's first line, if the name wraps. */}
-                <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12, paddingVertical: 8 }}>
-                  <Txt size={14} lineHeight={19} style={{ color: c.ink, flexShrink: 1 }}>
+                <View style={{ minHeight: 44, flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12, paddingVertical: 11 }}>
+                  <Txt size={15} lineHeight={20} style={{ color: c.ink, flexShrink: 1 }}>
                     {x.label}
                   </Txt>
                   <Txt size={15} lineHeight={20} style={[font.numeric(700), { color: x.points! > 0 ? c.tintInk.mint : c.tintInk.rose }]}>
@@ -125,28 +130,37 @@ export function DayCard({ d }: { d: DayDigest }) {
       )}
     </Surface>
   );
-}
+});
 
+/** The way to the numbers' own screen: a small blue capsule ("Based on …" with an arrow out), wrapping, never cut. */
 function BasedOn({ href, children }: { href: string; children: React.ReactNode }) {
   const c = useCalm();
   const router = useRouter();
+  const press = usePress(0.96);
+  const pressed = usePressStyle(press, { dim: 0.7 });
   return (
-    <Pressable onPress={() => router.push(href as Href)} accessibilityRole="link" hitSlop={8} style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", paddingHorizontal: 6, opacity: pressed ? 0.6 : 1 })}>
-      <Txt size={13} lineHeight={18} weight={600} style={{ color: c.teal, flexShrink: 1 }}>
-        Based on {children}
-      </Txt>
-      <ArrowUpRight size={15} color={c.teal} strokeWidth={2.25} />
+    <Pressable onPress={() => router.push(href as Href)} onPressIn={press.onPressIn} onPressOut={press.onPressOut} accessibilityRole="link" hitSlop={6} style={{ alignSelf: "flex-start", maxWidth: "100%" }}>
+      <Animated.View style={[{ minHeight: 30, flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 15, paddingHorizontal: 12, paddingVertical: 5, backgroundColor: alpha(c.teal, 0.12) }, pressed]}>
+        <Txt size={13} lineHeight={18} weight={600} style={{ color: c.teal, flexShrink: 1 }}>
+          Based on {children}
+        </Txt>
+        <ArrowUpRight size={14} color={c.teal} strokeWidth={2.4} />
+      </Animated.View>
     </Pressable>
   );
 }
 
-function EvidenceCard({ title, children }: { title: string; children: React.ReactNode }) {
+/** A tool's card, Apple Health's: the family's glyph and the title in its colour as the header, then the rows. */
+function EvidenceCard({ title, icon: Icon, tint, children }: { title: string; icon: LucideIcon; tint: CalmTint; children: React.ReactNode }) {
   const c = useCalm();
   return (
-    <Surface padding={18}>
-      <Txt size={15} lineHeight={20} weight={600} style={{ color: c.ink, marginBottom: 6 }}>
-        {title}
-      </Txt>
+    <Surface padding={16}>
+      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 7, marginBottom: 6 }}>
+        <Icon size={17} color={c.tintInk[tint]} strokeWidth={2.2} style={{ marginTop: 1.5 }} />
+        <Txt size={15} lineHeight={20} weight={600} accessibilityRole="header" style={{ color: c.tintInk[tint], flex: 1, minWidth: 0 }}>
+          {title}
+        </Txt>
+      </View>
       {children}
     </Surface>
   );
@@ -161,7 +175,7 @@ function Note({ children, size = 13, style }: { children: React.ReactNode; size?
   );
 }
 
-export function Evidence({ name, output }: { name: string; output: unknown }) {
+function EvidenceView({ name, output }: { name: string; output: unknown }) {
   const router = useRouter();
   const c = useCalm();
   const { units } = useUnits();
@@ -177,7 +191,7 @@ export function Evidence({ name, output }: { name: string; output: unknown }) {
     const u = shownIn(d.unit, units);
     return (
       <View style={{ gap: 8 }}>
-        <EvidenceCard title={`${d.metric} · ${d.start} to ${d.end}`}>
+        <EvidenceCard icon={TrendingUp} tint="sky" title={`${d.metric} · ${d.start} to ${d.end}`}>
           <KeyStatRow variant="row" label="Period average" metric={u.metric(d.average)} unit={u.unit} format="decimal1" direction="none" average={u.value(d.previous.average.value)} averageLabel="Previous period" caption={`${d.observedDays} of ${d.calendarDays} days measured`} />
           <Sparkline values={d.points.map((p) => u.value(p.value))} style={{ marginTop: 8, height: 56 }} />
         </EvidenceCard>
@@ -192,7 +206,7 @@ export function Evidence({ name, output }: { name: string; output: unknown }) {
     const debt = d.details?.find((v) => v.key === "debt");
     return (
       <View style={{ gap: 8 }}>
-        <EvidenceCard title={`Sleep · ${d.day}`}>
+        <EvidenceCard icon={Moon} tint="lavender" title={`Sleep · ${d.day}`}>
           <Rows>
             <KeyStatRow variant="row" label="Time asleep" metric={metric(d.asleepMinutes)} unit="min" format="int" direction="none" />
             {(d.summary ?? [])
@@ -219,7 +233,7 @@ export function Evidence({ name, output }: { name: string; output: unknown }) {
     if (!d.workouts) return <BasedOn href="/activities">Workouts</BasedOn>;
     return (
       <View style={{ gap: 8 }}>
-        <EvidenceCard title={`Workouts · ${d.start} to ${d.end}`}>
+        <EvidenceCard icon={Dumbbell} tint="peach" title={`Workouts · ${d.start} to ${d.end}`}>
           {d.workouts.length ? (
             <Rows>
               {d.workouts.slice(0, 5).map((v) => (
@@ -247,7 +261,7 @@ export function Evidence({ name, output }: { name: string; output: unknown }) {
     if (!a) return <Note>That workout is unavailable.</Note>;
     return (
       <View style={{ gap: 8 }}>
-        <EvidenceCard title={`${a.name} · ${a.day}`}>
+        <EvidenceCard icon={Flame} tint="peach" title={`${a.name} · ${a.day}`}>
           <Rows>
             <KeyStatRow variant="row" label="Activity strain" metric={metric(a.strain)} format="decimal1" direction="none" />
             {a.stats.slice(0, 3).map((v) => {
@@ -268,7 +282,7 @@ export function Evidence({ name, output }: { name: string; output: unknown }) {
     const d = output as CoachOutputs["get_journal_impacts"];
     return (
       <View style={{ gap: 8 }}>
-        <EvidenceCard title={`Habit associations · ${d.outcome}`}>
+        <EvidenceCard icon={ListChecks} tint="lavender" title={`Habit associations · ${d.outcome}`}>
           <Note size={12}>Differences in next-day averages, not proof of cause.</Note>
           {(d.effects ?? []).slice(0, 3).map((v) => (
             <View key={v.behaviour}>
@@ -291,12 +305,14 @@ export function Evidence({ name, output }: { name: string; output: unknown }) {
     const d = output as CoachOutputs["get_health"];
     return (
       <View style={{ gap: 8 }}>
-        <EvidenceCard title={`Health Monitor · ${d.day}`}>
-          {(d.vitals ?? []).map((v) => {
-            // The monitor's only temperature is skin temperature's change from its baseline: °F converts it by ×9/5 alone.
-            const u = shownIn(v.unit, units, true);
-            return <KeyStatRow key={v.vital} variant="row" label={v.vital} metric={u.metric(v)} unit={u.unit} format="decimal1" direction="none" caption={String(v.status).split("_").join(" ")} />;
-          })}
+        <EvidenceCard icon={HeartPulse} tint="rose" title={`Health Monitor · ${d.day}`}>
+          <Rows>
+            {(d.vitals ?? []).map((v) => {
+              // The monitor's only temperature is skin temperature's change from its baseline: °F converts it by ×9/5 alone.
+              const u = shownIn(v.unit, units, true);
+              return <KeyStatRow key={v.vital} variant="row" label={v.vital} metric={u.metric(v)} unit={u.unit} format="decimal1" direction="none" caption={String(v.status).split("_").join(" ")} />;
+            })}
+          </Rows>
         </EvidenceCard>
         <BasedOn href={`/health/monitor?d=${d.day}`}>Health Monitor · {d.day}</BasedOn>
       </View>
@@ -307,10 +323,12 @@ export function Evidence({ name, output }: { name: string; output: unknown }) {
     if (!("scores" in d) || !d.scores) return <Note>No report available yet.</Note>;
     return (
       <View style={{ gap: 8 }}>
-        <EvidenceCard title={`Report · ${d.start} to ${d.end}${d.partial ? " · Partial" : ""}`}>
-          {d.scores.map((v) => (
-            <KeyStatRow key={v.score} variant="row" label={v.score} metric={metric(v)} format="decimal1" direction="none" />
-          ))}
+        <EvidenceCard icon={CalendarRange} tint="sky" title={`Report · ${d.start} to ${d.end}${d.partial ? " · Partial" : ""}`}>
+          <Rows>
+            {d.scores.map((v) => (
+              <KeyStatRow key={v.score} variant="row" label={v.score} metric={metric(v)} format="decimal1" direction="none" />
+            ))}
+          </Rows>
         </EvidenceCard>
         <BasedOn href={d.period ? `/reports/${encodeURIComponent(d.period)}` : "/reports"}>
           Report · {d.start} to {d.end}
@@ -321,3 +339,6 @@ export function Evidence({ name, output }: { name: string; output: unknown }) {
   if (name === "get_profile") return <BasedOn href={PROFILE_HREF}>Your profile</BasedOn>;
   return null;
 }
+
+/** A tool's evidence, re-rendered only when its tool or its output changes (a streaming answer copies its parts). */
+export const Evidence = React.memo(EvidenceView, (a, b) => a.name === b.name && a.output === b.output);

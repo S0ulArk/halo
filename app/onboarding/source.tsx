@@ -1,17 +1,23 @@
 // Choose where data comes from: a Google account (the Google Health API, the richer source), Health Connect (the Google
-// Health app writes Fitbit data there) or generated demo data. Calm: the warm ground, white option cards with a pastel
-// icon tile each, the first one's arrow in solid teal.
+// Health app writes Fitbit data there) or generated demo data. Set as Apple Health's onboarding: the mark over a large
+// centred title and a sentence, then one big card per source (its coloured icon square, the name in bold, what it reads
+// in grey, and the way on), the recommended one's arrow filled blue. A card settles and dims under the finger and shows
+// a spinner in its square while it connects; the first import's progress shows above them. The blocks fade and rise
+// into place one after another as the screen opens.
 import { ArrowRight, CircleAlert, Cloud, HeartPulse, Sparkles, type LucideIcon } from "lucide-react-native";
 import * as React from "react";
 import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GOOGLE_SOURCE_ENABLED } from "@/google/flags";
 import { openHealthConnectSettings } from "@/health/connect";
 import { useApp, useSyncProgress } from "@/state/app";
 import { Txt } from "@/ui";
-import { Wordmark } from "@/ui/components/Wordmark";
-import { CalmButton, CalmProgress, IconTile, Notice, Num, Sentence, Surface, Title, useCalm, type CalmTint } from "@/screens/settings/calmKit";
+import type { SystemColor } from "@/ui/calm";
+import { usePress, usePressStyle } from "@/ui/components/press";
+import { CalmButton, CalmProgress, Notice, Num, Surface, useCalm } from "@/screens/settings/calmKit";
 import { SignInProblem } from "@/screens/settings/google";
+import { Appear, PageHead, RowIcon } from "@/screens/settings/list";
 import { progressLabel } from "@/screens/home/status";
 import type { GoogleSignInError } from "../../modules/pulse-google/errors";
 
@@ -38,30 +44,25 @@ export default function SourceScreen() {
   };
 
   const syncing = app.status === "syncing";
+  let step = 1;
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: c.ground }} contentContainerStyle={{ paddingTop: insets.top + 48, paddingBottom: insets.bottom + 24, paddingHorizontal: 16, gap: 16 }}>
-      <View style={{ alignItems: "center", marginBottom: 8 }}>
-        <Wordmark height={22} color={c.sub} />
-      </View>
-      <View style={{ gap: 8, paddingHorizontal: 4 }}>
-        <Txt size={28} lineHeight={34} weight={700} accessibilityRole="header" style={{ color: c.ink }}>
-          Your data
-        </Txt>
-        <Sentence size={15}>
+    <ScrollView style={{ flex: 1, backgroundColor: c.ground }} contentContainerStyle={{ paddingTop: insets.top + 36, paddingBottom: insets.bottom + 24, paddingHorizontal: 16, gap: 14 }}>
+      <Appear index={0} style={{ marginBottom: 12 }}>
+        <PageHead title="Your data">
           {GOOGLE_SOURCE_ENABLED
             ? "Halo scores Sleep, Recovery and Strain from your Fitbit’s heart-rate, HRV and sleep data: read from your Google account, or from Health Connect, where the Google Health app writes it."
             : "Halo scores Sleep, Recovery and Strain from the heart-rate, HRV and sleep data your Fitbit writes to Health Connect through the Google Health app."}
-        </Sentence>
-      </View>
+        </PageHead>
+      </Appear>
 
       {syncing && (
         <Surface padding={18} gap={12}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
             <ActivityIndicator color={c.teal} />
-            <Title style={{ flex: 1 }} size={16}>
+            <Txt size={16} lineHeight={21} weight={600} style={{ flex: 1, color: c.ink }}>
               {syncProgress ? progressLabel({ ...syncProgress, total: 0 }) : "Importing"}
-            </Title>
+            </Txt>
             {syncProgress && syncProgress.total > 0 && <Num value={`${syncProgress.done} / ${syncProgress.total}`} size={16} />}
           </View>
           {syncProgress && syncProgress.total > 0 && <CalmProgress value={syncProgress.done / syncProgress.total} />}
@@ -75,72 +76,85 @@ export default function SourceScreen() {
       )}
 
       {GOOGLE_SOURCE_ENABLED && (
-        <Option
-          icon={Cloud}
-          tint="sky"
-          primary
-          title="Google account (Google Health API)"
-          body="The richer source: everything Health Connect has, plus blood oxygen, Fitbit’s heart-rate zones and Active Zone Minutes, your resting-HR and HRV ranges, ECG and more. Sign in with the account your Fitbit uses."
-          disabled={busy !== null || syncing}
-          loading={busy === "google"}
-          onPress={() => go("google")}
-        />
+        <Appear index={step++}>
+          <Option
+            icon={Cloud}
+            system="blue"
+            primary
+            title="Google account (Google Health API)"
+            body="The richer source: everything Health Connect has, plus blood oxygen, Fitbit’s heart-rate zones and Active Zone Minutes, your resting-HR and HRV ranges, ECG and more. Sign in with the account your Fitbit uses."
+            disabled={busy !== null || syncing}
+            loading={busy === "google"}
+            onPress={() => go("google")}
+          />
+        </Appear>
       )}
       {googleError && <SignInProblem error={googleError} onRetry={() => void go("google")} busy={busy !== null} />}
-      <Option
-        icon={HeartPulse}
-        tint="rose"
-        primary={!GOOGLE_SOURCE_ENABLED}
-        title="Connect Health Connect"
-        body={
-          hcOk
-            ? "Reads the last 180 nights. Allow every permission on the next screen, including access to older data."
-            : app.availability === "update_required"
-              ? "Health Connect needs an update. Open it from the Play Store, then come back."
-              : "Health Connect is not available on this device."
-        }
-        disabled={!hcOk || busy !== null || syncing}
-        loading={busy === "health"}
-        onPress={() => go("health")}
-      />
+      <Appear index={step++}>
+        <Option
+          icon={HeartPulse}
+          system="pink"
+          primary={!GOOGLE_SOURCE_ENABLED}
+          title="Connect Health Connect"
+          body={
+            hcOk
+              ? "Reads the last 180 nights. Allow every permission on the next screen, including access to older data."
+              : app.availability === "update_required"
+                ? "Health Connect needs an update. Open it from the Play Store, then come back."
+                : "Health Connect is not available on this device."
+          }
+          disabled={!hcOk || busy !== null || syncing}
+          loading={busy === "health"}
+          onPress={() => go("health")}
+        />
+      </Appear>
       {app.availability === "update_required" && (
         <CalmButton variant="quiet" size="md" onPress={() => openHealthConnectSettings()} style={{ alignSelf: "center" }}>
           Open Health Connect
         </CalmButton>
       )}
-      <Option
-        icon={Sparkles}
-        tint="lavender"
-        title="Try with demo data"
-        body={`180 days of generated data for a demo person, so every screen has something to show. Switch to ${GOOGLE_SOURCE_ENABLED ? "your own data" : "Health Connect"} later in Settings.`}
-        disabled={busy !== null || syncing}
-        loading={busy === "demo"}
-        onPress={() => go("demo")}
-      />
+      <Appear index={step++}>
+        <Option
+          icon={Sparkles}
+          system="purple"
+          title="Try with demo data"
+          body={`180 days of generated data for a demo person, so every screen has something to show. Switch to ${GOOGLE_SOURCE_ENABLED ? "your own data" : "Health Connect"} later in Settings.`}
+          disabled={busy !== null || syncing}
+          loading={busy === "demo"}
+          onPress={() => go("demo")}
+        />
+      </Appear>
     </ScrollView>
   );
 }
 
-function Option({ icon, tint, primary = false, title, body, disabled, loading, onPress }: { icon: LucideIcon; tint: CalmTint; primary?: boolean; title: string; body: string; disabled?: boolean; loading?: boolean; onPress: () => void }) {
+/**
+ * One source as a big card, Apple Health's: the coloured icon square (a spinner in it while connecting), the name in
+ * bold over what it reads, and the way on, filled blue for the recommended choice.
+ */
+function Option({ icon, system, primary = false, title, body, disabled, loading, onPress }: { icon: LucideIcon; system: SystemColor; primary?: boolean; title: string; body: string; disabled?: boolean; loading?: boolean; onPress: () => void }) {
   const c = useCalm();
+  const press = usePress();
+  const pressed = usePressStyle(press, { rest: disabled && !loading ? 0.5 : 1, dim: 0.88 });
   return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityLabel={`${title}. ${body}`}
-      accessibilityState={{ disabled: !!disabled, busy: !!loading }}
-      style={({ pressed }) => ({ flexDirection: "row", gap: 14, padding: 18, borderRadius: 28, backgroundColor: c.card, alignItems: "center", opacity: disabled && !loading ? 0.5 : pressed ? 0.9 : 1 })}
-    >
-      <IconTile icon={icon} tint={tint} node={loading ? <ActivityIndicator color={c.tintInk[tint]} /> : undefined} />
-      <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-        <Title>{title}</Title>
-        <Sentence>{body}</Sentence>
-      </View>
-      {/* The way on: solid teal for the first choice, the ground's grey for the others. */}
-      <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: primary ? c.teal : c.ground, alignItems: "center", justifyContent: "center" }}>
-        <ArrowRight size={18} color={primary ? c.card : c.teal} strokeWidth={2.25} />
-      </View>
+    <Pressable onPress={onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut} disabled={disabled} accessibilityRole="button" accessibilityLabel={`${title}. ${body}`} accessibilityState={{ disabled: !!disabled, busy: !!loading }}>
+      <Animated.View style={[{ borderRadius: 24, backgroundColor: c.card, padding: 20, gap: 14 }, pressed]}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <RowIcon icon={loading ? undefined : icon} node={loading ? <ActivityIndicator color="#ffffff" /> : undefined} system={system} size={52} />
+          {/* The way on: filled blue for the recommended choice, the quiet fill for the others. */}
+          <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: primary ? c.teal : c.fill, alignItems: "center", justifyContent: "center" }}>
+            <ArrowRight size={18} color={primary ? "#ffffff" : c.teal} strokeWidth={2.4} />
+          </View>
+        </View>
+        <View style={{ gap: 4 }}>
+          <Txt size={20} lineHeight={25} weight={700} style={{ color: c.ink }}>
+            {title}
+          </Txt>
+          <Txt size={15} lineHeight={20} style={{ color: c.sub }}>
+            {body}
+          </Txt>
+        </View>
+      </Animated.View>
     </Pressable>
   );
 }

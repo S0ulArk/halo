@@ -1,49 +1,25 @@
-// Coach settings `/coach/settings`, ported from Pulse's coach/CoachSettings.tsx (Settings › Coach on the web): the
-// provider and model, the key as ••••last4 only with Remove, the person's notes for the coach, and the controls to
-// change the provider, delete every chat or turn the coach off. The web's morning-brief notification is not ported.
+// Coach settings `/coach/settings`, ported from Pulse's coach/CoachSettings.tsx (Settings › Coach on the web), as an
+// iOS settings page: the provider, model and key (as ••••last4 only, with a red Remove key), the person's notes for
+// the coach, then Change provider and the two red actions (delete every chat, turn the coach off), each confirmed by
+// an alert. With the coach off: its feature header and Set up. The groups rise into place as the page opens.
 import * as React from "react";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 import { useRouter, type Href } from "expo-router";
+import { BotMessageSquare } from "lucide-react-native";
 import { MAX_NOTES } from "@/coach/instructions";
 import { providerLabel, providerOf } from "@/coach/providers";
 import { useCoachSetup } from "@/coach/session";
 import { deleteAllChats, removeProvider, setConsent, setInstructions, type CoachSetup } from "@/coach/storage";
 import { useBack } from "@/screens/detail/nav";
-import { BottomSheet, DetailShell, Skeleton, Txt } from "@/ui";
-import { font } from "@/ui/fonts";
-import { CalmButton, CalmInput, Hairline, SectionLabel, Sentence, Surface, useCalm } from "@/screens/settings/calmKit";
+import { BottomSheet, DetailShell, Skeleton } from "@/ui";
+import { RiseEach } from "@/ui/motion/Rise";
+import { CalmButton, CalmInput } from "@/screens/settings/calmKit";
+import { ButtonRow, HeroCard, InfoRow, InsetGroup, RowBox } from "@/screens/settings/list";
 import { toast } from "./ChatList";
 import { ProviderForm } from "./CoachSetup";
 import { ConfirmDialog } from "./ConfirmDialog";
 
-/** A label / value row of the card, 52 px tall; hairlines between rows. */
-function Row({ label, first, children }: { label: string; first?: boolean; children?: React.ReactNode }) {
-  const c = useCalm();
-  return (
-    <>
-      {!first && <Hairline />}
-      <View style={{ minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingVertical: 10 }}>
-        <Txt size={15} lineHeight={20} weight={500} style={{ color: c.ink, flexShrink: 0 }}>
-          {label}
-        </Txt>
-        {children}
-      </View>
-    </>
-  );
-}
-
-/** "Coach" over its white card, as Settings' groups read. */
-function Section({ children }: { children: React.ReactNode }) {
-  return (
-    <View style={{ gap: 10 }}>
-      <SectionLabel>Coach</SectionLabel>
-      <Surface>{children}</Surface>
-    </View>
-  );
-}
-
 function Settings({ setup }: { setup: CoachSetup }) {
-  const c = useCalm();
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [pending, setPending] = React.useState(false);
@@ -63,81 +39,45 @@ function Settings({ setup }: { setup: CoachSetup }) {
   };
   if (!setup.consent)
     return (
-      <Section>
-        <Row label="Off" first>
-          <CalmButton size="md" onPress={() => router.replace("/coach" as Href)}>
-            Set up
-          </CalmButton>
-        </Row>
-      </Section>
+      <View style={{ gap: 24 }}>
+        <RiseEach>
+          <HeroCard icon={BotMessageSquare} system="indigo" title="Coach" status="Off" body="Set the coach up to ask about your scores, your training and your sleep, with your own AI provider." />
+          <CalmButton onPress={() => router.replace("/coach" as Href)}>Set up</CalmButton>
+        </RiseEach>
+      </View>
     );
   return (
-    <Section>
-      <View>
-        <Row label="Provider" first>
-          <Txt size={15} lineHeight={20} align="right" style={{ flexShrink: 1, color: c.sub }}>
-            {setup.provider ? (providerOf(setup.provider)?.label ?? providerLabel(setup.provider)) : "Not set"}
-          </Txt>
-        </Row>
-        {setup.model && (
-          <Row label="Model">
-            <Txt size={15} lineHeight={20} align="right" style={{ flexShrink: 1, color: c.sub }}>
-              {setup.model}
-            </Txt>
-          </Row>
-        )}
-        {setup.last4 && (
-          <Row label="API key">
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-              <Txt size={16} lineHeight={20} style={[font.numeric(600), { color: c.ink }]}>
-                {`••••${setup.last4}`}
-              </Txt>
-              <Pressable disabled={pending} onPress={() => void act(removeProvider, "Key removed.")} hitSlop={12} accessibilityRole="button" accessibilityLabel="Remove key">
-                <Txt size={14} lineHeight={18} weight={600} style={{ color: c.tintInk.rose }}>
-                  Remove
-                </Txt>
-              </Pressable>
-            </View>
-          </Row>
-        )}
-        <Hairline />
-        <View style={{ paddingTop: 12, paddingBottom: 4, gap: 8 }}>
-          <Txt size={15} lineHeight={20} weight={500} nativeID="coach-notes" style={{ color: c.ink }}>
-            About you
-          </Txt>
-          <CalmInput
-            value={notes}
-            onChangeText={setNotes}
-            onBlur={() => notes.trim() !== (setup.instructions ?? "") && void act(() => setInstructions(notes), "Saved.")}
-            maxLength={MAX_NOTES}
-            multiline
-            autoCorrect
-            accessibilityLabelledBy="coach-notes"
-            placeholder="Short and direct. I lift four days a week and I'm training for a half marathon."
-            on="card"
-            style={{ minHeight: 96, fontSize: 15, lineHeight: 22 }}
-          />
-          <Sentence size={13}>How you’d like the coach to talk and what it should know. It never changes the coach’s safety rules.</Sentence>
-        </View>
-      </View>
-      {/* Change the provider full width; clear the chats or turn the coach off side by side. */}
-      <View style={{ marginTop: 16, gap: 8 }}>
-        <CalmButton variant="secondary" on="card" onPress={() => setOpen(true)} disabled={pending}>
-          {setup.provider ? "Change provider" : "Add key"}
-        </CalmButton>
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          <CalmButton variant="secondary" on="card" grow disabled={pending} onPress={() => setConfirm("chats")}>
-            Delete chats
-          </CalmButton>
-          <CalmButton variant="secondary" on="card" grow disabled={pending} onPress={() => setConfirm("off")}>
-            Turn off
-          </CalmButton>
-        </View>
-      </View>
-      <Sentence size={13} style={{ marginTop: 12 }}>
-        Your key is stored encrypted on this phone and never shown again. It is sent only to your provider.
-      </Sentence>
-      {/* A focused key or model field keeps "Test and save" (under the field's hint) in view over the keyboard. */}
+    <View style={{ gap: 24 }}>
+      <RiseEach>
+        <InsetGroup title="Coach">
+          <InfoRow label="Provider" value={setup.provider ? (providerOf(setup.provider)?.label ?? providerLabel(setup.provider)) : "Not set"} />
+          {setup.model ? <InfoRow label="Model" value={setup.model} /> : null}
+          {setup.last4 ? <InfoRow label="API key" value={`••••${setup.last4}`} numeric /> : null}
+          {setup.last4 ? <ButtonRow label="Remove key" danger disabled={pending} onPress={() => void act(removeProvider, "Key removed.")} /> : null}
+        </InsetGroup>
+        <InsetGroup title="About you" footer="How you’d like the coach to talk and what it should know. It never changes the coach’s safety rules.">
+          <RowBox>
+            <CalmInput
+                value={notes}
+                onChangeText={setNotes}
+                onBlur={() => notes.trim() !== (setup.instructions ?? "") && void act(() => setInstructions(notes), "Saved.")}
+                maxLength={MAX_NOTES}
+                multiline
+                autoCorrect
+                accessibilityLabel="About you"
+                placeholder="Short and direct. I lift four days a week and I'm training for a half marathon."
+                on="card"
+                style={{ minHeight: 96, fontSize: 16, lineHeight: 22 }}
+              />
+          </RowBox>
+        </InsetGroup>
+        <InsetGroup footer="Your key is stored encrypted on this phone and never shown again. It is sent only to your provider.">
+          <ButtonRow label={setup.provider ? "Change provider" : "Add key"} onPress={() => setOpen(true)} disabled={pending} />
+          <ButtonRow label="Delete all chats" danger disabled={pending} onPress={() => setConfirm("chats")} />
+          <ButtonRow label="Turn off coach" danger disabled={pending} onPress={() => setConfirm("off")} />
+        </InsetGroup>
+      </RiseEach>
+      {/* A focused key or model field keeps "Test and save" (under the field's note) in view over the keyboard. */}
       <BottomSheet open={open} onClose={() => setOpen(false)} title="AI provider" size="tall" keyboardGap={112}>
         <ProviderForm
           current={setup}
@@ -159,12 +99,12 @@ function Settings({ setup }: { setup: CoachSetup }) {
           void (confirm === "chats" ? act(deleteAllChats, "Every chat deleted.", () => setConfirm(null)) : act(() => setConsent(false), "Coach turned off.", () => setConfirm(null)))
         }
       />
-    </Section>
+    </View>
   );
 }
 
 export default function CoachSettingsScreen() {
   const onBack = useBack("/coach");
   const setup = useCoachSetup();
-  return <DetailShell title="Coach settings" onBack={onBack} primary={setup ? <Settings key={setup.consent ? "on" : "off"} setup={setup} /> : <Skeleton radius={28} style={{ height: 240 }} />} />;
+  return <DetailShell title="Coach settings" onBack={onBack} primary={setup ? <Settings key={setup.consent ? "on" : "off"} setup={setup} /> : <Skeleton radius={16} style={{ height: 240 }} />} />;
 }

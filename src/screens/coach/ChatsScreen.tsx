@@ -1,5 +1,6 @@
 // The coach's chats on the phone `/coach/chats`, ported from Pulse's coach/chats/page.tsx (laptop shows the same list
-// beside the conversation). A chat opens back on /coach; New chat opens a fresh one.
+// beside the conversation), as an iOS list page: New chat, then the chats by recency, each swipeable to delete. A chat
+// opens back on /coach; New chat opens a fresh one.
 import * as React from "react";
 import { useRouter, type Href } from "expo-router";
 import { useBack } from "@/screens/detail/nav";

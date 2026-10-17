@@ -1,19 +1,28 @@
 // The component kit's preview (app/kit.tsx): every kit piece with deterministic sample data, in either scheme, so a
-// change to the look can be checked in one scroll.
+// change to the look can be checked in one scroll. It is itself an iOS large-title page: a floating bar with Liquid
+// Glass buttons (back, and the scheme toggle) over the scroll, then the brand, the iOS controls (switch, segmented
+// control, buttons, chips, fields, search, glass buttons), the grouped lists Settings is built from, alerts, action
+// sheets and the bottom sheet, a Liquid Glass sample over colour, the motion pieces and every chart and card.
 import * as React from "react";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
+import Animated, { useAnimatedRef, useScrollOffset } from "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { Activity, Heart, Hourglass, Moon, Rabbit, Thermometer, Turtle, Wind, Zap } from "lucide-react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
+import { Activity, Bell, Bluetooth, Heart, Hourglass, Moon, Plus, Rabbit, Ruler, Share2, Sparkles, Sun, Target, Thermometer, Turtle, Wind, Zap } from "lucide-react-native";
+import { CalmButton, CalmChip, CalmField, CalmInput, CalmProgress, GroupList, Notice, RoundButton, TintPill } from "@/screens/settings/calmKit";
+import { ButtonRow, CheckRow, Disclosure, FormRow, HeroCard, InfoRow, InsetGroup, MenuRow, NavRow, ProfileCard, RowBox, SearchField, Step, SwitchRow } from "@/screens/settings/list";
 import type { Metric } from "@/lib/reasons";
 import { ThemeProvider, useTheme } from "./ThemeProvider";
 import { ActivityCard } from "./components/ActivityCard";
-import { Alert } from "./components/Alert";
+import { ActionSheet, Alert, AlertDialog } from "./components/Alert";
 import { BottomSheet, SheetSection } from "./components/BottomSheet";
 import { Button } from "./components/Button";
 import { Card, LegendStrip } from "./components/Card";
 import { ContributorRow } from "./components/ContributorRow";
 import { DateSwitcher } from "./components/DateSwitcher";
-import { DetailHeader } from "./components/DetailHeader";
+import { DetailHeader, LargeTitle, NavBar, useBarInset } from "./components/DetailHeader";
+import { BackButton, GlassButton, GlassCapsule } from "./components/GlassButton";
 import { DriverList } from "./components/DriverList";
 import { EnergyBankChart } from "./components/EnergyBankChart";
 import { HomeHeader } from "./components/HomeHeader";
@@ -32,12 +41,14 @@ import { DeltaMark, MetricTags, StatusChip, Tag, ValueUnit } from "./components/
 import { ReasonPlaceholder } from "./components/ReasonPlaceholder";
 import { ScoreDial } from "./components/ScoreDial";
 import { SectionShell } from "./components/SectionShell";
+import { SegmentedControl } from "./components/Segmented";
 import { Skeleton, SkeletonText } from "./components/Skeleton";
 import { SleepCard } from "./components/SleepCard";
 import { SleepHrChart, type SleepHr } from "./components/SleepHrChart";
 import { SleepStages, type SleepStagesNight } from "./components/SleepStages";
 import { Sparkline } from "./components/Sparkline";
 import { StrainRecoveryChart } from "./components/StrainRecoveryChart";
+import { Switch } from "./components/Switch";
 import { SyncStatus } from "./components/SyncStatus";
 import { TabBar } from "./components/TabBar";
 import { Txt } from "./components/Text";
@@ -51,6 +62,7 @@ import { ActivityRings, HaloLine, HaloRing, RollingNumber, ScoreRings } from "./
 import { CalmSurface } from "./components/CalmSurface";
 import { useCalm } from "./calm";
 import { font, useAppFonts } from "./fonts";
+import { GlassTarget, LiquidGlass } from "./glass";
 import { GrowIn } from "./motion/Rise";
 
 // --- Sample data (deterministic, so the preview looks the same on every run) ---
@@ -185,25 +197,42 @@ function Preview() {
   const [sheet, setSheet] = React.useState(false);
   const [range, setRange] = React.useState<"w" | "m" | "6m" | "1y">("m");
   const [rings, setRings] = React.useState(false);
+  const [alert, setAlert] = React.useState<"row" | "stack" | null>(null);
+  const [actions, setActions] = React.useState(false);
+  const [toggle, setToggle] = React.useState(true);
+  const [period, setPeriod] = React.useState<"day" | "week" | "month">("week");
+  const [unit, setUnit] = React.useState<"kg" | "lb">("kg");
+  const [policy, setPolicy] = React.useState<"only" | "first" | "all">("only");
+  const [chip, setChip] = React.useState(true);
+  const [query, setQuery] = React.useState("");
+  const [field, setField] = React.useState("");
+  const router = useRouter();
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  const y = useScrollOffset(scrollRef);
+  const top = useBarInset();
   const icon = (I: typeof Heart) => <I size={20} color={c.mutedForeground} strokeWidth={1.75} />;
   const noop = () => {};
+  const bar = (
+    <NavBar
+      y={y}
+      title="Component kit"
+      left={<BackButton onPress={() => router.canGoBack() && router.back()} />}
+      right={
+        <GlassButton onPress={() => setChoice(scheme === "dark" ? "light" : "dark")} accessibilityLabel={scheme === "dark" ? "Light theme" : "Dark theme"}>
+          {scheme === "dark" ? <Sun size={19} color={calm.ink} strokeWidth={2} /> : <Moon size={19} color={calm.ink} strokeWidth={2} />}
+        </GlassButton>
+      }
+    />
+  );
   return (
     <View style={{ flex: 1, backgroundColor: c.background }}>
       <Ground />
-      <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
-        {/* Headers (full-bleed) */}
-        <HomeHeader
-          dateSwitcher={{ mode: "day", date, today: TODAY, firstDay: "2026-04-01", onChange: setDate, onOpenCalendar: noop }}
-          sync={{ status: SYNC, now: NOW, onPress: noop }}
-          streak={{ days: 23 }}
-          rings={{ sleep: { value: 81, onPress: noop }, recovery: { value: 39, onPress: noop }, strain: { value: 11.2, onPress: noop } }}
-          showRings={rings}
-        />
+      {/* The page is the glass's backdrop: the bar's round buttons bend what scrolls under them. */}
+      <GlassTarget style={{ flex: 1 }} overlay={bar}>
+      <Animated.ScrollView ref={scrollRef} scrollEventThrottle={16} contentContainerStyle={{ paddingTop: top, paddingBottom: 140 }}>
         <View style={{ paddingHorizontal: 16 }}>
+          <LargeTitle title="Component kit" subtitle="Every piece with sample data" y={y} />
           <Row>
-            <Button size="sm" variant="secondary" onPress={() => setChoice(scheme === "dark" ? "light" : "dark")}>
-              {scheme === "dark" ? "Light theme" : "Dark theme"}
-            </Button>
             <Button size="sm" variant="secondary" onPress={() => setRings((v) => !v)}>
               {rings ? "Hide ring row" : "Show ring row"}
             </Button>
@@ -218,6 +247,187 @@ function Preview() {
             <Mark size={28} />
             <Mark size={28} color="mono" />
           </Row>
+
+          <H>iOS controls</H>
+          <Sub>Switch (springs across with a toggle tick), on, off and disabled</Sub>
+          <Row gap={16}>
+            <Switch value={toggle} onChange={setToggle} label="Sample switch" />
+            <Switch value={!toggle} onChange={(v) => setToggle(!v)} label="Sample switch, inverted" />
+            <Switch value={false} onChange={noop} label="Disabled switch" disabled />
+          </Row>
+          <Sub>Segmented control (the thumb slides on a spring)</Sub>
+          <SegmentedControl
+            value={period}
+            onChange={setPeriod}
+            items={[
+              { value: "day", label: "Day" },
+              { value: "week", label: "Week" },
+              { value: "month", label: "Month" },
+            ]}
+            accessibilityLabel="Period"
+          />
+          <Sub>Buttons: filled, tinted, plain, destructive; three sizes</Sub>
+          <View style={{ gap: 10 }}>
+            <CalmButton onPress={noop}>Continue</CalmButton>
+            <Row gap={10}>
+              <CalmButton variant="secondary" size="md" icon={Share2} onPress={noop}>
+                Share
+              </CalmButton>
+              <CalmButton variant="quiet" size="md" onPress={noop}>
+                Not now
+              </CalmButton>
+              <CalmButton variant="danger" size="md" onPress={noop}>
+                Delete
+              </CalmButton>
+              <CalmButton size="sm" onPress={noop}>
+                Done
+              </CalmButton>
+            </Row>
+            <Row gap={12}>
+              <RoundButton icon={Plus} label="Add" onPress={noop} size={52} variant="teal" />
+              <RoundButton icon={Heart} label="Heart" onPress={noop} size={52} />
+              <RoundButton icon={Wind} label="End the session" onPress={noop} size={52} variant="danger" />
+            </Row>
+          </View>
+          <Sub>Chips, tags and progress</Sub>
+          <Row gap={8}>
+            <CalmChip label="Alcohol" selected={chip} onPress={() => setChip((v) => !v)} role="checkbox" />
+            <CalmChip label="Late caffeine" selected={!chip} onPress={() => setChip((v) => !v)} role="checkbox" />
+            <TintPill tint="mint" icon={Sparkles}>
+              New
+            </TintPill>
+            <TintPill tint="rose">Alert</TintPill>
+          </Row>
+          <View style={{ marginTop: 12 }}>
+            <CalmProgress value={0.62} />
+          </View>
+          <Sub>Fields and search</Sub>
+          <View style={{ gap: 12 }}>
+            <SearchField value={query} onChangeText={setQuery} />
+            <CalmField label="Model" help="Any model your provider offers.">
+              <CalmInput value={field} onChangeText={setField} placeholder="gemini-3.6-flash" on="ground" />
+            </CalmField>
+          </View>
+          <Sub>Glass bar buttons and a capsule</Sub>
+          <Row gap={10}>
+            <BackButton onPress={noop} />
+            <BackButton onPress={noop} dismiss="close" />
+            <GlassButton wide onPress={noop} accessibilityLabel="Edit">
+              <Txt size={16} lineHeight={21} weight={600} color={calm.teal}>
+                Edit
+              </Txt>
+            </GlassButton>
+            <GlassCapsule accessibilityLabel="23-day streak">
+              <Txt size={15} lineHeight={20} weight={700} color={calm.ink}>
+                23 days
+              </Txt>
+            </GlassCapsule>
+          </Row>
+
+          <H>Grouped lists</H>
+          <View style={{ gap: 24 }}>
+            <ProfileCard title="Your profile" subtitle="34 years · Male · body measurements and heart rate" onPress={noop} />
+            <InsetGroup footer="Rows: a value and chevron, a switch, a pull-down menu, a label and value.">
+              <NavRow icon={Target} system="orange" label="Goals" onPress={noop} />
+              <NavRow icon={Ruler} system="gray" label="Units" value="Metric" onPress={noop} />
+              <SwitchRow icon={Bell} system="red" label="Recovery ready" description="Once a day, when today’s Recovery is scored" value={toggle} onChange={setToggle} />
+              <MenuRow
+                icon={Ruler}
+                system="teal"
+                label="Weight"
+                description="Your weight, lean and fat mass"
+                value={unit}
+                options={[
+                  { value: "kg", label: "Kilograms (kg)", short: "Kilograms" },
+                  { value: "lb", label: "Pounds (lb)", short: "Pounds" },
+                ]}
+                onChange={setUnit}
+              />
+              <InfoRow label="Max heart rate" value="187" unit="bpm" numeric detail="learned from workouts" />
+            </InsetGroup>
+            <InsetGroup title="Use data from" footer="Checkmark choices, iOS's.">
+              <CheckRow label="Fitbit only" description="Records the Google Health app wrote" selected={policy === "only"} onPress={() => setPolicy("only")} />
+              <CheckRow label="Fitbit first" description="The phone’s data on days the Fitbit has none" selected={policy === "first"} onPress={() => setPolicy("first")} />
+              <CheckRow label="Every app" selected={policy === "all"} onPress={() => setPolicy("all")} />
+            </InsetGroup>
+            <InsetGroup title="Permissions">
+              <Disclosure label="Data types" summary="2 not allowed" summaryColor={calm.tintInk.sand}>
+                <InfoRow label="Sleep" value="Allowed" />
+                <InfoRow label="Blood oxygen" value="Not allowed" valueColor={calm.tintInk.sand} />
+              </Disclosure>
+            </InsetGroup>
+            <InsetGroup footer="Blue action rows, a red destructive one.">
+              <ButtonRow label="Sync now" onPress={noop} />
+              <ButtonRow label="Remove all data" danger onPress={noop} />
+            </InsetGroup>
+            <HeroCard icon={Bluetooth} system="blue" title="Live heart rate" status="Not connected" body="Beat by beat from your band, over Bluetooth." />
+            <InsetGroup title="Form">
+              <FormRow label="Max HR" optional>
+                <CalmInput value="" onChangeText={noop} placeholder="Auto" on="card" numeric style={{ width: 96, minHeight: 40 }} />
+              </FormRow>
+              <RowBox>
+                <Step n={1} title="Make a Cloudflare token">
+                  The form opens filled in: scroll down and tap Create Token.
+                </Step>
+              </RowBox>
+            </InsetGroup>
+            <GroupList
+              title="Kit list (calmKit)"
+              rows={[
+                { label: "Trends", icon: Activity, tint: "mint", aside: "Up to 1 year", onPress: noop },
+                { label: "Behaviours", icon: Moon, tint: "lavender", description: "Shown on the check-in", onPress: noop },
+              ]}
+            />
+          </View>
+
+          <H>Alerts and sheets</H>
+          <Row gap={10}>
+            <CalmButton variant="secondary" size="md" onPress={() => setAlert("row")}>
+              Alert
+            </CalmButton>
+            <CalmButton variant="secondary" size="md" onPress={() => setAlert("stack")}>
+              Destructive alert
+            </CalmButton>
+            <CalmButton variant="secondary" size="md" onPress={() => setActions(true)}>
+              Action sheet
+            </CalmButton>
+            <CalmButton variant="secondary" size="md" onPress={() => setSheet(true)}>
+              Bottom sheet
+            </CalmButton>
+          </Row>
+          <View style={{ gap: 10, marginTop: 12 }}>
+            <Notice tint="sand" title="Halo needs more permissions">
+              Allow every data type, including past data.
+            </Notice>
+          </View>
+
+          <H>Liquid Glass</H>
+          <Sub>Glass in a GlassTarget’s overlay bends what is under it; elsewhere it draws its stand-in</Sub>
+          <View style={{ height: 150, borderRadius: 24, overflow: "hidden" }}>
+            <GlassTarget
+              style={{ flex: 1 }}
+              overlay={
+                <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: 16, flexDirection: "row", justifyContent: "center", gap: 12 }}>
+                  <LiquidGlass style={{ height: 52, paddingHorizontal: 22, flexDirection: "row", alignItems: "center", gap: 18 }}>
+                    <Activity size={22} color={calm.teal} strokeWidth={2.2} />
+                    <Moon size={22} color={calm.ink} strokeWidth={2} />
+                    <Heart size={22} color={calm.ink} strokeWidth={2} />
+                  </LiquidGlass>
+                  <LiquidGlass style={{ width: 52, height: 52, alignItems: "center", justifyContent: "center" }}>
+                    <Plus size={24} color={calm.ink} strokeWidth={2.2} />
+                  </LiquidGlass>
+                </View>
+              }
+            >
+              <LinearGradient colors={[calm.system.mint, calm.system.indigo, calm.system.orange]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ flex: 1 }}>
+                <View style={{ flex: 1, flexDirection: "row" }}>
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <View key={i} style={{ flex: 1, backgroundColor: i % 2 ? "rgba(255,255,255,0.25)" : "transparent" }} />
+                  ))}
+                </View>
+              </LinearGradient>
+            </GlassTarget>
+          </View>
 
           <H>Motion</H>
           <Sub>A ring drawing on in a family ink, a full ring’s pulse, a rolling number, the halo line, a breathing hero card</Sub>
@@ -650,7 +860,17 @@ function Preview() {
           </View>
         </View>
 
-        <H>Detail headers</H>
+        <View style={{ paddingHorizontal: 16 }}>
+          <H>Headers</H>
+        </View>
+        <HomeHeader
+          dateSwitcher={{ mode: "day", date, today: TODAY, firstDay: "2026-04-01", onChange: setDate, onOpenCalendar: noop }}
+          sync={{ status: SYNC, now: NOW, onPress: noop }}
+          streak={{ days: 23 }}
+          rings={{ sleep: { value: 81, onPress: noop }, recovery: { value: 39, onPress: noop }, strain: { value: 11.2, onPress: noop } }}
+          showRings={rings}
+        />
+        <View style={{ height: 24 }} />
         <DetailHeader title="Recovery" onBack={noop} info={RECOVERY_INFO} dateTitle={{ mode: "day", date, today: TODAY, onChange: setDate }} />
         <View style={{ height: 24 }} />
         <DetailHeader title="Health monitor" onBack={noop} info={RECOVERY_INFO} />
@@ -661,13 +881,15 @@ function Preview() {
         <View style={{ height: 24 }} />
         <DetailHeader title="Settings" dismiss="close" onBack={noop} />
         <View style={{ height: 48 }} />
-      </ScrollView>
+      </Animated.ScrollView>
+      </GlassTarget>
       <TabBar current={tab} onChange={(i) => setTab(i)} onAction={() => setSheet(true)} />
       <BottomSheet
         open={sheet}
         onClose={() => setSheet(false)}
         title="Check in"
         description="Wed, Oct 7"
+        done={{ onPress: () => setSheet(false) }}
         footer={
           <>
             <Button size="sheet" onPress={() => setSheet(false)}>
@@ -681,7 +903,7 @@ function Preview() {
       >
         <View style={{ gap: 16 }}>
           <SheetSection>Time</SheetSection>
-          <Txt role="body">The sheet material: 28 px top corners, a 40 × 6 grab handle, the sheet → sheet-bottom gradient with a lit top edge.</Txt>
+          <Txt role="body">iOS 26’s sheet: the grouped ground with 38 px top corners, a 36 × 5 grabber, a round glass close button, the centred title and a filled Done. It springs open and follows a drag.</Txt>
           <SheetSection>Tags</SheetSection>
           <Row>
             <Tag kind="provisional" />
@@ -689,6 +911,25 @@ function Preview() {
           </Row>
         </View>
       </BottomSheet>
+      <AlertDialog
+        open={alert !== null}
+        onClose={() => setAlert(null)}
+        title={alert === "stack" ? "Remove all data?" : "Use demo data?"}
+        message={alert === "stack" ? "Removes your profile and every row and score Halo stored on this phone. This can’t be undone." : "Halo fills every screen with 180 days of generated data."}
+        actions={[
+          { label: "Cancel", style: "cancel", onPress: () => setAlert(null) },
+          alert === "stack" ? { label: "Remove all data", style: "destructive", onPress: () => setAlert(null) } : { label: "Use demo", onPress: () => setAlert(null) },
+        ]}
+      />
+      <ActionSheet
+        open={actions}
+        onClose={() => setActions(false)}
+        title="Morning run"
+        actions={[
+          { label: "Share", onPress: noop },
+          { label: "Delete chat", destructive: true, onPress: noop },
+        ]}
+      />
     </View>
   );
 }
