@@ -1,17 +1,26 @@
+// One metric with its label, value, unit and how it compares with its 30-day average (spec §5.2), in the iOS look: as a
+// row of a grouped list (Settings' coloured icon square, the name over its caption, the value on the right, the thin
+// chevron) or as a tile of a two-across grid (Apple Health's highlight tile: the glyph and the name in the family's
+// colour, the value large under it, its range chip or the comparison under that). Every press settles and dims on the
+// UI thread.
 import * as React from "react";
 import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
+import Animated from "react-native-reanimated";
 import { deltaTone, type ChipTone, type DeltaDir, type GoodDirection, type Tone } from "@/lib/bands";
 import { formatValue, MISSING, statSentence, type FormatKey } from "@/lib/format";
 import { reasonCopy, type Metric, type ReasonCode } from "@/lib/reasons";
 import { NBSP } from "@/lib/format";
 import { accentFamily, type AccentFamily } from "@/ui/accents";
+import { mix } from "@/lib/utils";
 import { useCalm, type CalmPalette } from "@/ui/calm";
+import { useTheme } from "@/ui/ThemeProvider";
 import type { ColorToken } from "@/ui/theme";
 import { Card } from "./Card";
-import { ChevronSlot, familyTint, onBand, softFill } from "./calmKit";
+import { ChevronSlot, familyTint, iconRadius, onBand, recolorIcon } from "./calmKit";
 import { MetricState, type MetricMeta } from "./MetricState";
 import { Capsule, TonePill } from "./Meter";
-import { AccentIcon, MetricTags, StatusChip, ValueUnit } from "./primitives";
+import { MetricTags, StatusChip, ValueUnit } from "./primitives";
+import { usePress, usePressStyle } from "./press";
 import { SkeletonText } from "./Skeleton";
 import { Sparkline } from "./Sparkline";
 import { Txt } from "./Text";
@@ -90,11 +99,32 @@ const unitText = (unit?: string) => (unit ? (unit === "%" ? "%" : `${NBSP}${unit
 
 const familyOf = (p: KeyStatRowProps) => (p.accent !== undefined ? p.accent : accentFamily(p.label));
 
-/** The value's ink: the family's (recovery by its band), plain ink without one, the faint grey when there is none. */
+/**
+ * The value's ink, Apple Health's: the label colour, except Recovery's, which takes its band's colour (green, yellow,
+ * red); the faint grey when there is none.
+ */
 function valueInk(c: CalmPalette, p: KeyStatRowProps, k: Computed): string {
   if (k.reason) return c.faint;
-  const tint = familyTint(familyOf(p), k.value);
-  return tint ? c.tintInk[tint] : c.ink;
+  return familyOf(p) === "recovery" ? c.tintInk[familyTint("recovery", k.value) ?? "mint"] : c.ink;
+}
+
+const PressableView = Animated.createAnimatedComponent(Pressable);
+
+/** A list row's icon square, iOS Settings': the family's colour with the glyph in white (a grey square without one); a swatch is drawn as given. */
+function RowSquare({ icon, family, value, size = 30 }: { icon: React.ReactNode; family: AccentFamily | null; value?: number | null; size?: number }) {
+  const c = useCalm();
+  const glyph = recolorIcon(icon, "#ffffff", Math.round(size * 0.58));
+  // A swatch (not a glyph) comes back as it was: drawn as given, centred in the square's box.
+  if (glyph === icon) return <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>{icon}</View>;
+  const tint = familyTint(family, value);
+  return <View style={{ width: size, height: size, borderRadius: iconRadius(size), backgroundColor: tint ? c.tintInk[tint] : c.faint, alignItems: "center", justifyContent: "center" }}>{glyph}</View>;
+}
+
+/** A tile's glyph, Apple Health's: the icon in the family's colour (grey without one), no square; a swatch as given. */
+function TileGlyph({ icon, family }: { icon: React.ReactNode; family: AccentFamily | null }) {
+  const c = useCalm();
+  const tint = familyTint(family);
+  return <>{recolorIcon(icon, tint ? c.tintInk[tint] : c.sub, 18)}</>;
 }
 
 /** The status meter's band ink: poor sand, sufficient grey, optimal mint. */
@@ -147,13 +177,13 @@ function StatusMeter({ p, c }: { p: KeyStatRowProps; c: Computed }) {
   return <Capsule value={share} color={STATUS_INK(calm)[p.status]} height={8} style={{ width: 64 }} />;
 }
 
-/** The metric's name (16/21 600 ink) over its caption or reason (13/18 grey); both wrap, never cut short. */
+/** The metric's name (16/21 ink, iOS's row label) over its caption or reason (13/18 grey); both wrap, never cut short. */
 function LabelBlock({ p, c }: { p: KeyStatRowProps; c: Computed }) {
   const calm = useCalm();
   return (
     <View style={{ gap: 2 }}>
       {p.label ? (
-        <Txt size={16} lineHeight={21} weight={600} style={{ color: calm.ink }}>
+        <Txt size={16} lineHeight={21} style={{ color: calm.ink }}>
           {p.label}
         </Txt>
       ) : (
@@ -169,22 +199,24 @@ function LabelBlock({ p, c }: { p: KeyStatRowProps; c: Computed }) {
 }
 
 /**
- * A row's lead band, the icon tile's height: the icon, the name's first line, the value and the chevron are centred on
- * it, in every row of a list, with or without an icon; the caption, the comparison and the tags hang under the name.
+ * A row's lead band, the icon square's height: the icon, the name's first line, the value and the chevron are centred
+ * on it, in every row of a list, with or without an icon; the caption, the comparison and the tags hang under the name.
  */
-const BAND = 44;
+const BAND = 30;
 const LABEL_LINE = 21;
-const VALUE_LINE = 28;
+const VALUE_LINE = 26;
 const CHEVRON = 18;
 
 /**
- * A row (in a card's list) or a row that is its own card: the family's icon tile, the name over its caption, the value
- * on the right in the family's ink, the chevron (or its empty column) after it; under the name, in the name's column,
- * the comparison as a pastel pill with the average beside it (it wraps under the pill when narrow), the band meter and
- * the metric's tags.
+ * A row (in a card's list) or a row that is its own card: the family's icon square, the name over its caption, the
+ * value on the right, the chevron (or its empty column) after it; under the name, in the name's column, the comparison
+ * as a tinted pill with the average beside it (it wraps under the pill when narrow), the band meter and the metric's
+ * tags.
  */
 function Row({ p, c }: { p: KeyStatRowProps; c: Computed }) {
   const calm = useCalm();
+  const press = usePress(0.985);
+  const pressed = usePressStyle(press, { dim: 0.6 });
   const tappable = !!p.onPress && !c.loading;
   const family = familyOf(p);
   const base = c.loading
@@ -197,13 +229,9 @@ function Row({ p, c }: { p: KeyStatRowProps; c: Computed }) {
   const tags = !!c.meta && (c.meta.provisional || !!c.meta.tags?.length);
   // A grouped-list row: the screen's divider draws the hairline between rows; the row owns its 14 px of air.
   const inner = (
-    <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, minHeight: 72, paddingVertical: 14 }}>
-      {p.icon && (
-        // A swatch keeps the tile's box, so every row's name starts at one x.
-        <View style={{ width: BAND, height: BAND, alignItems: "center", justifyContent: "center" }}>
-          <AccentIcon icon={p.icon} family={family} value={c.value} />
-        </View>
-      )}
+    <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, minHeight: 56, paddingVertical: 13 }}>
+      {/* A swatch keeps the square's box, so every row's name starts at one x. */}
+      {p.icon && <RowSquare icon={p.icon} family={family} value={c.value} size={BAND} />}
       <View style={{ flex: 1, minWidth: 0, gap: 8 }}>
         <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
           <View style={{ flex: 1, minWidth: 0, paddingTop: onBand(BAND, LABEL_LINE) }}>
@@ -211,9 +239,9 @@ function Row({ p, c }: { p: KeyStatRowProps; c: Computed }) {
           </View>
           <View style={{ alignItems: "flex-end", flexShrink: 0, maxWidth: "50%", paddingTop: onBand(BAND, VALUE_LINE) }}>
             {c.loading ? (
-              <SkeletonText role="value" size={24} lineHeight={VALUE_LINE} chars={4} />
+              <SkeletonText role="value" size={20} lineHeight={VALUE_LINE} chars={4} />
             ) : (
-              <ValueUnit value={c.valueText} unit={p.unit} role="value" size={24} lineHeight={VALUE_LINE} color={valueInk(calm, p, c)} style={{ textAlign: "right" }} />
+              <ValueUnit value={c.valueText} unit={p.unit} role="value" size={20} lineHeight={VALUE_LINE} color={valueInk(calm, p, c)} style={{ textAlign: "right" }} />
             )}
           </View>
         </View>
@@ -239,14 +267,9 @@ function Row({ p, c }: { p: KeyStatRowProps; c: Computed }) {
     );
   if (tappable)
     return (
-      <Pressable
-        onPress={p.onPress}
-        accessibilityRole="button"
-        accessibilityLabel={sentence}
-        style={({ pressed }) => [{ marginHorizontal: -8, paddingHorizontal: 8, borderRadius: 16, backgroundColor: pressed ? softFill(calm, "card") : "transparent" }, p.style]}
-      >
+      <PressableView onPress={p.onPress} onPressIn={press.onPressIn} onPressOut={press.onPressOut} accessibilityRole="button" accessibilityLabel={sentence} style={[p.style, pressed]}>
         {inner}
-      </Pressable>
+      </PressableView>
     );
   return (
     <View accessibilityLabel={sentence} style={p.style}>
@@ -256,15 +279,21 @@ function Row({ p, c }: { p: KeyStatRowProps; c: Computed }) {
 }
 
 /**
- * A grid tile (never more than two across): the family's icon tile, the name (wrapping, never cut), the value in the
- * family's ink with its unit small and grey, then its range chip or the comparison pill over the average. A wide tile
- * (a full grid row) puts the value block on the left and the sparkline or the average on the right. In a TileRow the
- * tile fills the row's height and its name takes the row's tallest name's height, so the two values share a line.
+ * A grid tile (never more than two across), Apple Health's: the family's glyph and the name in its colour (wrapping,
+ * never cut), the value large with its unit small and grey, then its range chip or the comparison pill over the
+ * average. A wide tile (a full grid row) puts the value block on the left and the sparkline or the average on the
+ * right. In a TileRow the tile fills the row's height and its name takes the row's tallest name's height, so the two
+ * values share a line.
  */
 function Tile({ p, c }: { p: KeyStatRowProps; c: Computed }) {
   const calm = useCalm();
   const family = familyOf(p);
   const tint = familyTint(family, c.value);
+  // The category line keeps its family's colour whatever the value.
+  const head = familyTint(family);
+  const dark = useTheme().scheme === "dark";
+  // Yellow is deepened toward ink on the light ground, so the name stays readable.
+  const headInk = head === "sand" && !dark ? mix(calm.tintInk.sand, calm.ink, 0.8) : head ? calm.tintInk[head] : calm.ink;
   const flagged = !c.reason && !c.loading && (p.chip?.tone === "warning" || p.chip?.tone === "alert");
   const sentence = c.loading
     ? ""
@@ -286,33 +315,35 @@ function Tile({ p, c }: { p: KeyStatRowProps; c: Computed }) {
     </View>
   );
   return (
-    <Card padding={16} onPress={c.loading ? undefined : p.onPress} accessibilityLabel={sentence} ring={flagged ? "warning" : null} style={[{ flexGrow: 1, minHeight: wide ? undefined : 156 }, p.style]}>
+    <Card padding={16} onPress={c.loading ? undefined : p.onPress} accessibilityLabel={sentence} ring={flagged ? "warning" : null} style={[{ flexGrow: 1, minHeight: wide ? undefined : 132 }, p.style]}>
       <View style={{ flexDirection: wide ? "row" : "column", alignItems: wide ? "center" : "stretch", gap: 12, flexGrow: 1 }}>
-        <View style={{ gap: 10, flex: wide && !p.spark ? 1 : undefined, flexGrow: wide ? (p.spark ? 0 : 1) : 1, flexShrink: 1, minWidth: 0 }}>
-          {/* The icon tile, then the name under it: a two-across tile has no room for both on one line. */}
-          {p.icon && (
-            <View style={{ width: 40, height: 40, alignItems: "flex-start", justifyContent: "center" }}>
-              <AccentIcon icon={p.icon} family={family} value={c.value} disc={40} />
-            </View>
-          )}
+        <View style={{ gap: 8, flex: wide && !p.spark ? 1 : undefined, flexGrow: wide ? (p.spark ? 0 : 1) : 1, flexShrink: 1, minWidth: 0 }}>
+          {/* Health's category line: the glyph and the name in the family's colour; a long name wraps under itself. */}
           <TileLabel>
-            {p.label ? (
-              <Txt size={16} lineHeight={21} weight={600} style={{ color: calm.ink }}>
-                {p.label}
-              </Txt>
-            ) : (
-              <SkeletonText role="label" size={16} lineHeight={21} width={96} />
-            )}
+            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 6 }}>
+              {p.icon && (
+                <View style={{ height: 20, justifyContent: "center" }}>
+                  <TileGlyph icon={p.icon} family={family} />
+                </View>
+              )}
+              {p.label ? (
+                <Txt size={15} lineHeight={20} weight={600} style={{ color: headInk, flex: 1, minWidth: 0 }}>
+                  {p.label}
+                </Txt>
+              ) : (
+                <SkeletonText role="label" size={15} lineHeight={20} width={96} />
+              )}
+            </View>
           </TileLabel>
           {/* Straight under the name (the row's names share a height), so the two values of a row share a line. */}
           <View style={{ alignItems: "flex-start", gap: 8 }}>
             {c.loading ? (
               <>
-                <SkeletonText role="valueXl" size={28} lineHeight={32} chars={3} />
+                <SkeletonText role="valueXl" size={30} lineHeight={36} chars={3} />
                 <SkeletonText role="tag" size={11} lineHeight={22} width={112} />
               </>
             ) : (
-              <ValueUnit value={c.valueText} align="left" unit={p.unit} role="valueXl" size={28} lineHeight={32} color={valueInk(calm, p, c)} />
+              <ValueUnit value={c.valueText} align="left" unit={p.unit} role="valueXl" size={30} lineHeight={36} color={valueInk(calm, p, c)} />
             )}
             {c.loading ? null : c.reason ? (
               <Txt size={13} lineHeight={18} style={{ color: calm.sub }}>
@@ -337,8 +368,8 @@ function Tile({ p, c }: { p: KeyStatRowProps; c: Computed }) {
         )}
         {wide && !p.spark && !c.loading && !c.reason && (p.chip || c.avgText) && (
           <View style={{ alignItems: "flex-end", gap: 4, flexShrink: 1 }}>
-            <Txt size={11} lineHeight={15} weight={600} style={{ color: calm.faint, letterSpacing: 1.4 }}>
-              {(p.chip ? "Your range" : (p.averageLabel ?? "30-day avg")).toUpperCase()}
+            <Txt size={13} lineHeight={18} style={{ color: calm.sub }}>
+              {p.chip ? "Your range" : (p.averageLabel ?? "30-day avg")}
             </Txt>
             {p.chip ? (
               <StatusChip tone={p.chip.tone} compact>

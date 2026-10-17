@@ -1,24 +1,30 @@
-// Home › My Dashboard's pencil (spec §11 CD1, CD2), ported from the web's src/app/(app)/_lib/EditDashboard.tsx: the
-// reference app's two lists in a tall bottom sheet. "On Home" holds the shown metrics in order, each with Move up /
-// Move down and Remove; "Add to My Dashboard" holds the rest by group with a search field, and a tap adds a metric to
-// the end. Save keeps the list on the phone (dashboard.ts); Reset to default restores `defaults`. Calm: each metric
-// leads with its family's pastel icon tile, section labels are small spaced capitals, rules are the palette's line.
+// Today's "Pinned" and Health's My Dashboard editor (spec §11 CD1, CD2), ported from the web's
+// src/app/(app)/_lib/EditDashboard.tsx, as iOS's list editing: "Edit" beside the section's title opens a tall sheet
+// with two inset grouped lists. "Pinned" holds the shown metrics in order, each with iOS's red remove button and Move up
+// / Move down; "More metrics" holds the rest by group under a search field, each row led by the green add mark, and a
+// tap on the row adds it to the end. Done keeps the list on the phone (dashboard.ts); Reset to default restores `defaults`. Each metric
+// leads with its family's icon square.
 import * as React from "react";
-import { Pressable, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { ArrowDown, ArrowUp, Minus, Plus, Search } from "lucide-react-native";
 import { DASHBOARD_GROUPS, DASHBOARD_LABEL, DASHBOARD_METRICS, type DashboardKey } from "@/queries";
 import { moved } from "@/lib/utils";
-import { accentFamily, BottomSheet, Button, font, Txt } from "@/ui";
+import { accentFamily, BottomSheet, Button, font, SheetSection, Txt } from "@/ui";
 import { useCalm } from "@/ui/calm";
 import { useSheetFieldAtTop } from "@/ui/components/BottomSheet";
-import { FAMILY_TINT, softFill } from "@/ui/components/calmKit";
+import { FAMILY_TINT } from "@/ui/components/calmKit";
+import { usePress, usePressStyle } from "@/ui/components/press";
+import { haptic } from "@/ui/motion/haptics";
 import { toast } from "../settings/toast";
-import { EditButton, HeadTile } from "./controls";
+import { EditLink, HeadTile, RowIcon } from "./controls";
 import { saveDashboardKeys } from "./dashboard";
 import { STAT_ICON } from "./view";
 
+const PressableView = Animated.createAnimatedComponent(Pressable);
+
 export type EditDashboardProps = {
-  /** The metrics on Home now, in order. */
+  /** The pinned metrics now, in order. */
   keys: DashboardKey[];
   /** What Reset to default restores (the v1 rows, or phone metrics without a band). */
   defaults: DashboardKey[];
@@ -29,60 +35,137 @@ export type EditDashboardProps = {
 const GROUP_LABEL = Object.fromEntries(DASHBOARD_GROUPS.map((g) => [g.key, g.label])) as Record<string, string>;
 const same = (a: DashboardKey[], b: DashboardKey[]) => a.length === b.length && a.every((k, i) => k === b[i]);
 
-/** The metric search. Focused, the sheet scrolls it to the top of what shows above the keyboard: matches list under it. */
+/** A list row's icon square inset: the hairline under a row starts at its text. */
+const ROW_INSET = 16 + 24 + 12 + 29 + 12;
+
+/** iOS's search field: a rounded box in the quiet fill with the magnifier. Focused, the sheet scrolls it to the top of what shows above the keyboard. */
 function SearchField({ value, onChangeText }: { value: string; onChangeText: (q: string) => void }) {
   const c = useCalm();
   const ref = React.useRef<TextInput>(null);
   useSheetFieldAtTop(ref);
   return (
-    <TextInput
-      ref={ref}
-      value={value}
-      onChangeText={onChangeText}
-      placeholder="Search metrics…"
-      placeholderTextColor={c.faint}
-      accessibilityLabel="Search metrics"
-      autoCorrect={false}
-      autoCapitalize="none"
-      returnKeyType="search"
-      style={{ height: 44, paddingLeft: 40, paddingRight: 16, fontSize: 16, color: c.ink, ...font.sans(400) }}
-    />
-  );
-}
-
-/** The sheet's caps section label (11 px spaced capitals) with a rule to the edge, and a count after it. */
-function SectionLabel({ children, count, style }: { children: string; count?: number; style?: object }) {
-  const c = useCalm();
-  return (
-    <View style={[{ flexDirection: "row", alignItems: "center", gap: 12 }, style]}>
-      <Txt size={11} lineHeight={15} weight={600} style={{ color: c.faint, letterSpacing: 1.4 }}>
-        {children.toUpperCase()}
-        {count !== undefined && (
-          <Txt size={12} lineHeight={15} style={[font.numeric(700), { color: c.ink, letterSpacing: 0 }]}>
-            {`  ${count}`}
-          </Txt>
-        )}
-      </Txt>
-      <View style={{ flex: 1, height: 1, backgroundColor: c.line }} />
+    <View style={{ height: 40, borderRadius: 12, backgroundColor: c.fill, justifyContent: "center" }}>
+      <View pointerEvents="none" style={{ position: "absolute", left: 10 }}>
+        <Search size={18} color={c.sub} strokeWidth={2.2} />
+      </View>
+      <TextInput
+        ref={ref}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder="Search metrics"
+        placeholderTextColor={c.sub}
+        accessibilityLabel="Search metrics"
+        autoCorrect={false}
+        autoCapitalize="none"
+        returnKeyType="search"
+        cursorColor={c.teal}
+        style={{ height: 40, paddingLeft: 36, paddingRight: 12, fontSize: 17, color: c.ink, ...font.sans(400) }}
+      />
     </View>
   );
 }
 
-/** The metric's icon tile in its family's pastel (a quiet grey one without a family). */
+/** The metric's icon square in its family's colour (a quiet grey one without a family). */
 function StatIcon({ k }: { k: DashboardKey }) {
   const c = useCalm();
   const family = accentFamily(k);
   const tint = family ? FAMILY_TINT[family] : null;
   const Icon = STAT_ICON[k];
-  if (!Icon) return <View style={{ width: 36, height: 36 }} />;
-  return <HeadTile icon={Icon} color={tint ? c.tintInk[tint] : c.sub} bg={tint ? c.tint[tint] : c.ground} size={36} />;
+  if (!Icon) return <View style={{ width: 29, height: 29 }} />;
+  return tint ? <RowIcon icon={Icon} tint={tint} /> : <HeadTile icon={Icon} color="#ffffff" bg={c.faint} size={29} />;
 }
 
-/** The pencil and its sheet. */
+/** iOS's round edit control: the green plus that adds (drawn only: its whole row is the button). */
+function AddDot() {
+  const c = useCalm();
+  return (
+    <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: c.system.green, alignItems: "center", justifyContent: "center" }}>
+      <Plus size={16} color="#ffffff" strokeWidth={3} />
+    </View>
+  );
+}
+
+/** iOS's round edit control: the red minus that removes. */
+function RemoveDot({ label, onPress }: { label: string; onPress: () => void }) {
+  const c = useCalm();
+  const press = usePress(0.85);
+  const pressed = usePressStyle(press, { dim: 0.7 });
+  return (
+    <PressableView
+      onPress={() => {
+        haptic.select();
+        onPress();
+      }}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={10}
+      style={[{ width: 24, height: 24, borderRadius: 12, backgroundColor: c.system.red, alignItems: "center", justifyContent: "center" }, pressed]}
+    >
+      <Minus size={16} color="#ffffff" strokeWidth={3} />
+    </PressableView>
+  );
+}
+
+/** A move button: the blue arrow, faint where the metric can't move further. */
+function MoveButton({ up, label, disabled, onPress }: { up: boolean; label: string; disabled: boolean; onPress: () => void }) {
+  const c = useCalm();
+  const Icon = up ? ArrowUp : ArrowDown;
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      hitSlop={2}
+      style={({ pressed }) => ({ width: 40, height: 44, alignItems: "center", justifyContent: "center", opacity: disabled ? 0.25 : pressed ? 0.45 : 1 })}
+    >
+      <Icon size={20} color={c.teal} strokeWidth={2.2} />
+    </Pressable>
+  );
+}
+
+/** A row of "More metrics": the whole row adds the metric, settling and dimming while pressed. */
+function AddRow({ label, onPress, children }: { label: string; onPress: () => void; children: React.ReactNode }) {
+  const press = usePress(0.985);
+  const pressed = usePressStyle(press, { dim: 0.55 });
+  return (
+    <PressableView
+      onPress={() => {
+        haptic.select();
+        onPress();
+      }}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={[{ minHeight: 52, flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 4 }, pressed]}
+    >
+      {children}
+    </PressableView>
+  );
+}
+
+/** One inset grouped list on the sheet: rows in the sheet's card fill, iOS hairlines inset to the text between them. */
+function List({ children }: { children: React.ReactNode[] }) {
+  const c = useCalm();
+  return (
+    <View style={{ borderRadius: 14, backgroundColor: c.sheetFill, overflow: "hidden" }}>
+      {children.map((child, i) => (
+        <React.Fragment key={i}>
+          {i > 0 && <View style={{ height: StyleSheet.hairlineWidth, marginLeft: ROW_INSET, backgroundColor: c.line }} />}
+          {child}
+        </React.Fragment>
+      ))}
+    </View>
+  );
+}
+
+/** "Edit" and its sheet. */
 export function EditDashboard({ keys, defaults, empty = [] }: EditDashboardProps) {
   const c = useCalm();
-  // The sheet is a card: its quiet fills take the ground's grey.
-  const quiet = softFill(c, "card");
   const [open, setOpen] = React.useState(false);
   const [shown, setShown] = React.useState(keys);
   const [query, setQuery] = React.useState("");
@@ -112,88 +195,67 @@ export function EditDashboard({ keys, defaults, empty = [] }: EditDashboardProps
     }
   };
 
-  const row = { minHeight: 60, flexDirection: "row", alignItems: "center", gap: 4, borderBottomWidth: 1, borderBottomColor: c.line } as const;
+  const row = { minHeight: 52, flexDirection: "row", alignItems: "center", gap: 12, paddingLeft: 16, paddingRight: 6, paddingVertical: 4 } as const;
 
   return (
     <>
-      <EditButton label="Edit My Dashboard" onPress={start} />
+      <EditLink accessibilityLabel="Edit My Dashboard" onPress={start} />
       <BottomSheet
         open={open}
         onClose={() => setOpen(false)}
         title="My Dashboard"
-        description="Choose the metrics on Home and their order."
+        description="Choose the metrics you pin and their order."
         size="tall"
+        done={{ label: saving ? "Saving…" : "Done", onPress: () => void save(), disabled: saving || shown.length === 0 }}
         footer={
-          <>
-            <Button size="sheet" onPress={() => void save()} disabled={saving || shown.length === 0}>
-              {saving ? "Saving…" : "Save dashboard"}
-            </Button>
-            <Button size="sheet" variant="outline-pill" onPress={() => setShown(defaults)} disabled={saving || same(shown, defaults)}>
-              Reset to default
-            </Button>
-          </>
+          <Button size="sheet" variant="outline-pill" onPress={() => setShown(defaults)} disabled={saving || same(shown, defaults)}>
+            Reset to default
+          </Button>
         }
       >
-        <SectionLabel count={shown.length} style={{ marginTop: 8 }}>
-          On Home
-        </SectionLabel>
-        {shown.length === 0 ? (
-          <Txt size={14} lineHeight={19} accessibilityRole="alert" style={{ paddingVertical: 16, color: c.sub }}>
-            Add at least one metric to save.
-          </Txt>
-        ) : (
-          <View>
-            {shown.map((key, i) => {
-              const label = DASHBOARD_LABEL[key];
-              return (
-                <View key={key} style={row}>
-                  <View style={{ marginRight: 8 }}>
+        <View style={{ gap: 8, marginTop: 4 }}>
+          <SheetSection>{`Pinned · ${shown.length}`}</SheetSection>
+          {shown.length === 0 ? (
+            <Txt size={15} lineHeight={20} accessibilityRole="alert" style={{ paddingHorizontal: 4, paddingVertical: 8, color: c.sub }}>
+              Add at least one metric to save.
+            </Txt>
+          ) : (
+            <List>
+              {shown.map((key, i) => {
+                const label = DASHBOARD_LABEL[key];
+                return (
+                  <View key={key} style={row}>
+                    {/* the reference app hides removal behind a swipe that members could not find; Halo shows it (spec §11 CD2). */}
+                    <RemoveDot label={`Remove ${label}`} onPress={() => setShown(shown.filter((_, j) => j !== i))} />
                     <StatIcon k={key} />
-                  </View>
-                  <Txt size={16} lineHeight={21} weight={500} style={{ flex: 1, minWidth: 0, color: c.ink }}>
-                    {label}
-                  </Txt>
-                  <Button variant="ghost" size="icon-touch" accessibilityLabel={`Move ${label} up`} disabled={i === 0} onPress={() => setShown(moved(shown, i, -1))}>
-                    <ArrowUp size={20} color={c.ink} strokeWidth={1.75} />
-                  </Button>
-                  <Button variant="ghost" size="icon-touch" accessibilityLabel={`Move ${label} down`} disabled={i === shown.length - 1} onPress={() => setShown(moved(shown, i, 1))}>
-                    <ArrowDown size={20} color={c.ink} strokeWidth={1.75} />
-                  </Button>
-                  {/* the reference app hides removal behind a swipe that members could not find; Pulse shows it (spec §11 CD2). */}
-                  <Button variant="ghost" size="icon-touch" accessibilityLabel={`Remove ${label}`} onPress={() => setShown(shown.filter((_, j) => j !== i))}>
-                    <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: c.tint.rose, alignItems: "center", justifyContent: "center" }}>
-                      <Minus size={15} color={c.tintInk.rose} strokeWidth={2.5} />
+                    <Txt size={16} lineHeight={21} style={{ flex: 1, minWidth: 0, color: c.ink }}>
+                      {label}
+                    </Txt>
+                    <View style={{ flexDirection: "row" }}>
+                      <MoveButton up label={`Move ${label} up`} disabled={i === 0} onPress={() => setShown(moved(shown, i, -1))} />
+                      <MoveButton up={false} label={`Move ${label} down`} disabled={i === shown.length - 1} onPress={() => setShown(moved(shown, i, 1))} />
                     </View>
-                  </Button>
-                </View>
-              );
-            })}
-          </View>
-        )}
+                  </View>
+                );
+              })}
+            </List>
+          )}
+        </View>
 
-        <SectionLabel style={{ marginTop: 32 }}>Add to My Dashboard</SectionLabel>
-        <View style={{ marginTop: 12, height: 44, borderRadius: 22, backgroundColor: quiet, justifyContent: "center" }}>
-          <View pointerEvents="none" style={{ position: "absolute", left: 14 }}>
-            <Search size={18} color={c.sub} strokeWidth={2} />
-          </View>
+        <View style={{ gap: 10, marginTop: 28 }}>
+          <SheetSection>More metrics</SheetSection>
           <SearchField value={query} onChangeText={setQuery} />
         </View>
         {groups.map((g) => (
-          <View key={g.key} style={{ marginTop: 20 }}>
-            <Txt size={13} lineHeight={18} weight={600} style={{ color: c.sub }}>
-              {g.label}
-            </Txt>
-            {g.items.map((m) => (
-              <View key={m.key} style={{ borderBottomWidth: 1, borderBottomColor: c.line }}>
-                <Pressable
-                  onPress={() => setShown([...shown, m.key])}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Add ${m.label}${noData.has(m.key) ? ", no data yet" : ""}`}
-                  style={({ pressed }) => ({ minHeight: 60, flexDirection: "row", alignItems: "center", gap: 12, marginHorizontal: -8, paddingHorizontal: 8, borderRadius: 14, backgroundColor: pressed ? quiet : "transparent" })}
-                >
+          <View key={g.key} style={{ gap: 8, marginTop: 20 }}>
+            <SheetSection>{g.label}</SheetSection>
+            <List>
+              {g.items.map((m) => (
+                <AddRow key={m.key} label={`Add ${m.label}${noData.has(m.key) ? ", no data yet" : ""}`} onPress={() => setShown([...shown, m.key])}>
+                  <AddDot />
                   <StatIcon k={m.key} />
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Txt size={16} lineHeight={21} weight={500} style={{ color: c.ink }}>
+                  <View style={{ flex: 1, minWidth: 0, paddingVertical: 6 }}>
+                    <Txt size={16} lineHeight={21} style={{ color: c.ink }}>
                       {m.label}
                     </Txt>
                     {noData.has(m.key) && (
@@ -202,17 +264,14 @@ export function EditDashboard({ keys, defaults, empty = [] }: EditDashboardProps
                       </Txt>
                     )}
                   </View>
-                  <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: c.teal, alignItems: "center", justifyContent: "center" }}>
-                    <Plus size={15} color={c.card} strokeWidth={2.5} />
-                  </View>
-                </Pressable>
-              </View>
-            ))}
+                </AddRow>
+              ))}
+            </List>
           </View>
         ))}
         {groups.length === 0 && (
-          <Txt size={14} lineHeight={19} align="center" style={{ paddingVertical: 24, color: c.sub }}>
-            {hidden.length ? `No metric matches “${query.trim()}”.` : "Every metric is on Home."}
+          <Txt size={15} lineHeight={20} align="center" style={{ paddingVertical: 24, color: c.sub }}>
+            {hidden.length ? `No metric matches “${query.trim()}”.` : "Every metric is pinned."}
           </Txt>
         )}
       </BottomSheet>

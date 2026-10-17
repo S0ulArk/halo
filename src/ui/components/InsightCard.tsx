@@ -1,10 +1,14 @@
+// The coach card (spec §5.15) in the iOS look, as Today's coach card draws it: a flat card washed with the family's
+// colour from its top left, a solid icon square in that colour with the sparkle in white, the title (16/21 semibold),
+// the body (15/21 in ink) and the action as a blue link. Not rendered when empty.
 import * as React from "react";
-import { Pressable, View } from "react-native";
-import { ArrowRight, Sparkles } from "lucide-react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { ChevronRight, Sparkles } from "lucide-react-native";
 import { useScreenAccent, type AccentFamily } from "@/ui/accents";
-import { useCalm } from "@/ui/calm";
+import { useCalm, type CalmTint } from "@/ui/calm";
 import { CARD_RADIUS } from "./Card";
-import { familyTint, IconTile, OnCard } from "./calmKit";
+import { familyTint, iconRadius, OnCard } from "./calmKit";
 import { Skeleton, SkeletonText } from "./Skeleton";
 import { Txt } from "./Text";
 
@@ -14,42 +18,41 @@ export type InsightCardProps = {
   body: string;
   action?: { label: string; onPress: () => void };
   /**
-   * Tints the icon tile in this metric family's pastel instead of the coach lavender. Default: the screen's family
-   * from an enclosing `AccentScope`, else lavender.
+   * Colours the card in this metric family's colour instead of the coach indigo. Default: the screen's family from an
+   * enclosing `AccentScope`, else indigo.
    */
   accent?: AccentFamily | null;
 };
 
-/** The frame: the white card (32 px corners, 20 px padding) with the faint hairline and the soft lift. */
-function Frame({ children }: { children: React.ReactNode }) {
+/** The frame: the flat card (20 px corners, 16 px padding), washed with `tint` when given. */
+function Frame({ tint, children }: { tint?: CalmTint; children: React.ReactNode }) {
   const c = useCalm();
   return (
-    <View style={{ borderRadius: CARD_RADIUS, backgroundColor: c.card, borderWidth: 1, borderColor: c.edge, padding: 20, ...(c.shadow ? { boxShadow: c.shadow } : null) }}>
+    <View style={{ borderRadius: CARD_RADIUS, backgroundColor: c.card, padding: 16, overflow: "hidden" }}>
+      {tint && <LinearGradient pointerEvents="none" colors={[c.tint[tint], c.card]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
       <OnCard>{children}</OnCard>
     </View>
   );
 }
 
-/**
- * The coach card (spec §5.15), Calm: a lavender icon tile (or the family's pastel), the title in Figtree 600 17/22,
- * the body 15/22 in ink, and the action as a teal link. Not rendered when empty.
- */
 export function InsightCard({ title, body, action, accent }: InsightCardProps) {
   const c = useCalm();
   const screen = useScreenAccent();
   const family = accent !== undefined ? accent : screen;
   const tint = familyTint(family) ?? "lavender";
   return (
-    <Frame>
-      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 14 }}>
-        <IconTile icon={<Sparkles size={20} color={c.ink} strokeWidth={1.75} />} tint={tint} size={40} radius={13} />
-        <View style={{ flex: 1, minWidth: 0, gap: 6, minHeight: 40, justifyContent: "center" }}>
+    <Frame tint={tint}>
+      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
+        <View style={{ width: 36, height: 36, borderRadius: iconRadius(36), backgroundColor: c.tintInk[tint], alignItems: "center", justifyContent: "center" }}>
+          <Sparkles size={20} color="#ffffff" strokeWidth={2} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0, gap: 4, minHeight: 36, justifyContent: "center" }}>
           {title && (
-            <Txt size={17} lineHeight={22} weight={600} style={{ color: c.ink }}>
+            <Txt size={16} lineHeight={21} weight={600} style={{ color: c.ink }}>
               {title}
             </Txt>
           )}
-          <Txt size={15} lineHeight={22} style={{ color: c.ink }}>
+          <Txt size={15} lineHeight={21} style={{ color: title ? c.sub : c.ink }}>
             {body}
           </Txt>
           {action && (
@@ -57,12 +60,12 @@ export function InsightCard({ title, body, action, accent }: InsightCardProps) {
               onPress={action.onPress}
               accessibilityRole="button"
               hitSlop={{ top: 14, bottom: 14, left: 4, right: 4 }}
-              style={({ pressed }) => ({ marginTop: 6, alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, opacity: pressed ? 0.6 : 1 })}
+              style={({ pressed }) => ({ marginTop: 6, alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 1, opacity: pressed ? 0.5 : 1 })}
             >
-              <Txt size={15} lineHeight={20} weight={600} style={{ color: c.teal }}>
+              <Txt size={15} lineHeight={20} weight={500} style={{ color: c.teal }}>
                 {action.label}
               </Txt>
-              <ArrowRight size={16} color={c.teal} strokeWidth={2.25} />
+              <ChevronRight size={17} color={c.teal} strokeWidth={2.4} />
             </Pressable>
           )}
         </View>
@@ -75,13 +78,13 @@ export function InsightCard({ title, body, action, accent }: InsightCardProps) {
 export function InsightCardSkeleton({ title = false, action = false }: { title?: boolean; action?: boolean }) {
   return (
     <Frame>
-      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 14 }}>
-        <Skeleton radius={13} style={{ width: 40, height: 40 }} />
-        <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
-          {title && <SkeletonText role="insightTitle" size={17} lineHeight={22} width={160} />}
+      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
+        <Skeleton radius={iconRadius(36)} style={{ width: 36, height: 36 }} />
+        <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+          {title && <SkeletonText role="insightTitle" size={16} lineHeight={21} width={160} />}
           <View>
-            <SkeletonText role="body" size={15} lineHeight={22} />
-            <SkeletonText role="body" size={15} lineHeight={22} width="66%" />
+            <SkeletonText role="body" size={15} lineHeight={21} />
+            <SkeletonText role="body" size={15} lineHeight={21} width="66%" />
           </View>
           {action && <SkeletonText role="label" size={15} lineHeight={20} width={144} style={{ marginTop: 6 }} />}
         </View>

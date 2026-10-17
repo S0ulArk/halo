@@ -1,13 +1,15 @@
-// The Activity tab's "Today’s goals" (a phone-only addition, Fitbit-style; Today shows them at a glance, GoalsGlance), Calm: a white card with "3 of 7 done" as a
-// pill beside its title, then a two-column grid of pastel tiles, one per goal switched on in Settings › Goals (the
-// goal's icon tile, its name, value over target with the value in the family's ink, an 8 px capsule; a check badge
-// once it is met), then the week's Active Zone Minutes as seven rounded columns. The head and body open a sheet with
-// every goal's full row (value, target, progress, the last 7 days, streak) and a way to Settings › Goals. Two rows sit
-// at the card's foot, each its own tap target: Activity (the day's steps and calories burned beside their 30-day
-// averages; opens Strain) and the Weekly plan (WeeklyPlanCard.tsx; opens its sheet). A goal first met while Home is
-// open gets a toast.
+// The Activity tab's "Today’s goals" (a phone-only addition, Fitbit-style; Today shows them at a glance, GoalsGlance),
+// in the Apple Fitness look: a flat card with Health's category head and "3 of 7 done" as a capsule beside its title,
+// then a two-column grid of tiles in the quiet fill, one per goal switched on in Settings › Goals (the goal's glyph in
+// its colour, its name, value over target, a capsule bar; a green check once it is met), then the week's Active Zone
+// Minutes as rounded bars. The head and body open a sheet with every goal's full row (value, target, progress, the
+// last 7 days, streak) and a way to Settings › Goals. Two iOS rows sit at the card's foot, each its own tap target:
+// Activity (the day's steps and calories burned beside their 30-day averages) and the Weekly plan (WeeklyPlanCard.tsx;
+// opens its sheet). On Today the goals are Fitness rings, one per goal, each drawing on with a spring. A goal first met
+// while Home is open gets a toast.
 import * as React from "react";
-import { Pressable, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { Activity, Check, Moon, Target } from "lucide-react-native";
 import { dayLabel, formatValue, MISSING, NBSP } from "@/lib/format";
 import { getGoalsDay, GOAL_KEYS, GOAL_META, type GoalKey, type GoalRow, type GoalsDayVM, type GoalsWeek } from "@/queries/goals";
@@ -16,12 +18,13 @@ import { useGoals, type Goals } from "@/state/goals";
 import { accentFamily, BottomSheet, Button, SheetSection, SkeletonText, Txt } from "@/ui";
 import { HaloRing } from "@/ui/components/Halo";
 import { useCalm, type CalmTint } from "@/ui/calm";
-import { familyTint, onBand } from "@/ui/components/calmKit";
+import { familyTint, onBand, useSoftFill } from "@/ui/components/calmKit";
 import { Capsule } from "@/ui/components/Meter";
+import { usePress, usePressStyle } from "@/ui/components/press";
 import { TileLabel } from "@/ui/components/TileRow";
 import { font } from "@/ui/fonts";
 import { toast } from "../settings/toast";
-import { CardButton, CheckBadge, FootRow, HeadTile, HomeCard, LINE_BAND, LINE_INSET, LINE_TILE, NumSpan, ProgressPill, RowRule, TwoUp, WeekColumns, type WeekColumn } from "./controls";
+import { CardButton, CheckBadge, FootRow, HomeCard, LINE_BAND, LINE_INSET, LINE_TILE, NumSpan, ProgressPill, RowIcon, RowRule, TwoUp, WeekColumns, type WeekColumn } from "./controls";
 import type { SlotProps } from "./sections";
 import { STAT_ICON } from "./view";
 import { WeeklyPlanRow } from "./WeeklyPlanCard";
@@ -78,7 +81,7 @@ export function GoalsCard({ vm, at, go }: SlotProps) {
   );
   if (ready && keys.length === 0)
     return (
-      <HomeCard icon={Target} title={title} subtitle="No goals switched on." gap={16} footer={footer}>
+      <HomeCard icon={Target} iconTint="mint" title={title} subtitle="No goals switched on." gap={16} footer={footer}>
         <CardButton icon={Target} label="Set goals" onPress={() => go(GOALS_HREF)} style={{ alignSelf: "flex-start" }} />
       </HomeCard>
     );
@@ -89,6 +92,7 @@ export function GoalsCard({ vm, at, go }: SlotProps) {
     <>
       <HomeCard
         icon={Target}
+        iconTint="mint"
         title={title}
         subtitle={subtitle}
         right={data && <ProgressPill done={data.done} total={data.goals.length} word="done" />}
@@ -131,13 +135,14 @@ export function GoalsGlance({ vm, at, go }: SlotProps) {
   const open = () => go(at(`${ACTIVITY_TAB}#goals`));
   if (ready && keys.length === 0)
     return (
-      <HomeCard icon={Target} title={title} subtitle="No goals switched on." gap={16}>
+      <HomeCard icon={Target} iconTint="mint" title={title} subtitle="No goals switched on." gap={16}>
         <CardButton icon={Target} label="Set goals" onPress={() => go(GOALS_HREF)} style={{ alignSelf: "flex-start" }} />
       </HomeCard>
     );
   return (
     <HomeCard
       icon={Target}
+      iconTint="mint"
       title={title}
       subtitle={data ? (data.done === data.goals.length ? "Every goal reached" : "Tap for every goal in full") : undefined}
       right={data && <ProgressPill done={data.done} total={data.goals.length} word="done" />}
@@ -152,8 +157,10 @@ export function GoalsGlance({ vm, at, go }: SlotProps) {
   );
 }
 
-const RING = 56;
-const RING_W = 5;
+const RING = 58;
+const RING_W = 7;
+
+const PressableView = Animated.createAnimatedComponent(Pressable);
 
 /**
  * Where a goal's ring leads: its own detail. Zone minutes to the Activity tab's "Time in zones", sleep to the Sleep tab,
@@ -162,31 +169,38 @@ const RING_W = 5;
 const ringHref = (key: GoalKey) => (key === "azm" ? `${ACTIVITY_TAB}#zones` : key === "sleep" ? SLEEP_TAB : GOAL_META[key].href);
 
 /**
- * One goal as a ring: the track in its pastel, the progress drawing on in its ink (staggered by `order`, on the UI
- * thread), its icon (a check once met) in the middle. A goal met pulses once a day: a ring that swells and fades.
+ * One goal as an Apple Fitness ring: the track in its colour's soft step, the progress drawing on in its colour on the
+ * ring spring (staggered by `order`, on the UI thread), its glyph (a check once met) in the middle, the value and the
+ * short name under it. A goal met pulses once a day: a ring that swells and fades.
  */
 function GoalRing({ g, day, order, onPress }: { g: GoalRow; day: string; order: number; onPress: () => void }) {
   const c = useCalm();
+  const press = usePress(0.94);
+  const pressed = usePressStyle(press, { dim: 0.6 });
   const tint = goalTint(g.key);
   const ink = c.tintInk[tint];
   const p = Math.max(0, Math.min(1, g.progress));
   return (
-    <Pressable
+    <PressableView
       onPress={onPress}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
       accessibilityRole="button"
       accessibilityLabel={`${g.label}: ${valueText(g)}${unitOf(g)} of ${targetText(g)}${g.done ? ", done" : ""}. Opens ${g.label}`}
-      style={({ pressed }) => ({ width: "25%", alignItems: "center", gap: 6, opacity: pressed ? 0.6 : 1 })}
+      style={[{ width: "25%", alignItems: "center", gap: 6 }, pressed]}
     >
-      <HaloRing size={RING} stroke={RING_W} progress={p} track={c.tint[tint]} color={ink} colors={c.vivid[tint]} delay={order * 90} celebrateKey={g.done ? `${day}:${g.key}` : null}>
-        {g.done ? <Check size={20} color={ink} strokeWidth={2.5} /> : React.createElement(goalIcon(g.key), { size: 20, color: ink, strokeWidth: 1.75 })}
+      <HaloRing size={RING} stroke={RING_W} progress={p} track={c.tint[tint]} color={ink} colors={c.vivid[tint]} delay={120 + order * 80} celebrateKey={g.done ? `${day}:${g.key}` : null}>
+        {g.done ? <Check size={20} color={ink} strokeWidth={2.8} /> : React.createElement(goalIcon(g.key), { size: 19, color: ink, strokeWidth: 2.1 })}
       </HaloRing>
-      <Txt size={14} lineHeight={17} style={[font.numeric(600), { color: g.value === null ? c.faint : c.ink }]}>
-        {valueText(g)}
-      </Txt>
-      <Txt size={11} lineHeight={14} weight={600} align="center" style={{ color: c.sub, letterSpacing: 1 }}>
-        {g.short.toUpperCase()}
-      </Txt>
-    </Pressable>
+      <View style={{ alignItems: "center" }}>
+        <Txt size={15} lineHeight={19} style={[font.numeric(700), { color: g.value === null ? c.faint : c.ink }]}>
+          {valueText(g)}
+        </Txt>
+        <Txt size={12} lineHeight={15} weight={500} align="center" style={{ color: c.sub }}>
+          {g.short}
+        </Txt>
+      </View>
+    </PressableView>
   );
 }
 
@@ -194,9 +208,9 @@ function GoalRingSkeleton() {
   const c = useCalm();
   return (
     <View style={{ width: "25%", alignItems: "center", gap: 6 }}>
-      <View style={{ width: RING, height: RING, borderRadius: RING / 2, borderWidth: RING_W, borderColor: c.chip }} />
-      <SkeletonText size={14} lineHeight={17} width={40} />
-      <SkeletonText size={11} lineHeight={14} width={36} />
+      <View style={{ width: RING, height: RING, borderRadius: RING / 2, borderWidth: RING_W, borderColor: c.fill }} />
+      <SkeletonText size={15} lineHeight={19} width={40} />
+      <SkeletonText size={12} lineHeight={15} width={36} />
     </View>
   );
 }
@@ -245,6 +259,7 @@ function Tiles({ goals }: { goals: GoalRow[] }) {
 
 function TilesSkeleton({ keys }: { keys: GoalKey[] }) {
   const c = useCalm();
+  const fill = useSoftFill();
   return (
     <TwoUp
       items={keys}
@@ -252,15 +267,15 @@ function TilesSkeleton({ keys }: { keys: GoalKey[] }) {
       render={(k) => {
         const tint = goalTint(k);
         return (
-          <View style={{ flex: 1, borderRadius: 20, backgroundColor: c.tint[tint], padding: 14, gap: 10 }}>
-            <HeadTile icon={goalIcon(k)} color={c.tintInk[tint]} bg={c.chip} size={36} />
+          <View style={{ flex: 1, borderRadius: 16, backgroundColor: fill, padding: 14, gap: 10 }}>
+            {React.createElement(goalIcon(k), { size: 20, color: c.tintInk[tint], strokeWidth: 2.1 })}
             <TileLabel>
               <Txt size={15} lineHeight={20} weight={600} style={{ color: c.ink }}>
                 {GOAL_META[k].short}
               </Txt>
             </TileLabel>
             <SkeletonText role="value" size={22} lineHeight={26} chars={7} />
-            <Capsule value={null} color="transparent" height={8} style={{ marginTop: "auto", backgroundColor: c.chip }} />
+            <Capsule value={null} color="transparent" height={8} style={{ marginTop: "auto", backgroundColor: c.fill }} />
           </View>
         );
       }}
@@ -282,11 +297,13 @@ function ValueOverTarget({ value, target, color, size = 22 }: { value: string; t
 }
 
 /**
- * One goal: its icon tile (a check badge once met, else the percent), the name, value over target, an 8 px capsule.
- * The names of a row share one height (TileLabel), so the two values start on one line; the capsules sit at the foot.
+ * One goal: its glyph in its colour (a green check once met, else the percent), the name, value over target, an 8 px
+ * capsule. The names of a row share one height (TileLabel), so the two values start on one line; the capsules sit at
+ * the foot.
  */
 function GoalTile({ g }: { g: GoalRow }) {
   const c = useCalm();
+  const fill = useSoftFill();
   const tint = goalTint(g.key);
   const ink = c.tintInk[tint];
   const pct = g.value === null ? null : Math.round(g.progress * 100);
@@ -296,10 +313,10 @@ function GoalTile({ g }: { g: GoalRow }) {
     <View
       accessible
       accessibilityLabel={`${g.label}: ${value} of ${target}${g.done ? ", reached" : g.partial ? ", so far today" : ""}`}
-      style={{ flex: 1, borderRadius: 20, backgroundColor: c.tint[tint], padding: 14, gap: 10 }}
+      style={{ flex: 1, borderRadius: 16, backgroundColor: fill, padding: 14, gap: 10 }}
     >
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <HeadTile icon={goalIcon(g.key)} color={ink} bg={c.chip} size={36} />
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, minHeight: 24 }}>
+        {React.createElement(goalIcon(g.key), { size: 20, color: ink, strokeWidth: 2.1 })}
         {g.done ? (
           <CheckBadge />
         ) : (
@@ -316,7 +333,7 @@ function GoalTile({ g }: { g: GoalRow }) {
         </Txt>
       </TileLabel>
       <ValueOverTarget value={value} target={target} color={ink} />
-      <Capsule value={g.done ? 1 : g.value === null ? null : g.progress} color={ink} height={8} style={{ marginTop: "auto", backgroundColor: c.chip }} />
+      <Capsule value={g.done ? 1 : g.value === null ? null : g.progress} color={ink} height={8} style={{ marginTop: "auto", backgroundColor: c.fill }} />
     </View>
   );
 }
@@ -329,7 +346,7 @@ function WeekStrip({ week, dayTarget }: { week: GoalsWeek; dayTarget: number }) 
   const cols: WeekColumn[] = week.days.map((d) => ({ day: d.day, frac: d.value === null ? null : Math.min(1, d.value / max), met: d.value !== null && d.value >= dayTarget, value: d.value === null ? null : String(Math.round(d.value)) }));
   const total = Math.round(week.total);
   return (
-    <View style={{ gap: 14, paddingTop: 16, borderTopWidth: 1, borderTopColor: c.line }}>
+    <View style={{ gap: 14, paddingTop: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.line }}>
       <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 12 }}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Txt size={15} lineHeight={20} weight={600} style={{ color: c.ink }}>
@@ -368,7 +385,7 @@ function GoalLine({ g }: { g: GoalRow }) {
     <View style={{ paddingVertical: 16, gap: 14 }}>
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
         <View style={{ marginTop: onBand(LINE_BAND, LINE_TILE) }}>
-          <HeadTile icon={goalIcon(g.key)} color={ink} bg={c.tint[tint]} size={LINE_TILE} />
+          <RowIcon icon={goalIcon(g.key)} tint={tint} size={LINE_TILE} />
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Txt size={16} lineHeight={21} weight={600} style={{ color: c.ink }}>

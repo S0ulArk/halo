@@ -2,16 +2,24 @@
 // check-in card, and the one check-in sheet mounted for the whole app (the web mounts it in the app layout and opens
 // it with `?checkin=1`). `openCheckIn(day?)` opens it over whatever screen is showing, for that screen's day (`?d=`),
 // and closing it leaves the screen as it was. The behaviours and answers load when it opens.
+//
+// The sheet is iOS's (the mockup's): the grabber, the round close button, "Check in" with the day, and the filled Done
+// that saves. It asks "How was yesterday?" in a large title, then each group of behaviours as an inset list, every row
+// its icon square, its name and the No / Yes capsules (blue once Yes is chosen); an unanswered behaviour stays
+// unanswered. Closing with changes asks first.
 import * as React from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { useGlobalSearchParams, useRouter, type Href } from "expo-router";
 import { Check, ChevronRight, NotebookPen } from "lucide-react-native";
 import { dayHref } from "@/lib/day";
 import { DAY, dayLabel as dayWord, formatDay } from "@/lib/format";
 import { useApp, useQueryCtx } from "@/state/app";
 import type { JournalTag, JournalVM } from "@/queries/types";
-import { BottomSheet, Txt } from "@/ui";
-import { CalmButton, CalmCard, IconTile, SectionLabel, TintPill, useCalm, type CalmTint } from "../settings/calmKit";
+import { BottomSheet, SheetSection, Txt } from "@/ui";
+import { usePress, usePressStyle } from "@/ui/components/press";
+import { HomeCard } from "@/screens/home/controls";
+import { CalmButton, IconTile, TintPill, useCalm, type CalmTint } from "../settings/calmKit";
 import { loadCheckIn, saveJournalEntry } from "./actions";
 import { AddBehaviour, useActionCtx } from "./AddBehaviour";
 import { ConfirmDialog, DialogAction, ErrorAlert, haptic, TagBadge, toast, YesNo } from "./controls";
@@ -31,21 +39,23 @@ export type CheckInProps = {
   checkIn: JournalVM["checkIn"];
 };
 
-/** Each behaviour group's pastel: evening habits lavender (sleep), recovery mint, context sand, your own sky. */
+/** Each behaviour group's colour: evening habits indigo (sleep), recovery green, context yellow, your own blue. */
 export const GROUP_TINT: Record<JournalTag["group"], CalmTint> = { evening: "lavender", recovery: "mint", context: "sand", custom: "sky" };
 
-/** The Journal's check-in card (spec §7.11, journey 7). Its button opens the app-wide check-in sheet. */
+const PressableView = Animated.createAnimatedComponent(Pressable);
+
+/** The Journal's check-in card (spec §7.11, journey 7), a Health card. Its button opens the app-wide check-in sheet. */
 export function CheckIn({ dayLabel, day, checkIn }: CheckInProps) {
   const start = () => openCheckIn(day);
   // The section above is headed "Check-in", so the card is titled by its day, as History's rows are (SYM2).
   return (
-    <CalmCard
+    <HomeCard
       icon={NotebookPen}
       iconTint="mint"
       title={dayLabel}
       subtitle={checkIn.done ? undefined : "Log what you did today. Halo compares it with tomorrow’s Recovery."}
       right={checkIn.done ? <TintPill tint="mint" icon={Check}>Checked in</TintPill> : undefined}
-      gap={16}
+      gap={14}
     >
       {checkIn.done ? (
         <>
@@ -65,7 +75,41 @@ export function CheckIn({ dayLabel, day, checkIn }: CheckInProps) {
       ) : (
         <CalmButton onPress={start}>Check in</CalmButton>
       )}
-    </CalmCard>
+    </HomeCard>
+  );
+}
+
+/** "How was yesterday?": the question the sheet opens with, for the day it is checking in. */
+const question = (day: string, today: string) => {
+  const word = dayWord(day, today);
+  return word === "Today" ? "How was today?" : word === "Yesterday" ? "How was yesterday?" : `How was ${formatDay(day, DAY.long)}?`;
+};
+
+/** The way to the journal at the sheet's top, an iOS row: its icon square, the words, the chevron. */
+function JournalLink({ onPress }: { onPress: () => void }) {
+  const c = useCalm();
+  const press = usePress(0.985);
+  const pressed = usePressStyle(press, { dim: 0.6 });
+  return (
+    <PressableView
+      onPress={onPress}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      accessibilityRole="link"
+      accessibilityLabel="Open journal: log water, food, weight and more"
+      style={[{ flexDirection: "row", alignItems: "center", gap: 12, minHeight: 52, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14, backgroundColor: c.sheetFill }, pressed]}
+    >
+      <IconTile icon={NotebookPen} tint="sky" size={30} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Txt size={16} lineHeight={21} style={{ color: c.ink }}>
+          Open journal
+        </Txt>
+        <Txt size={13} lineHeight={18} style={{ color: c.sub }}>
+          Log water, food, weight and more
+        </Txt>
+      </View>
+      <ChevronRight size={18} color={c.tertiary} strokeWidth={2.4} />
+    </PressableView>
   );
 }
 
@@ -205,27 +249,24 @@ export function CheckInSheetHost() {
         title="Check in"
         description={label}
         size="tall"
-        footer={
-          <View style={{ gap: 10, alignSelf: "stretch" }}>
-            {saveError && <ErrorAlert>Couldn’t save. Try again.</ErrorAlert>}
-            <CalmButton onPress={() => void save()} disabled={saving || !data} style={{ alignSelf: "stretch", minHeight: 56, borderRadius: 28 }}>
-              {saving ? "Saving…" : "Save check-in"}
-            </CalmButton>
-          </View>
-        }
+        done={{ label: saving ? "Saving…" : "Done", onPress: () => void save(), disabled: saving || !data }}
       >
-        <Pressable
-          onPress={openJournal}
-          accessibilityRole="link"
-          accessibilityLabel="Open journal: log water, food, weight and more"
-          style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4, paddingVertical: 10, opacity: pressed ? 0.6 : 1 })}
-        >
-          <NotebookPen size={18} color={c.teal} strokeWidth={2} />
-          <Txt size={15} lineHeight={20} weight={600} style={{ flex: 1, minWidth: 0, color: c.teal }}>
-            Open journal · log water, food, weight and more
+        <View style={{ gap: 6, marginTop: 2 }}>
+          <Txt size={28} lineHeight={34} weight={700} accessibilityRole="header" style={{ color: c.ink }}>
+            {question(data?.day ?? day, app.today)}
           </Txt>
-          <ChevronRight size={18} color={c.teal} strokeWidth={2.25} />
-        </Pressable>
+          <Txt size={16} lineHeight={22} style={{ color: c.sub }}>
+            Answer what applied. Halo learns what moves your next-morning Recovery.
+          </Txt>
+        </View>
+        {saveError && (
+          <View style={{ marginTop: 14 }}>
+            <ErrorAlert>Couldn’t save. Try again.</ErrorAlert>
+          </View>
+        )}
+        <View style={{ marginTop: 18 }}>
+          <JournalLink onPress={openJournal} />
+        </View>
         {!data &&
           (loadError ? (
             <View style={{ marginTop: 8 }}>
@@ -248,23 +289,25 @@ export function CheckInSheetHost() {
           TAG_GROUPS.map((g) => ({ ...g, items: tags.filter((t) => t.group === g.key) }))
             .filter((g) => g.items.length > 0 || g.key === "custom")
             .map((g, i) => (
-              <View key={g.key} style={{ marginTop: i === 0 ? 8 : 24, gap: 10 }}>
-                <SectionLabel style={{ paddingHorizontal: 4 }}>{g.title}</SectionLabel>
-                {/* One card per question: the behaviour named in full, then No and Yes as two large pills. */}
-                <View style={{ gap: 8 }}>
-                  {g.items.map((t) => (
-                    <View key={t.tag} style={{ borderRadius: 22, backgroundColor: c.ground, padding: 14, gap: 12 }}>
-                      {/* The name's first line on the tile's middle; a long name wraps under it, the tile stays. */}
-                      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
-                        <IconTile icon={tagIcon(t.tag)} tint={GROUP_TINT[g.key]} size={36} />
-                        <Txt size={16} lineHeight={21} weight={600} style={{ flex: 1, minWidth: 0, color: c.ink, marginTop: (36 - 21) / 2 }}>
-                          {t.label}
-                        </Txt>
-                      </View>
-                      <YesNo label={t.label} on="ground" value={values[t.tag]} onChange={(v) => setValues((s) => ({ ...s, [t.tag]: v }))} />
-                    </View>
-                  ))}
-                </View>
+              <View key={g.key} style={{ marginTop: i === 0 ? 22 : 26, gap: 8 }}>
+                <SheetSection>{g.title}</SheetSection>
+                {/* An inset list: each behaviour named in full beside its No and Yes; a long name wraps, the capsules stay. */}
+                {g.items.length > 0 && (
+                  <View style={{ borderRadius: 14, backgroundColor: c.sheetFill, overflow: "hidden" }}>
+                    {g.items.map((t, k) => (
+                      <React.Fragment key={t.tag}>
+                        {k > 0 && <View style={{ height: StyleSheet.hairlineWidth, marginLeft: 14 + 30 + 12, backgroundColor: c.line }} />}
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, minHeight: 58, paddingHorizontal: 14, paddingVertical: 9 }}>
+                          <IconTile icon={tagIcon(t.tag)} tint={GROUP_TINT[g.key]} size={30} />
+                          <Txt size={16} lineHeight={21} style={{ flex: 1, minWidth: 0, color: c.ink }}>
+                            {t.label}
+                          </Txt>
+                          <YesNo label={t.label} compact value={values[t.tag]} onChange={(v) => setValues((s) => ({ ...s, [t.tag]: v }))} />
+                        </View>
+                      </React.Fragment>
+                    ))}
+                  </View>
+                )}
                 {g.key === "custom" && (
                   <AddBehaviour
                     tags={tags}
