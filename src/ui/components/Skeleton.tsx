@@ -5,6 +5,7 @@
 import * as React from "react";
 import { View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { cancelAnimation, Easing, makeMutable, useAnimatedStyle, withRepeat, withSequence, withTiming } from "react-native-reanimated";
+import { useIsFocused } from "expo-router";
 import { useCalm } from "@/ui/calm";
 import { reduceMotionNow, useReduceMotion } from "@/ui/motion/system";
 import { ROLES, type TextRole } from "./Text";
@@ -31,14 +32,18 @@ function sync() {
 
 function usePulse() {
   const reduce = useReduceMotion();
+  // Only bars on the screen in front count: a covered tab's loading bars must not keep the pulse (and so the frames)
+  // running while nothing on screen loads.
+  const focused = useIsFocused();
   React.useEffect(() => {
+    if (!focused) return;
     mounted++;
     sync();
     return () => {
       mounted--;
       sync();
     };
-  }, []);
+  }, [focused]);
   // Reduce motion turned on or off while bars are showing.
   React.useEffect(sync, [reduce]);
 }

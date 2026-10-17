@@ -20,8 +20,8 @@ import { useTheme } from "@/ui/ThemeProvider";
 export type GlassTint = "light" | "dark" | "clear" | (string & {});
 
 const PRESETS: Record<"light" | "dark" | "clear", { color: string; frost: number }> = {
-  light: { color: "#fafafc", frost: 0.55 },
-  dark: { color: "#1e1e22", frost: 0.6 },
+  light: { color: "#fafafc", frost: 0.7 },
+  dark: { color: "#1e1e22", frost: 0.72 },
   clear: { color: "#ffffff", frost: 0.1 },
 };
 
@@ -113,7 +113,9 @@ export function LiquidGlass({
   cornerRadius,
   tint,
   refraction = 1,
-  blurRadius = 5,
+  // No blur by default: the lens alone is one cheap shader pass, while a blur re-filters the layer on the GPU every
+  // frame anything under the glass moves (measured on the phone: the GPU was the bottleneck). The frost keeps text legible.
+  blurRadius = 0,
   frost,
   saturation = 1.8,
   backdrop = true,
@@ -162,7 +164,7 @@ export function LiquidGlass({
  * GlassTarget's overlay; elsewhere the stand-in. `strength` scales the lens (0–1); `radius` defaults to a capsule.
  */
 export function GlassMaterial({ strength = 1, radius, tint, shadow = true }: { strength?: number; radius?: number; tint?: GlassTint; shadow?: boolean | string }) {
-  return <LiquidGlass pointerEvents="none" style={StyleSheet.absoluteFill} cornerRadius={radius} tint={tint} refraction={strength} blurRadius={2} shadow={shadow} />;
+  return <LiquidGlass pointerEvents="none" style={StyleSheet.absoluteFill} cornerRadius={radius} tint={tint} refraction={strength} blurRadius={0} shadow={shadow} />;
 }
 
 const styles = StyleSheet.create({ fill: { flex: 1 } });
