@@ -12,7 +12,7 @@ import { ScrollView, View } from "react-native";
 import { useRouter, useScrollToTop, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CircleAlert } from "lucide-react-native";
-import Animated, { Extrapolation, interpolate, useAnimatedStyle, type SharedValue } from "react-native-reanimated";
+import Animated from "react-native-reanimated";
 import { RevealScroll, useRevealScroll } from "@/ui/motion/Rise";
 import { dayLabel } from "@/lib/format";
 import { dayHref, useDay } from "@/lib/day";
@@ -31,34 +31,6 @@ import { Rise } from "./rise";
 import { HomeSkeleton } from "./skeleton";
 import { progressLabel, useSyncShell, wearStreak } from "./status";
 import { hasData } from "./view";
-
-/** The scroll edge's steps under the bar: the wash at full strength to the bar's foot, then fading out over 18 dp. */
-const EDGE_STEPS: [extra: number, opacity: number][] = [
-  [0, 1],
-  [6, 0.66],
-  [12, 0.4],
-  [18, 0.16],
-];
-
-/**
- * iOS 26's scroll edge for Today: once the page has moved, the ground colour rises under the bar, so the content softens
- * away as it passes under it rather than showing through the glass. Plain fills of the ground, each a few dp taller and
- * fainter, make the soft foot; it fades in with the first 14 dp of scroll (UI thread). Plain fills, not pictures: a
- * bitmap here was redrawn on every frame of a scroll.
- */
-function ScrollEdge({ y }: { y: SharedValue<number> | null }) {
-  const c = useCalm();
-  const insets = useSafeAreaInsets();
-  const bar = insets.top + BAR_ROW;
-  const shown = useAnimatedStyle(() => ({ opacity: y ? interpolate(y.value, [0, 14], [0, 1], Extrapolation.CLAMP) : 0 }));
-  return (
-    <Animated.View pointerEvents="none" style={[{ position: "absolute", top: 0, left: 0, right: 0, height: bar + EDGE_STEPS[EDGE_STEPS.length - 1][0] }, shown]}>
-      {EDGE_STEPS.map(([extra, opacity]) => (
-        <View key={extra} style={{ position: "absolute", top: 0, left: 0, right: 0, height: bar + extra, opacity, backgroundColor: c.ground }} />
-      ))}
-    </Animated.View>
-  );
-}
 
 export default function HomeScreen() {
   const app = useApp();
@@ -186,7 +158,6 @@ export default function HomeScreen() {
             </RevealScroll.Provider>
           </Animated.ScrollView>
         </PullToRefresh>
-        <ScrollEdge y={scrollY} />
       </GlassTarget>
     </View>
   );

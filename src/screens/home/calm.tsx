@@ -25,7 +25,7 @@ import { useCalm } from "@/ui/calm";
 import { CalendarSheet } from "@/ui/components/CalendarSheet";
 import { CalmSurface, PillAction } from "@/ui/components/CalmSurface";
 import { stepDay } from "@/ui/components/DateSwitcher";
-import { BAR_ROW } from "@/ui/components/DetailHeader";
+import { BAR_ROW, BarEdge } from "@/ui/components/DetailHeader";
 import { GlassButton, GlassCapsule } from "@/ui/components/GlassButton";
 import { RING_LAND_MS, RING_STAGGER, RollingNumber, ScoreRings } from "@/ui/components/Halo";
 import { StreakFlame, UserAvatar } from "@/ui/components/HomeHeader";
@@ -94,6 +94,8 @@ export function TodayBar({ y, title, streak, sync, onAvatar }: { y: SharedValue<
   });
   return (
     <View pointerEvents="box-none" style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 20 }}>
+      {/* Under the buttons, so their glass bends the page passing beneath, as the tab bar's does. */}
+      <BarEdge y={y} ground={c.ground} />
       <Animated.View pointerEvents="none" importantForAccessibility="no-hide-descendants" style={[{ position: "absolute", left: 96, right: 96, top: insets.top, height: BAR_ROW, alignItems: "center", justifyContent: "center" }, inline]}>
         <Txt size={17} lineHeight={22} weight={600} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} align="center" style={{ color: c.ink }}>
           {title}

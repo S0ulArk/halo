@@ -74,6 +74,30 @@ function HeaderTitle({ children }: { children: string }) {
 }
 
 /**
+ * iOS 26's scroll edge under a floating bar: once the page has moved, the ground rises behind the bar in one smooth
+ * gradient (the status bar's strip near solid, the buttons' row half clear, nothing 20 px below the bar), so content
+ * softens as it passes under. Draw it first in the bar (the GlassTarget's overlay), under the buttons: the glass then
+ * bends the page itself, as the tab bar does, instead of a flat fill. It fades in over the first 12 px of scroll.
+ */
+export function BarEdge({ y, ground }: { y: SharedValue<number> | null; ground?: string }) {
+  const c = useCalm();
+  const insets = useSafeAreaInsets();
+  const fill = ground ?? c.ground;
+  // The edge reaches 20 px past the bar so content fades out rather than being cut at its foot.
+  const edgeH = insets.top + BAR_ROW + 20;
+  const edge = useAnimatedStyle(() => ({ opacity: y ? interpolate(y.value, [0, 12], [0, 1], Extrapolation.CLAMP) : 0 }));
+  return (
+    <Animated.View pointerEvents="none" style={[{ position: "absolute", top: 0, left: 0, right: 0, height: edgeH }, edge]}>
+      <LinearGradient
+        colors={[fill, alpha(fill, 0.94), alpha(fill, 0.6), alpha(fill, 0)]}
+        locations={[0, insets.top / edgeH, (insets.top + BAR_ROW * 0.7) / edgeH, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+    </Animated.View>
+  );
+}
+
+/**
  * The floating bar over a scrolling page. At rest it is clear: only its buttons float over the ground. Scrolled, the
  * inline title fades in once the large title has gone under it, and the scroll edge rises behind it. Without a scroll
  * offset (`y` null) it stays at rest. Absolute: render it as the `overlay` of a GlassTarget around the ScrollView (so its
@@ -82,24 +106,13 @@ function HeaderTitle({ children }: { children: string }) {
 export function NavBar({ y, title, left, right, ground }: { y: SharedValue<number> | null; title: string; left?: React.ReactNode; right?: React.ReactNode; ground?: string }) {
   const c = useCalm();
   const insets = useSafeAreaInsets();
-  const fill = ground ?? c.ground;
-  const height = insets.top + BAR_ROW;
-  // The edge reaches 20 px past the bar so content fades out rather than being cut at its foot.
-  const edgeH = height + 20;
-  const edge = useAnimatedStyle(() => ({ opacity: y ? interpolate(y.value, [0, 12], [0, 1], Extrapolation.CLAMP) : 0 }));
   const inline = useAnimatedStyle(() => {
     const p = y ? interpolate(y.value, [TITLE_SWAP - 18, TITLE_SWAP], [0, 1], Extrapolation.CLAMP) : 0;
     return { opacity: p, transform: [{ translateY: (1 - p) * 6 }] };
   });
   return (
     <View pointerEvents="box-none" style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 20 }}>
-      <Animated.View pointerEvents="none" style={[{ position: "absolute", top: 0, left: 0, right: 0, height: edgeH }, edge]}>
-        <LinearGradient
-          colors={[fill, alpha(fill, 0.94), alpha(fill, 0.6), alpha(fill, 0)]}
-          locations={[0, insets.top / edgeH, (insets.top + BAR_ROW * 0.7) / edgeH, 1]}
-          style={StyleSheet.absoluteFill}
-        />
-      </Animated.View>
+      <BarEdge y={y} ground={ground} />
       <View pointerEvents="box-none" style={{ paddingTop: insets.top }}>
         <HeaderRow
           left={left}
