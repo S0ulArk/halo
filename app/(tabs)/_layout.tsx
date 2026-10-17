@@ -9,6 +9,7 @@ import { InteractionManager } from "react-native";
 import { Tabs, useRouter, type Href } from "expo-router";
 import { useHasCoachKey } from "@/coach/session";
 import { CheckInSheetHost, useCheckInAction } from "@/screens/journal/CheckInSheet";
+import { useSyncProgress } from "@/state/app";
 import { GlassTarget } from "@/ui/glass";
 import { FloatingTabBar, TabBarBridge } from "@/ui/components/TabBarHost";
 
@@ -19,15 +20,26 @@ import { FloatingTabBar, TabBarBridge } from "@/ui/components/TabBarHost";
  */
 function TabPreloader() {
   const router = useRouter();
+  // Building a tab is heavy JS; on top of the launch sync it held taps back for seconds. So a sync puts it off, and the
+  // tabs still to build start again one at a time once the sync has finished and its screens have refreshed.
+  const syncing = useSyncProgress() != null;
+  const left = React.useRef<string[]>(["/tab-sleep", "/tab-activity", "/health"]);
+  const first = React.useRef(true);
   React.useEffect(() => {
+    if (syncing || !left.current.length) return;
     let cancelled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
+    const wait = first.current ? 6000 : 2500;
+    first.current = false;
     const task = InteractionManager.runAfterInteractions(() => {
-      (["/tab-sleep", "/tab-activity", "/health"] as const).forEach((href, i) => {
+      left.current.forEach((href, i) => {
         timers.push(
           setTimeout(() => {
-            if (!cancelled) router.prefetch(href as Href);
-          }, 6000 + i * 700),
+            if (cancelled) return;
+            // A transition, so React builds the tab in slices and a tap meanwhile isn't held behind it.
+            React.startTransition(() => router.prefetch(href as Href));
+            left.current = left.current.filter((h) => h !== href);
+          }, wait + i * 900),
         );
       });
     });
@@ -36,7 +48,7 @@ function TabPreloader() {
       task.cancel();
       timers.forEach(clearTimeout);
     };
-  }, [router]);
+  }, [router, syncing]);
   return null;
 }
 

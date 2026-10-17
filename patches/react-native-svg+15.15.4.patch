@@ -1,0 +1,85 @@
+diff --git a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/SvgView.java b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/SvgView.java
+index f04da14..56c979f 100644
+--- a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/SvgView.java
++++ b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/SvgView.java
+@@ -19,6 +19,7 @@ import android.graphics.RectF;
+ import android.graphics.Typeface;
+ import android.util.Base64;
+ import android.view.View;
++import android.view.ViewGroup;
+ import android.view.ViewParent;
+ import android.view.accessibility.AccessibilityNodeInfo;
+ import com.facebook.react.bridge.Dynamic;
+@@ -131,6 +132,26 @@ public class SvgView extends ReactViewGroup implements ReactCompoundView, ReactC
+       return;
+     }
+     super.onDraw(canvas);
++    // Halo: draw straight into the hardware display list. The bitmap path rasterised every SVG in software on the main
++    // thread, allocated a new bitmap each time the view was redrawn or re-attached (every tab switch) and uploaded it
++    // to the GPU. Filters and masks read the root bitmap back, so an SVG holding one keeps the bitmap path.
++    if (canvas.isHardwareAccelerated() && !needsBitmap(this)) {
++      if (mBitmap != null) {
++        mBitmap.recycle();
++        mBitmap = null;
++      }
++      float w = getWidth();
++      float h = getHeight();
++      if (Float.isNaN(w) || Float.isNaN(h) || w < 1 || h < 1) {
++        return;
++      }
++      drawChildren(canvas);
++      if (toDataUrlTask != null) {
++        toDataUrlTask.run();
++        toDataUrlTask = null;
++      }
++      return;
++    }
+     if (mBitmap == null) {
+       mBitmap = drawOutput();
+     }
+@@ -150,6 +171,20 @@ public class SvgView extends ReactViewGroup implements ReactCompoundView, ReactC
+     }
+   }
+ 
++  /** Whether the tree under `group` holds a filter or a mask, which draw through the root bitmap. */
++  private static boolean needsBitmap(ViewGroup group) {
++    for (int i = 0; i < group.getChildCount(); i++) {
++      View child = group.getChildAt(i);
++      if (child instanceof FilterView || child instanceof MaskView) {
++        return true;
++      }
++      if (child instanceof ViewGroup && needsBitmap((ViewGroup) child)) {
++        return true;
++      }
++    }
++    return false;
++  }
++
+   private Runnable toDataUrlTask = null;
+ 
+   void setToDataUrlTask(Runnable task) {
+diff --git a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/VirtualView.java b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/VirtualView.java
+index 4d71806..f062587 100644
+--- a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/VirtualView.java
++++ b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/VirtualView.java
+@@ -608,18 +608,8 @@ public abstract class VirtualView extends ReactViewGroup {
+         setBottom(Math.min(bottom, root.getHeight()));
+       }
+     }
+-    EventDispatcher eventDispatcher =
+-        UIManagerHelper.getEventDispatcherForReactTag(mContext, getId());
+-    if (eventDispatcher != null) {
+-      eventDispatcher.dispatchEvent(
+-        new SvgOnLayoutEvent(
+-          UIManagerHelper.getSurfaceId(VirtualView.this),
+-          this.getId(),
+-          left,
+-          top,
+-          width,
+-          height));
+-    }
++    // Halo: no SvgOnLayoutEvent. It went to JS for every shape of every SVG (icons included) each time one was drawn,
++    // hundreds per screen, and nothing in Halo listens to a shape's onLayout.
+   }
+ 
+   RectF getClientRect() {

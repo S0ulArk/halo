@@ -26,6 +26,7 @@ import { unitsKey } from "@/lib/units";
 import type { QueryCtx } from "@/queries/ctx";
 import { useAfterTransition } from "@/ui/components/AfterTransition";
 // Live heart rate over Bluetooth (display-only; never written to the Store), available to every screen.
+import { syncedRecently } from "./launchSync";
 import { LiveBleProvider } from "./liveBle";
 // The person's display units (Settings › Units), part of the query context and the view-model cache's stamp.
 import { useUnits } from "./units";
@@ -191,7 +192,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (r.warnings.length) console.log("[sync]", r.warnings.join("; "));
           if (!r.ran) console.log("[run] skipped:", r.skipped);
           const sync = await st.getSyncState();
-          set((s) => ({ ...s, status: "ready", progress: null, sync, dataVersion: s.dataVersion + 1, syncWarnings: r.ran ? r.warnings : s.syncWarnings }));
+          // A transition: the new scoring run re-renders every open screen, and React now does that in slices with
+          // taps let in between instead of one long block.
+          React.startTransition(() => {
+            set((s) => ({ ...s, status: "ready", progress: null, sync, dataVersion: s.dataVersion + 1, syncWarnings: r.ran ? r.warnings : s.syncWarnings }));
+          });
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);
           console.warn("[run]", message);
@@ -243,6 +248,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         patch({ status: hasScores ? "ready" : "syncing" });
         if (!hasScores) {
           void run(st, profile, source);
+        } else if (source !== "demo" && syncedRecently(sync.lastSyncTs, timeZone)) {
+          // Synced minutes ago (by the app or the background task) and still the same day: the saved scores are
+          // current, and skipping the import and rescore keeps the first seconds free for taps and scrolling.
+          perf("launch-sync", "skipped", `${Math.round(Date.now() / 1000 - (sync.lastSyncTs ?? 0))}s since the last`);
         } else {
           // The first screen draws first: the launch sync (an import and a rescore, heavy on the JS thread, and then
           // every open screen recomputing) waits until the opening frames are done, so the first seconds stay smooth.
@@ -259,7 +268,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [run]);
+  }, [run, timeZone]);
 
   // Coming back to the foreground after 10 minutes away re-imports (Health Connect gets new nights while the app sleeps).
   React.useEffect(() => {
@@ -597,11 +606,13 @@ export function useQuery<T>(fn: (ctx: QueryCtx) => Promise<T>, deps: React.Depen
     // The same object when already loading (a mount), so no render is spent on it.
     setR((s) => (s.loading ? s : { ...s, loading: true }));
     const job = key ? runCached(key, stamp, () => fn(ctx)) : fn(ctx);
+    // Results land as a transition: a screen's numbers are a big render (charts, lists, text to measure), and React
+    // slices it so a tap that comes in meanwhile is answered first.
     const deliver = () => {
       job.then(
-        (data) => live && setR({ data, error: null, loading: false }),
+        (data) => live && React.startTransition(() => setR({ data, error: null, loading: false })),
         // Keep the last good data: a failed background refresh shouldn't blank a screen that was already showing.
-        (e) => live && setR((s) => ({ data: s.data, error: e instanceof Error ? e : new Error(String(e)), loading: false })),
+        (e) => live && React.startTransition(() => setR((s) => ({ data: s.data, error: e instanceof Error ? e : new Error(String(e)), loading: false }))),
       );
     };
     if (openedRef.current) deliver();
